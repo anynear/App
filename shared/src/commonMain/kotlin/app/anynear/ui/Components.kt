@@ -233,9 +233,10 @@ internal fun ExpandRow(title: String, expanded: Boolean, icon: ImageVector? = nu
     )
 }
 
+/** Arrow to the right: the one sign in the app that a tap leads to another page (rows and the title in the header). */
 @Composable
-private fun Chevron(modifier: Modifier = Modifier) {
-    Icon(AppIcons.Weiter, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier.size(CHEVRON_SIZE))
+internal fun Chevron(modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Icon(AppIcons.Weiter, contentDescription = null, tint = tint, modifier = modifier.size(CHEVRON_SIZE))
 }
 
 /** Width of the arrow at the end of the row; rows without an arrow keep this much free when things are stacked. */
