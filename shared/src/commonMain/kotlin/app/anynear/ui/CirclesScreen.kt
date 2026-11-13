@@ -25,7 +25,7 @@ import app.anynear.mesh.Conversation
 import app.anynear.i18n.texts
 
 /**
- * „Kreise“ tab (UX concept): at the top, of equal rank, „Kreis gründen“ and „Einladung annehmen“, below them
+ * „Kreise“ tab (ADR 0100): at the top, of equal rank, „Kreis gründen“ and „Einladung annehmen“, below them
  * all circles with picture, name and who is in them. Tapping opens the circle detail ([CircleDetailScreen]),
  * from there „Nachricht schreiben“ leads into the circle chat.
  */
@@ -40,36 +40,39 @@ internal fun CirclesScreen(controller: AppController, onOpenCircle: (String) -> 
     var query by rememberSaveable { mutableStateOf("") }
     val shown = circles.filter { matchesSearch(query, it.name) }
 
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        // Both paths equally easy to find: one below the other, full width, fully readable even with large font.
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            AppButton(texts.people.startCircle, { mode = CircleAction.Create }, Modifier.fillMaxWidth(), kind = ButtonKind.Main, icon = AppIcons.Plus)
-            AppButton(texts.people.acceptInvite, { mode = CircleAction.Menu }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary, icon = AppIcons.Link)
-        }
-        if (circles.isEmpty()) {
-            Text(
-                texts.people.circleExplained,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
-        } else {
-            SearchField(query, { query = it }, texts.people.searchCircles)
-            if (shown.isEmpty()) NoSearchResults()
-            else AppSection(texts.people.yourCircles) {
-                shown.forEach { circle ->
-                    AppRow(
-                        title = circle.name,
-                        subtitle = circleSummary(circle, circleMembers[circle.id].orEmpty().size)
-                            .let { if (circle.id in internetOnly) "$it · ${texts.people.internetOnlyShort}" else it },
-                        leading = { CircleAvatar(controller, circle.id, circle.image, 48.dp) },
-                        chevron = true,
-                        onClickLabel = texts.chat.viewCircle,
-                        onClick = { onOpenCircle(circle.id) },
-                    )
+    Column(Modifier.fillMaxSize()) {
+        AppHeader(texts.setup.tabCircles)
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            // Both paths equally easy to find: one below the other, full width, fully readable even with large font.
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AppButton(texts.people.startCircle, { mode = CircleAction.Create }, Modifier.fillMaxWidth(), kind = ButtonKind.Main, icon = AppIcons.Plus)
+                AppButton(texts.people.acceptInvite, { mode = CircleAction.Menu }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary, icon = AppIcons.Link)
+            }
+            if (circles.isEmpty()) {
+                Text(
+                    texts.people.circleExplained,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            } else {
+                SearchField(query, { query = it }, texts.people.searchCircles)
+                if (shown.isEmpty()) NoSearchResults()
+                else AppSection(texts.people.yourCircles) {
+                    shown.forEach { circle ->
+                        AppRow(
+                            title = circle.name,
+                            subtitle = circleSummary(circle, circleMembers[circle.id].orEmpty().size)
+                                .let { if (circle.id in internetOnly) "$it · ${texts.people.internetOnlyShort}" else it },
+                            leading = { CircleAvatar(controller, circle.id, circle.image, 48.dp) },
+                            chevron = true,
+                            onClickLabel = texts.chat.viewCircle,
+                            onClick = { onOpenCircle(circle.id) },
+                        )
+                    }
                 }
             }
         }

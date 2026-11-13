@@ -11,7 +11,6 @@ interface PeopleTexts {
     val shareLink: String
 
     // Circles
-    val circles: String
     fun circleCount(n: Int): String
     val startOrJoinCircle: String
 
@@ -76,12 +75,10 @@ interface PeopleTexts {
     val everyoneSeesChange: String
 
     // Contacts
-    val contacts: String
     val addContact: String
 
     /** „Noch niemand da. Wer einem deiner Kreise beitritt, erscheint hier automatisch.“ */
     val noContactsYet: String
-    val searchContacts: String
 
     /** „Ohne Kreis · direkter Kontakt“ */
     val noCircleSelfAdded: String
@@ -142,11 +139,7 @@ interface PeopleTexts {
     val acceptInvite: String
     val pasteInviteLinkHint: String
     val shareMyContact: String
-    val wroteToYou: String
-    val notInContactsYet: String
     val openConversation: String
-    val contactsEmpty: String
-    val allContacts: String
     val radioOnly: String
     val lastReached: String
     val lastReachedFooter: String
@@ -209,7 +202,6 @@ internal object PeopleTextsDe : PeopleTexts {
     override val radioOnlyContact = "Nutzt kein $APP. Nur über Funk erreichbar, ohne Bilder und Dateien."
     override val shareLink = "Link teilen"
 
-    override val circles = "Kreise"
     override fun circleCount(n: Int) = if (n == 1) "1 Kreis" else "$n Kreise"
     override val startOrJoinCircle = "Kreis gründen oder beitreten"
     override val noCircleYet = "Noch kein Kreis. Gründe einen oder tritt mit einer Einladung bei."
@@ -261,10 +253,8 @@ internal object PeopleTextsDe : PeopleTexts {
     override val editCircle = "Kreis bearbeiten"
     override val everyoneSeesChange = "Alle im Kreis sehen die Änderung."
 
-    override val contacts = "Kontakte"
     override val addContact = "Kontakt hinzufügen"
     override val noContactsYet = "Noch niemand da. Wer einem deiner Kreise beitritt, erscheint hier automatisch."
-    override val searchContacts = "Kontakte durchsuchen"
     override val noCircleSelfAdded = "Ohne Kreis · direkter Kontakt"
     override val pasteLink = "Link einfügen"
     override val pasteLinkHint = "Den Kontaktlink, den du bekommen hast"
@@ -318,11 +308,7 @@ internal object PeopleTextsDe : PeopleTexts {
     override val acceptInvite = "Einladung annehmen"
     override val pasteInviteLinkHint = "Den Einladungslink, den du bekommen hast"
     override val shareMyContact = "Meinen Kontakt teilen"
-    override val wroteToYou = "Hat dir geschrieben"
-    override val notInContactsYet = "Noch nicht in deinen Kontakten."
     override val openConversation = "Gespräch öffnen"
-    override val contactsEmpty = "Hier stehen die Menschen, mit denen du schreibst. Wer in einem deiner Kreise ist, erscheint automatisch."
-    override val allContacts = "Alle Kontakte"
     override val radioOnly = "nur über Funk"
     override val lastReached = "Zuletzt erreicht"
     override val lastReachedFooter = "Das weiß nur dein Handy. Ob die Nachricht ankommt, zeigt sich beim Senden."
@@ -390,7 +376,6 @@ internal object PeopleTextsEn : PeopleTexts {
     override val radioOnlyContact = "Doesn't use $APP. Reachable by radio only, without photos or files."
     override val shareLink = "Share link"
 
-    override val circles = "Circles"
     override fun circleCount(n: Int) = if (n == 1) "1 circle" else "$n circles"
     override val startOrJoinCircle = "Start or join a circle"
     override val noCircleYet = "No circle yet. Start one or join with an invite."
@@ -442,10 +427,8 @@ internal object PeopleTextsEn : PeopleTexts {
     override val editCircle = "Edit circle"
     override val everyoneSeesChange = "Everyone in the circle sees the change."
 
-    override val contacts = "Contacts"
     override val addContact = "Add contact"
     override val noContactsYet = "Nobody here yet. People who join one of your circles show up here automatically."
-    override val searchContacts = "Search contacts"
     override val noCircleSelfAdded = "No circle · direct contact"
     override val pasteLink = "Paste link"
     override val pasteLinkHint = "The contact link you got"
@@ -499,11 +482,7 @@ internal object PeopleTextsEn : PeopleTexts {
     override val acceptInvite = "Accept invite"
     override val pasteInviteLinkHint = "The invite link you received"
     override val shareMyContact = "Share my contact"
-    override val wroteToYou = "Wrote to you"
-    override val notInContactsYet = "Not in your contacts yet."
     override val openConversation = "Open conversation"
-    override val contactsEmpty = "The people you write with appear here. Anyone in one of your circles shows up automatically."
-    override val allContacts = "All contacts"
     override val radioOnly = "radio only"
     override val lastReached = "Last reached"
     override val lastReachedFooter = "Only your phone knows this. Whether a message arrives shows when you send it."
