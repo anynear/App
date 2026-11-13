@@ -117,10 +117,14 @@ internal fun PersonalFilesScreen(controller: AppController, onBack: () -> Unit, 
     val scope = rememberCoroutineScope()
     val picker = rememberAttachmentPicker(AttachmentLimits.MAX_PERSONAL_BYTES) { images, picked ->
         scope.launch {
+            var added: PersonalFile? = null
             for (file in picked) {
-                val problem = withContext(Dispatchers.Default) { addPersonalFile(controller, store, file, images) }
-                problem?.let(controller::showNotice)
+                val result = withContext(Dispatchers.Default) { addPersonalFile(controller, store, file, images) }
+                result.problem?.let(controller::showNotice)
+                result.file?.let { added = it }
             }
+            // Open what was just added, so it does not have to be searched for in the list.
+            added?.let { onOpenFile(it.id) }
         }
     }
     // Fetch right away what others in the circle have stored in the meantime.
@@ -208,6 +212,13 @@ internal fun PersonalFilesScreen(controller: AppController, onBack: () -> Unit, 
                     },
                 )
             }
+            // Adding above the list: with many files it is otherwise only reachable at the very bottom.
+            ActionTiles {
+                ActionTile(texts.files.addPhoto, AppIcons.Bild) { picker.pickImages(AttachmentLimits.MAX_PER_MESSAGE) }
+                ActionTile(texts.files.addFile, AppIcons.Dokument) { picker.pickFiles() }
+            }
+            // Search the phone for documents, right below adding (ADR 0071 item 1, no ⋮ menu).
+            finder?.let { f -> FindDocsRow(f) { finding = false } }
             if (files.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (hasPhotos && hasDocs) ViewSwitch(gallery) { photosView = it }
@@ -245,12 +256,6 @@ internal fun PersonalFilesScreen(controller: AppController, onBack: () -> Unit, 
                     }
                 }
             }
-            ActionTiles {
-                ActionTile(texts.files.addPhoto, AppIcons.Bild) { picker.pickImages(AttachmentLimits.MAX_PER_MESSAGE) }
-                ActionTile(texts.files.addFile, AppIcons.Dokument) { picker.pickFiles() }
-            }
-            // Search the phone for documents, right below adding (ADR 0071 item 1, no ⋮ menu).
-            finder?.let { f -> FindDocsRow(f) { finding = false } }
             if (bin.isNotEmpty()) {
                 AppSection {
                     AppRow(title = texts.files.binRow(bin.size), icon = AppIcons.Papierkorb, chevron = true, onClick = { binOpen = true })
@@ -520,26 +525,27 @@ private fun FilesFooter(circleId: String?) {
 }
 
 /** Takes a selected file into [store]; returns what went wrong, otherwise `null`. */
-private suspend fun addPersonalFile(controller: AppController, store: PersonalFiles, file: PickedFile, image: Boolean): String? {
+/** Outcome of adding one file: the new file or why it was not taken in. */
+private class Added(val file: PersonalFile? = null, val problem: String? = null)
+
+private suspend fun addPersonalFile(controller: AppController, store: PersonalFiles, file: PickedFile, image: Boolean): Added {
     // Storage space across all storages full (ADR 0079): do not take in anything new that would never get online.
-    if (controller.storage?.full == true) return texts.files.storageFull
-    val bytes = file.bytes ?: return if (file.tooLarge && !image) texts.files.fileTooLarge else texts.status.fileTooLarge
+    if (controller.storage?.full == true) return Added(problem = texts.files.storageFull)
+    val bytes = file.bytes ?: return Added(problem = if (file.tooLarge && !image) texts.files.fileTooLarge else texts.status.fileTooLarge)
     // Photos, also images chosen as a file, large, without location (ADR 0067 §7) and upright; downscaled only in the chat.
     val imageFile = !image && file.name.substringAfterLast('.', "").lowercase() in STORE_AS_PHOTO
     if (image || imageFile) {
         val draft = controller.prepareStoreImage(bytes)
         when {
-            draft != null && imageFile -> store.add(draft, "${file.name.substringBeforeLast('.')}.jpg")
-            draft != null -> store.add(draft, "${texts.files.photoName(formatShortDate(Clock.System.now().toEpochMilliseconds()))}.jpg")
-            image -> return texts.status.fileTooLarge
+            draft != null && imageFile -> return Added(store.add(draft, "${file.name.substringBeforeLast('.')}.jpg"))
+            draft != null -> return Added(store.add(draft, "${texts.files.photoName(formatShortDate(Clock.System.now().toEpochMilliseconds()))}.jpg"))
+            image -> return Added(problem = texts.status.fileTooLarge)
             // An image that cannot be read (rare format): unchanged like any other file.
         }
-        if (draft != null) return null
     }
     val (draft, problem) = controller.prepareFile(bytes, file.name, AttachmentLimits.MAX_PERSONAL_BYTES, texts.files.fileTooLarge)
-    if (draft == null) return problem
-    store.add(draft, draft.name.ifEmpty { file.name })
-    return null
+    if (draft == null) return Added(problem = problem)
+    return Added(store.add(draft, draft.name.ifEmpty { file.name }))
 }
 
 /**

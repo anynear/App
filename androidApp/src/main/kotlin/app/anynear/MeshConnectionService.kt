@@ -60,7 +60,7 @@ class MeshConnectionService : Service() {
             else -> 0
         }
         try {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(radio), type)
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), type)
         } catch (e: SecurityException) {
             // Bluetooth permission missing (connectedDevice): then at least receive messages.
             log("Dienst ohne Funkgerät: ${e.message.orEmpty()}")
@@ -69,7 +69,7 @@ class MeshConnectionService : Service() {
         }
     }
 
-    private fun buildNotification(radio: Boolean): Notification {
+    private fun buildNotification(): Notification {
         val open = PendingIntent.getActivity(
             this,
             0,
@@ -79,11 +79,13 @@ class MeshConnectionService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(AppBrand.notificationIcon)
             .setContentTitle(AppBrand.name)
-            .setContentText(if (radio) texts.system.receivingWithRadio else texts.system.receiving)
+            .setContentText(texts.system.receiving)
             .setContentIntent(open)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
+            // Own group, so that Android does not bundle it with messages and put it on top of them.
+            .setGroup(CHANNEL_ID)
             .build()
     }
 

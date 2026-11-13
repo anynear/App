@@ -17,7 +17,6 @@ interface SystemTexts {
 
     // Foreground service (Android)
     val receiving: String
-    val receivingWithRadio: String
     val backgroundChannel: String
     val backgroundChannelDescription: String
 
@@ -70,7 +69,6 @@ internal object SystemTextsDe : SystemTexts {
     override val remindersChannelDescription = "Zum Beispiel, dein Funkgerät zu laden"
 
     override val receiving = "Empfängt deine Nachrichten"
-    override val receivingWithRadio = "Empfängt Nachrichten, mit Funkgerät verbunden"
     override val backgroundChannel = "$APP läuft im Hintergrund"
     override val backgroundChannelDescription = "Nötig, damit neue Nachrichten ankommen. Kann ausgeblendet werden."
 
@@ -108,7 +106,6 @@ internal object SystemTextsEn : SystemTexts {
     override val remindersChannelDescription = "For example, to charge your radio"
 
     override val receiving = "Receiving your messages"
-    override val receivingWithRadio = "Receiving messages, connected to radio"
     override val backgroundChannel = "$APP running in the background"
     override val backgroundChannelDescription = "Needed so new messages arrive. You can hide it."
 

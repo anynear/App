@@ -132,6 +132,8 @@ class CheckInNotifier(private val context: Context) {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(androidx.core.app.NotificationCompat.CATEGORY_REMINDER)
+            // Own group, not bundled with messages (like [MeshConnectionService]).
+            .setGroup(CHANNEL_ID)
             .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(open)
             .addAction(0, checkIn.okLabel, LifeSignActionReceiver.intent(context, checkIn.okAction, ""))
