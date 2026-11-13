@@ -53,6 +53,15 @@ jobs:
       run:
         working-directory: App
     steps:
+      # A repository can switch releases off (variable BETA_RELEASE=off), e.g. a private copy whose builds would
+      # carry lower version codes than the public releases. Test apps for a phone come from ci.yml (Run workflow).
+      - name: Releases allowed here
+        if: vars.BETA_RELEASE == 'off'
+        working-directory: .
+        run: |
+          echo "::error::Releases are switched off in this repository (BETA_RELEASE=off). Run ci.yml for a test app." >&2
+          exit 1
+
       - uses: actions/checkout@v4
         with:
           path: App
@@ -253,6 +262,7 @@ jobs:
           status: completed
 
   ios:
+    if: vars.BETA_RELEASE != 'off'
     runs-on: ${{ fromJSON(vars.RUNNER_MAC || '"macos-26"') }}
     environment: release
     outputs:
