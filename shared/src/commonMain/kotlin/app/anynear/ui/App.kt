@@ -64,7 +64,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.liveRegion
@@ -91,7 +90,8 @@ import app.anynear.mesh.LinkState
 
 private enum class Tab(val icon: ImageVector) {
     Chats(AppIcons.Nachrichten),
-    People(AppIcons.Person),
+    /** Circles only (ADR 0100); contacts are under „Neue Nachricht“. */
+    Circles(AppIcons.Kreis),
     Files(AppIcons.Dokument),
 
     /** Alerts and channels (ADR 0062); replaces „Mehr“, whose entries are in the ⋮ menu. */
@@ -101,7 +101,7 @@ private enum class Tab(val icon: ImageVector) {
     val title: String
         get() = when (this) {
             Chats -> texts.setup.tabChats
-            People -> texts.setup.tabPeople
+            Circles -> texts.setup.tabCircles
             Files -> texts.setup.tabFiles
             Alerts -> texts.alerts.title
         }
@@ -119,7 +119,7 @@ private val NoAccessHint: StateFlow<Boolean> = MutableStateFlow(false)
 private sealed interface Detail {
     data class CircleInfo(val circleId: String) : Detail
     data class PersonInfo(val peer: String) : Detail
-    /** My profile: from the ⋮ menu and via one's own card under „Menschen“, the same page. */
+    /** My profile: from the ⋮ menu. */
     data object OwnProfile : Detail
     data class Connections(val start: ConnectionsPage = ConnectionsPage.Main) : Detail
     data object Settings : Detail
@@ -200,8 +200,6 @@ private fun MainScreen(controller: AppController) {
     var details by remember { mutableStateOf<List<Detail>>(emptyList()) }
     // „Neue Nachricht“: choosing who to write to, above the „Nachrichten“ overview.
     var newMessage by remember { mutableStateOf(false) }
-    // Under „Menschen“: contacts or circles; is kept when switching back and forth between the tabs.
-    var showCircles by rememberSaveable { mutableStateOf(false) }
     val showDetail: (Detail) -> Unit = { details = details + it }
     val closeDetail: () -> Unit = { details = details.dropLast(1) }
     val openRequest by controller.openRequest.collectAsState()
@@ -329,7 +327,7 @@ private fun MainScreen(controller: AppController) {
                 AppCommand.Settings -> details = listOf(Detail.Settings)
                 AppCommand.Help -> details = listOf(Detail.Help)
                 AppCommand.ShowChats -> selectTab(Tab.Chats)
-                AppCommand.ShowPeople -> selectTab(Tab.People)
+                AppCommand.ShowCircles -> selectTab(Tab.Circles)
                 AppCommand.ShowFiles -> selectTab(Tab.Files)
                 AppCommand.ShowAlerts -> selectTab(Tab.Alerts)
                 AppCommand.Back -> goBack()
@@ -536,19 +534,8 @@ private fun MainScreen(controller: AppController) {
                                     )
                                     tab == Tab.Chats && newMessage -> NewMessageScreen(controller, onBack = { newMessage = false }, onPick = openChat)
                                     tab == Tab.Chats -> ChatListScreen(controller, onOpen = openChat, onNewMessage = { newMessage = true }, onOpenPublic = { openPublic = it })
-                                    // People: contacts and circles separate, switchable at the top. From „Kreise“ first the circle detail.
-                                    tab == Tab.People -> PeopleScreen(
-                                        showCircles = showCircles,
-                                        onSwitch = { showCircles = it },
-                                        contacts = {
-                                            ContactsScreen(
-                                                controller,
-                                                onOpenChat = { openChatHere(Conversation.Direct(it)) },
-                                                onOpenProfile = { showDetail(Detail.OwnProfile) },
-                                            )
-                                        },
-                                        circles = { CirclesScreen(controller, onOpenCircle = { showDetail(Detail.CircleInfo(it)) }, onOpenChat = openChatHere) },
-                                    )
+                                    // Circles (ADR 0100): first the circle detail, from there into the chat.
+                                    tab == Tab.Circles -> CirclesScreen(controller, onOpenCircle = { showDetail(Detail.CircleInfo(it)) }, onOpenChat = openChatHere)
                                     tab == Tab.Files -> FilesScreen(
                                         controller,
                                         onOpenPersonal = { showDetail(Detail.FilesPersonal) },

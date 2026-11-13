@@ -382,7 +382,7 @@ fun menuText(key: String): String = when (key) {
     "Help" -> texts.system.menuHelp
     "GoTo" -> texts.system.menuGoTo
     "ShowChats" -> texts.setup.tabChats
-    "ShowPeople" -> texts.setup.tabPeople
+    "ShowCircles" -> texts.setup.tabCircles
     "ShowFiles" -> texts.setup.tabFiles
     "ShowAlerts" -> texts.alerts.title
     "Back" -> texts.common.back

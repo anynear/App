@@ -141,7 +141,6 @@ interface SetupTexts {
     val choiceShareText: String
     val choiceLookAroundText: String
     val onlyAdd: String
-    val tabPeople: String
     val tabFiles: String
     val tabMore: String
 
@@ -311,7 +310,6 @@ internal object SetupTextsDe : SetupTexts {
     override val choiceShareText = "Schick deinen Kontakt an Familie oder Freunde. Wer ihn öffnet, kann dir gleich schreiben."
     override val choiceLookAroundText = "Erst einmal die App kennenlernen. Kontakte und Kreise kannst du jederzeit hinzufügen."
     override val onlyAdd = "Nur hinzufügen"
-    override val tabPeople = "Menschen"
     override val tabFiles = "Ablage"
     override val tabMore = "Mehr"
     override val notificationsTitle = "Benachrichtigungen"
@@ -479,7 +477,6 @@ internal object SetupTextsEn : SetupTexts {
     override val choiceShareText = "Send your contact to family or friends. Whoever opens it can write to you right away."
     override val choiceLookAroundText = "Get to know the app first. You can add contacts and circles any time."
     override val onlyAdd = "Just add"
-    override val tabPeople = "People"
     override val tabFiles = "Files"
     override val tabMore = "More"
     override val notificationsTitle = "Notifications"
