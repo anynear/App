@@ -1,0 +1,836 @@
+# Release of the app (APK as a GitHub release, Google Play closed test, TestFlight, website), by hand only. Start via
+# "Actions -> Beta-Release -> Run workflow" or `gh workflow run beta-release.yml --ref <ref>`, with one of two refs:
+#
+#   main            Build vX.Y.Z-<hash>: X.Y.Z = latest tag vX.Y.Z on main, <hash> = commit (7 characters),
+#                   e.g. v0.3.0-1a2b3c4. The workflow creates the release and its tag itself.
+#   Tag vX.Y.Z      new version (needs release-notes/X.Y.Z.md). The tag alone starts nothing.
+#
+# Why builds instead of versions: TestFlight sends the first build of a new version X.Y.Z into Apple's beta review,
+# further builds of the same version go to the external testers without review.
+#
+#   android  signed APK (flavor direct) as GitHub release v<version> with the assets anynear-v<version>.apk and
+#            build.json (the APK updates itself from there), plus the app bundle for Google Play (flavor play) as a
+#            workflow artifact; with PLAY_SERVICE_ACCOUNT_JSON also released to the closed test track
+#   ios      upload to TestFlight (closed beta, invited testers only)
+#   publish  attaches ios.json to the release and redeploys the website, which shows the latest release
+#
+# Version = tag without "v"; iOS gets only X.Y.Z of it (Apple allows only numbers). versionCode and iOS build number:
+# VERSION_CODE_BASE + 2n for a build, + 2n+1 for a tag vX.Y.Z on the same commit (n = number of commits), so that the
+# tag build installs as an update and App Store Connect gets no number twice.
+#
+# Secrets (environment "release"): KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD (key CN=anynear,
+# ADR 0061); for iOS ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (App Store Connect API key, role Admin; without them iOS is
+# skipped); optional PLAY_SERVICE_ACCOUNT_JSON (track from the variable PLAY_TRACK, default alpha); optional
+# DEPLOYBASE_API_KEY with the variables WEBSITE_REPO and WEBSITE_PROJECT_ID for the website. Optional variables:
+# RUNNER_RELEASE, RUNNER_MAC (JSON label lists, default GitHub's runners), VERSION_CODE_BASE (default 0), NETWORK_REPO
+# (repository whose latest release carries net.json; otherwise https://anynear.net/andp/v1/net). While ANMP and ANDP are
+# private, CI_APP_ID and CI_APP_KEY give read access to them.
+name: Beta-Release
+
+# By hand only: merges and tags no longer start a release.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VERSION_CODE_BASE: ${{ vars.VERSION_CODE_BASE || '0' }}
+
+# One release at a time. Cancelling would leave half a TestFlight upload behind. If several merges come
+# in quick succession, only the newest waits; builds in between are dropped.
+concurrency:
+  group: beta-release
+  cancel-in-progress: false
+
+jobs:
+  android:
+    runs-on: ${{ fromJSON(vars.RUNNER_RELEASE || '"ubuntu-latest"') }}
+    environment: release
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    defaults:
+      run:
+        working-directory: App
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: App
+          fetch-depth: 0 # for versionCode from the number of commits
+
+      # A version (tag vX.Y.Z) needs its release notes in release-notes/X.Y.Z.md; stop before anything is built.
+      - name: Check the release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        run: scripts/release-notes.sh "$GITHUB_REF_NAME" > /dev/null
+
+      # ANMP core and ANDP client via composite build from the neighbouring folders (ADR 0036). While they are private,
+      # read access via a short-lived token of the GitHub App anynear CI (secrets CI_APP_ID, CI_APP_KEY; Contents read).
+      - uses: actions/create-github-app-token@v2
+        id: ci-token
+        if: github.event.repository.private
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_KEY }}
+          repositories: ${{ vars.ANMP_REPO || 'ANMP' }},${{ vars.ANDP_REPO || 'ANDP' }}${{ vars.NETWORK_REPO && format(',{0}', vars.NETWORK_REPO) || '' }}
+          permission-contents: read
+
+      - uses: actions/checkout@v4
+        with:
+          repository: anynear/${{ vars.ANMP_REPO || 'ANMP' }}
+          token: ${{ steps.ci-token.outputs.token || github.token }}
+          path: ANMP
+
+      - uses: actions/checkout@v4
+        with:
+          repository: anynear/${{ vars.ANDP_REPO || 'ANDP' }}
+          token: ${{ steps.ci-token.outputs.token || github.token }}
+          path: ANDP
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Version
+        id: version
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$GITHUB_REF is not on main." >&2; exit 1; }
+          count=$(git rev-list --count HEAD)
+          commit=$(git rev-parse --short=7 HEAD)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            # New version: tag vX.Y.Z without suffix (build tags vX.Y.Z-<hash> are created only by this workflow).
+            [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "::error::Releases only from main or a tag vX.Y.Z without a suffix, not from $GITHUB_REF_NAME." >&2; exit 1; }
+            marketing="${BASH_REMATCH[1]}"
+            name="$marketing"
+            code=$((VERSION_CODE_BASE + 2 * count + 1))
+          elif [ "$GITHUB_REF" = refs/heads/main ]; then
+            # Build: version of the latest tag vX.Y.Z on main plus commit.
+            base=$(git tag --merged HEAD --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+            [ -n "$base" ] || { echo "::error::There is no tag vX.Y.Z on main yet." >&2; exit 1; }
+            marketing="${base#v}"
+            name="$marketing-$commit"
+            code=$((VERSION_CODE_BASE + 2 * count))
+          else
+            echo "::error::Releases only from main or a tag vX.Y.Z, not from $GITHUB_REF." >&2
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "tag=v$name" >> "$GITHUB_OUTPUT"
+          echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+          echo "Version $name, Build $code"
+
+      - name: Embed the network list
+        # Signed network list unchanged (ADR 0015, 0035 §6): release asset net.json of the latest
+        # release in the repository NETWORK_REPO (ADR 0064) if set, otherwise the entry point https://anynear.net/andp/v1/net. The app checks the signature itself.
+        # If none is reachable, it builds without an embedded list and fetches it on first start from the entry point.
+        env:
+          GH_TOKEN: ${{ steps.ci-token.outputs.token || github.token }}
+          NETWORK_REPO: ${{ vars.NETWORK_REPO }}
+        run: |
+          got=""
+          mkdir -p "$RUNNER_TEMP/net"
+          if [ -n "$NETWORK_REPO" ] && gh release download -R "anynear/$NETWORK_REPO" --pattern net.json --dir "$RUNNER_TEMP/net" --clobber 2>/dev/null \
+              && grep -q '"sig"' "$RUNNER_TEMP/net/net.json"; then
+            mv "$RUNNER_TEMP/net/net.json" net.json
+            got="Network-Release"
+          elif curl -fsS --max-time 20 https://anynear.net/andp/v1/net -o "$RUNNER_TEMP/net/seed.json" && grep -q '"sig"' "$RUNNER_TEMP/net/seed.json"; then
+            mv "$RUNNER_TEMP/net/seed.json" net.json
+            got="anynear.net"
+          fi
+          if [ -n "$got" ]; then echo "Embedded the network list from $got."; else echo "::notice::No network list reachable, building without an embedded list."; fi
+
+      - name: Build and sign the APK and the app bundle
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo "Secret KEYSTORE_BASE64 is missing" >&2; exit 1; }
+          export KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FILE"
+          # The same key signs both: it is the upload key for Play App Signing, so Play and the APK stay interchangeable.
+          ./gradlew :androidApp:assembleDirectRelease :androidApp:bundlePlayRelease \
+            -Papp.versionName="${{ steps.version.outputs.name }}" \
+            -Papp.versionCode="${{ steps.version.outputs.code }}"
+          rm -f "$KEYSTORE_FILE"
+
+      - name: Prepare the assets
+        run: |
+          mkdir -p dist
+          # File name with version, e.g. anynear-v0.3.0-1a2b3c4.apk; the website looks for exactly this name (repo Website).
+          apk="dist/anynear-${{ steps.version.outputs.tag }}.apk"
+          cp androidApp/build/outputs/apk/direct/release/androidApp-direct-release.apk "$apk"
+          cp androidApp/build/outputs/bundle/playRelease/androidApp-play-release.aab "dist/anynear-play-${{ steps.version.outputs.tag }}.aab"
+          # Package name from the APK itself: older installations recognise a new app ID by it (ADR 0025).
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2"
+          package=$("$aapt2" dump packagename "$apk")
+          test -n "$package" || { echo "Cannot read the package name of the APK" >&2; exit 1; }
+          # SHA-256 of the signing certificate: installations with a different key show “reinstall” (ADR 0037).
+          # Newest build-tools first; if its apksigner does not run here (e.g. it needs a newer JDK), the next one.
+          signer=""
+          for dir in $(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -Vr); do
+            out=$("${dir}apksigner" verify --print-certs "$apk" 2>&1) || true
+            signer=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<<"$out" | head -1)
+            [[ "$signer" =~ ^[0-9a-f]{64}$ ]] && break
+            echo "apksigner aus $dir: $(head -3 <<<"$out")" >&2
+          done
+          [[ "$signer" =~ ^[0-9a-f]{64}$ ]] || { echo "Cannot read the signing certificate of the APK" >&2; exit 1; }
+          cat > dist/build.json <<EOF
+          {
+            "version": "${{ steps.version.outputs.name }}",
+            "versionCode": ${{ steps.version.outputs.code }},
+            "commit": "${{ steps.version.outputs.commit }}",
+            "package": "$package",
+            "signer": "$signer",
+            "date": "${{ steps.version.outputs.date }}",
+            "size": $(stat -c %s "$apk"),
+            "sha256": "$(sha256sum "$apk" | cut -d' ' -f1)"
+          }
+          EOF
+          cat dist/build.json
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # Repeated run: replace the assets in the existing release. Tags vX.Y.Z are created only by the project owner; the build tag
+          # vX.Y.Z-<hash> is created by gh release create on the built commit. --latest so that the website takes it.
+          # A version carries the release notes from release-notes/X.Y.Z.md (README there); a build between versions
+          # only points to the version it follows.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            scripts/release-notes.sh "$TAG" > "$RUNNER_TEMP/release-notes.md"
+          else
+            echo "Build of main after version ${TAG%-*}. What that version brought is in its release notes." > "$RUNNER_TEMP/release-notes.md"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "dist/anynear-$TAG.apk" dist/build.json --clobber
+            gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            gh release create "$TAG" "dist/anynear-$TAG.apk" dist/build.json --verify-tag \
+              --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --latest
+          else
+            gh release create "$TAG" "dist/anynear-$TAG.apk" dist/build.json --target "$GITHUB_SHA" \
+              --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --latest
+          fi
+
+      # The app bundle is not a release asset: the website and the APK update only look at the APK.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anynear-play-${{ steps.version.outputs.tag }}
+          path: App/dist/anynear-play-${{ steps.version.outputs.tag }}.aab
+          if-no-files-found: error
+
+      - name: Check the Play secret
+        id: play
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then echo "upload=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::No PLAY_SERVICE_ACCOUNT_JSON, the app bundle stays an artifact."; fi
+
+      # Straight to the closed test (ADR 0089): the testers get it as soon as Google has reviewed the release; nothing to
+      # release by hand in the Play Console. The default closed track has the id alpha; another closed track via the
+      # repository variable PLAY_TRACK.
+      - name: Upload to Google Play (closed test track)
+        if: steps.play.outputs.upload == 'true'
+        # A Play problem (review pending, wrong track) must not stop the website deploy and ios.json in publish.
+        continue-on-error: true
+        uses: r0adkll/upload-google-play@v1.1.3
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: app.anynear
+          releaseFiles: App/dist/anynear-play-${{ steps.version.outputs.tag }}.aab
+          releaseName: ${{ steps.version.outputs.name }}
+          track: ${{ vars.PLAY_TRACK || 'alpha' }}
+          status: completed
+
+  ios:
+    runs-on: ${{ fromJSON(vars.RUNNER_MAC || '"macos-26"') }}
+    environment: release
+    outputs:
+      built: ${{ steps.ios-json.outputs.built }}
+    defaults:
+      run:
+        working-directory: App
+    steps:
+      - name: Check the secrets
+        id: check
+        working-directory: . # the folder App does not exist before the checkout
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ]; then
+            echo "::notice::Secrets ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 are missing, skipping iOS."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          path: App
+          fetch-depth: 0 # for versionCode from the number of commits
+
+      # ANMP core and ANDP client via composite build from the neighbouring folders (ADR 0036). While they are private,
+      # read access via a short-lived token of the GitHub App anynear CI (secrets CI_APP_ID, CI_APP_KEY; Contents read).
+      - uses: actions/create-github-app-token@v2
+        if: steps.check.outputs.ready == 'true' && github.event.repository.private
+        id: ci-token
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_KEY }}
+          repositories: ${{ vars.ANMP_REPO || 'ANMP' }},${{ vars.ANDP_REPO || 'ANDP' }}${{ vars.NETWORK_REPO && format(',{0}', vars.NETWORK_REPO) || '' }}
+          permission-contents: read
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          repository: anynear/${{ vars.ANMP_REPO || 'ANMP' }}
+          token: ${{ steps.ci-token.outputs.token || github.token }}
+          path: ANMP
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          repository: anynear/${{ vars.ANDP_REPO || 'ANDP' }}
+          token: ${{ steps.ci-token.outputs.token || github.token }}
+          path: ANDP
+
+      # The workflow installs none of these itself; better to say right away what is missing.
+      - name: Check the tools
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          missing=""
+          for tool in xcodebuild jq gh python3 openssl curl; do
+            command -v "$tool" >/dev/null || missing="$missing $tool"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing on the runner:$missing."
+            exit 1
+          fi
+
+      # xcodebuild reports only “Authentication failed” for every key error. Here we check the
+      # three secrets individually and ask the App Store Connect API directly, so that it is clear what does not
+      # fit. Only findings are printed, never values.
+      - name: Check the App Store Connect key
+        if: steps.check.outputs.ready == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          fail=0
+          if [[ ! "$ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ ]]; then
+            echo "::error::ASC_KEY_ID does not have the format of a key ID (10 characters, A-Z and 0-9). Trailing space or line break?"
+            fail=1
+          fi
+          if [[ ! "$ASC_ISSUER_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo "::error::ASC_ISSUER_ID is not a UUID (issuer ID at the top of the team keys page)."
+            fail=1
+          fi
+          key="$RUNNER_TEMP/check.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$key"
+          # Not an error: the archive step rewrites the key anyway. Only as a hint
+          # in case xcodebuild still reports “Authentication failed”.
+          if grep -q $'\r' "$key"; then
+            echo "::warning::ASC_KEY_P8 has Windows line endings (CRLF). openssl reads that, xcodebuild possibly not; the archive step therefore rewrites the key as a clean PEM file."
+          fi
+          if grep -q -E '[[:space:]]$' "$key" && ! grep -q $'\r' "$key"; then
+            echo "::warning::ASC_KEY_P8 has trailing spaces; the archive step rewrites the key."
+          fi
+          if grep -q '\\n' "$key"; then
+            echo "::error::ASC_KEY_P8 contains a literal \\n instead of line breaks. Set the file with gh secret set ASC_KEY_P8 < AuthKey_….p8."
+            fail=1
+          fi
+          pem="PRIVATE KEY-----" # split so that the line itself does not look like a key
+          if [ "$(grep -c -- "-----BEGIN $pem" "$key")" != 1 ] || [ "$(grep -c -- "-----END $pem" "$key")" != 1 ]; then
+            echo "::error::ASC_KEY_P8 does not have exactly one line BEGIN PRIVATE KEY and one line END PRIVATE KEY. Set the whole content of AuthKey_….p8 as the secret."
+            fail=1
+          fi
+          if ! openssl pkey -in "$key" -noout 2>/dev/null; then
+            echo "::error::openssl cannot read ASC_KEY_P8 as a private key (truncated, base64-encoded or the wrong file?)."
+            fail=1
+          elif ! openssl pkey -in "$key" -text_pub -noout 2>/dev/null | grep -q -E 'prime256v1|P-256'; then
+            echo "::error::ASC_KEY_P8 is not an EC key on P-256. App Store Connect keys are always P-256, so the file comes from somewhere else."
+            fail=1
+          else
+            echo "ASC_KEY_P8: valid P-256 key."
+          fi
+          [ "$fail" = 0 ] || { rm -f "$key"; exit 1; }
+
+          # Token like xcodebuild: ES256 JWT, valid for 10 minutes. openssl returns the signature as DER,
+          # JWT needs r||s with 32 bytes each.
+          b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+          now=$(date +%s)
+          header=$(printf '{"alg":"ES256","kid":"%s","typ":"JWT"}' "$ASC_KEY_ID" | b64url)
+          payload=$(printf '{"iss":"%s","iat":%d,"exp":%d,"aud":"appstoreconnect-v1"}' "$ASC_ISSUER_ID" "$now" "$((now + 600))" | b64url)
+          sig=$(printf '%s.%s' "$header" "$payload" | openssl dgst -sha256 -sign "$key" \
+            | python3 -c '
+          import sys
+          d = sys.stdin.buffer.read()
+          i = 2
+          out = b""
+          for _ in range(2):
+              n = d[i + 1]
+              out += d[i + 2:i + 2 + n].lstrip(b"\0").rjust(32, b"\0")
+              i += 2 + n
+          sys.stdout.buffer.write(out)' | b64url)
+          rm -f "$key"
+          token="$header.$payload.$sig"
+
+          # Queries the bundle IDs; this only works if key, key ID and issuer ID match.
+          api() {
+            curl -gsS --max-time 30 -o "$RUNNER_TEMP/asc.json" -w '%{http_code}' \
+              -H "Authorization: Bearer $token" "https://api.appstoreconnect.apple.com/v1/$1"
+          }
+          reason() { jq -r '[.errors[]? | "\(.status) \(.code): \(.title)"] | join("; ")' "$RUNNER_TEMP/asc.json"; }
+          status=$(api 'bundleIds?filter[identifier]=app.anynear,app.anynear.notifications,app.anynear.credentials,app.anynear.share&fields[bundleIds]=identifier,seedId,bundleIdCapabilities&include=bundleIdCapabilities&limit=20')
+          case "$status" in
+            200) echo "App Store Connect API: signing in with the key works." ;;
+            401) echo "::error::Apple rejects the key (401, $(reason)). Key ID, issuer ID and .p8 do not belong together, or the key has been revoked."; exit 1 ;;
+            403) echo "::error::Key valid but without permission (403, $(reason)). The Admin role is needed, or an agreement in App Store Connect has not been accepted yet."; exit 1 ;;
+            *)   echo "::error::Unexpected answer from the App Store Connect API ($status, $(reason))."; exit 1 ;;
+          esac
+          # The profiles only take over capabilities that are switched on at the bundle ID. Which app
+          # group is assigned, the API does not reveal; that remains to be checked on developer.apple.com.
+          team=$(sed -n 's/^TEAM_ID=//p' iosApp/Configuration/Config.xcconfig)
+          # Password extension (ADR 0039): app and extension need AutoFill Credential Provider.
+          for spec in "app.anynear:APP_GROUPS PUSH_NOTIFICATIONS ASSOCIATED_DOMAINS AUTOFILL_CREDENTIAL_PROVIDER" "app.anynear.notifications:APP_GROUPS" \
+            "app.anynear.credentials:APP_GROUPS AUTOFILL_CREDENTIAL_PROVIDER" "app.anynear.share:APP_GROUPS"; do
+            id=${spec%%:*}
+            entry=$(jq -c --arg id "$id" '
+              (.included // []) as $inc
+              | .data[] | select(.attributes.identifier == $id)
+              | {seed: .attributes.seedId,
+                 caps: [.relationships.bundleIdCapabilities.data[]?.id as $c
+                        | $inc[] | select(.id == $c) | .attributes.capabilityType]}' "$RUNNER_TEMP/asc.json")
+            if [ -z "$entry" ]; then
+              echo "::warning::Bundle ID $id does not exist yet. Create it at developer.apple.com → Identifiers."
+              continue
+            fi
+            seed=$(jq -r .seed <<<"$entry")
+            if [ "$seed" != "$team" ]; then
+              echo "::warning::Bundle ID $id has the prefix $seed, the project expects $team (TEAM_ID in Config.xcconfig)."
+            fi
+            missing=""
+            for cap in ${spec#*:}; do
+              jq -e --arg c "$cap" '.caps | index($c)' <<<"$entry" >/dev/null || missing="$missing $cap"
+            done
+            if [ -n "$missing" ]; then
+              echo "::warning::Bundle ID $id: exists, but without$missing. Switch it on at developer.apple.com → Identifiers → $id (App Groups with group.app.anynear)."
+            else
+              echo "Bundle ID $id: exists, with $(jq -r '.caps | join(", ")' <<<"$entry")."
+            fi
+          done
+          rm -f "$RUNNER_TEMP/asc.json"
+
+      # App Store Connect accepts only builds with the current SDK (Xcode 26, iOS 26 SDK). Better to
+      # abort immediately than after the long build at upload.
+      - name: Check for Xcode 26
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          version=$(xcodebuild -version | awk 'NR==1 {print $2}')
+          if [ "${version%%.*}" -lt 26 ]; then
+            # GitHub's macOS images carry several Xcode versions; take the newest 26.x if there is one.
+            newest=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+            if [ -n "$newest" ]; then sudo xcode-select -s "$newest/Contents/Developer"; fi
+            version=$(xcodebuild -version | awk 'NR==1 {print $2}')
+          fi
+          xcodebuild -version
+          if [ "${version%%.*}" -lt 26 ]; then
+            echo "::error::Xcode $version on this runner, Xcode 26 or newer is needed."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.check.outputs.ready == 'true'
+
+      - name: Version
+        if: steps.check.outputs.ready == 'true'
+        id: version
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$GITHUB_REF is not on main." >&2; exit 1; }
+          count=$(git rev-list --count HEAD)
+          commit=$(git rev-parse --short=7 HEAD)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            # New version: tag vX.Y.Z without suffix (build tags vX.Y.Z-<hash> are created only by this workflow).
+            [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "::error::Releases only from main or a tag vX.Y.Z without a suffix, not from $GITHUB_REF_NAME." >&2; exit 1; }
+            marketing="${BASH_REMATCH[1]}"
+            name="$marketing"
+            code=$((VERSION_CODE_BASE + 2 * count + 1))
+          elif [ "$GITHUB_REF" = refs/heads/main ]; then
+            # Build: version of the latest tag vX.Y.Z on main plus commit.
+            base=$(git tag --merged HEAD --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+            [ -n "$base" ] || { echo "::error::There is no tag vX.Y.Z on main yet." >&2; exit 1; }
+            marketing="${base#v}"
+            name="$marketing-$commit"
+            code=$((VERSION_CODE_BASE + 2 * count))
+          else
+            echo "::error::Releases only from main or a tag vX.Y.Z, not from $GITHUB_REF." >&2
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "tag=v$name" >> "$GITHUB_OUTPUT"
+          echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+          echo "Version $name, Build $code"
+
+      - name: Embed the network list
+        # Signed network list unchanged (ADR 0015, 0035 §6): release asset net.json of the latest
+        # release in the repository NETWORK_REPO (ADR 0064) if set, otherwise the entry point https://anynear.net/andp/v1/net. The app checks the signature itself.
+        # If none is reachable, it builds without an embedded list and fetches it on first start from the entry point.
+        if: steps.check.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ steps.ci-token.outputs.token || github.token }}
+          NETWORK_REPO: ${{ vars.NETWORK_REPO }}
+        run: |
+          got=""
+          mkdir -p "$RUNNER_TEMP/net"
+          if [ -n "$NETWORK_REPO" ] && gh release download -R "anynear/$NETWORK_REPO" --pattern net.json --dir "$RUNNER_TEMP/net" --clobber 2>/dev/null \
+              && grep -q '"sig"' "$RUNNER_TEMP/net/net.json"; then
+            mv "$RUNNER_TEMP/net/net.json" net.json
+            got="Network-Release"
+          elif curl -fsS --max-time 20 https://anynear.net/andp/v1/net -o "$RUNNER_TEMP/net/seed.json" && grep -q '"sig"' "$RUNNER_TEMP/net/seed.json"; then
+            mv "$RUNNER_TEMP/net/seed.json" net.json
+            got="anynear.net"
+          fi
+          if [ -n "$got" ]; then echo "Embedded the network list from $got."; else echo "::notice::No network list reachable, building without an embedded list."; fi
+
+      - name: Archive and upload to TestFlight
+        if: steps.check.outputs.ready == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          # openssl reads the key tolerantly and writes it as a clean PKCS#8 PEM file (LF,
+          # 64 characters per line) under the name that Apple's tools expect.
+          raw="$RUNNER_TEMP/asc-raw.p8"
+          key="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$raw"
+          openssl pkey -in "$raw" -out "$key"
+          rm -f "$raw"
+          team=$(sed -n 's/^TEAM_ID=//p' iosApp/Configuration/Config.xcconfig)
+          auth=(-allowProvisioningUpdates -authenticationKeyPath "$key"
+                -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$team</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>testFlightInternalTestingOnly</key><false/>
+          </dict>
+          </plist>
+          EOF
+          # xcodebuild accepts the API key only on export, not on archiving (Apple DTS,
+          # forum thread 763225; otherwise “Authentication failed” and “No profiles”). Since Xcode 27
+          # the ad hoc archive also requires a profile. Therefore archive entirely without signing and then sign ad
+          # hoc ourselves: the entitlements (app group, push, keychain, links) are then in the signature,
+          # and the export re-signs with certificate and profiles from Apple.
+          xcodebuild archive -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Release \
+            -destination generic/platform=iOS -archivePath "$RUNNER_TEMP/anynear.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="$team" AppIdentifierPrefix="$team." \
+            MARKETING_VERSION="${{ steps.version.outputs.marketing }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.code }}" \
+            APP_VERSION_NAME="${{ steps.version.outputs.name }}"
+          app=$(echo "$RUNNER_TEMP"/anynear.xcarchive/Products/Applications/*.app)
+          plugins="$app/PlugIns"
+          # $(AppIdentifierPrefix) would otherwise come from the profile; without a profile we set it ourselves.
+          # First the extensions, then the app (the app signature covers the embedded ones).
+          # Each extension with its own entitlements: notifications (ADR 0009), passwords (ADR 0039), sharing.
+          for pair in "$plugins/NotificationService.appex=iosApp/NotificationService/NotificationService.entitlements" \
+            "$plugins/CredentialProvider.appex=iosApp/CredentialProvider/CredentialProvider.entitlements" \
+            "$plugins/Share.appex=iosApp/Share/Share.entitlements" \
+            "$app=iosApp/iosApp/iosApp.entitlements"; do
+            [ -d "${pair%%=*}" ] || { echo "::error::The archive lacks $(basename "${pair%%=*}")."; rm -f "$key"; exit 1; }
+            xcent="$RUNNER_TEMP/$(basename "${pair%%=*}").xcent"
+            sed "s/\$(AppIdentifierPrefix)/$team./g" "${pair#*=}" > "$xcent"
+            codesign --force --sign - --timestamp=none --generate-entitlement-der --entitlements "$xcent" "${pair%%=*}"
+          done
+          # If entitlements are missing in the archive, they are also missing after the export. Better to abort here than
+          # to upload an app that shares no app group or no keychain.
+          ok=1
+          for bundle in "$app" "$plugins/NotificationService.appex" "$plugins/CredentialProvider.appex"; do
+            ents=$(codesign -d --entitlements - --xml "$bundle" 2>/dev/null || true)
+            for want in group.app.anynear "$team.app.anynear.shared"; do
+              if ! grep -q -F "$want" <<<"$ents"; then
+                echo "::error::In the archive, $(basename "$bundle") lacks the entitlement $want."
+                ok=0
+              fi
+            done
+          done
+          # Sharing only needs the app group (there the extension stores the shared item for the app).
+          if ! codesign -d --entitlements - --xml "$plugins/Share.appex" 2>/dev/null | grep -q -F group.app.anynear; then
+            echo "::error::In the archive, Share.appex lacks the entitlement group.app.anynear."
+            ok=0
+          fi
+          for bundle in "$app" "$plugins/CredentialProvider.appex"; do
+            if ! codesign -d --entitlements - --xml "$bundle" 2>/dev/null | grep -q autofill-credential-provider; then
+              echo "::error::In the archive, $(basename "$bundle") lacks the entitlement AutoFill Credential Provider (passwords)."
+              ok=0
+            fi
+          done
+          if ! codesign -d --entitlements - --xml "$app" 2>/dev/null | grep -q aps-environment; then
+            echo "::error::In the archive, $(basename "$app") lacks the entitlement aps-environment (push)."
+            ok=0
+          fi
+          # Links are generated on anynear.app and also recognised on anynear.net (ADR 0061, decision 4).
+          for domain in applinks:anynear.app applinks:anynear.net; do
+            if ! codesign -d --entitlements - --xml "$app" 2>/dev/null | grep -q -F "$domain"; then
+              echo "::error::In the archive, $(basename "$app") lacks the associated domain $domain (invitation and contact links)."
+              ok=0
+            fi
+          done
+          [ "$ok" = 1 ] || { rm -f "$key"; exit 1; }
+          echo "Archive: entitlements for app group, keychain, push and links (anynear.app, anynear.net) are present."
+          # Uploads directly to App Store Connect; TestFlight distributes to the invited groups.
+          # A repeated run for the same commit fails here because the build number already exists.
+          # When packaging, Xcode calls /usr/bin/rsync, which starts its counterpart via PATH. An rsync from
+          # Homebrew (3.x) does not know Apple's --extended-attributes (“Copy failed”), hence /usr/bin first.
+          PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/anynear.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" "${auth[@]}"
+          rm -f "$key"
+
+      - name: TestFlight – build details and external groups
+        # Apple allows only numbers in version and build. So that the build shows the same identifier in TestFlight as on
+        # Android, it goes into the test notes. Then, as soon as Apple has processed the build: submit for beta review
+        # and assign to all external groups. Builds of an already reviewed version are usually released by Apple
+        # without another review, so they reach the testers without a click. If this step fails, the
+        # build is still in TestFlight and can be distributed there by hand.
+        if: steps.check.outputs.ready == 'true'
+        continue-on-error: true
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          NAME: ${{ steps.version.outputs.name }}
+          MARKETING: ${{ steps.version.outputs.marketing }}
+          BUILD: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          raw="$RUNNER_TEMP/asc-raw.p8"
+          key="$RUNNER_TEMP/AuthKey_notes.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$raw"
+          openssl pkey -in "$raw" -out "$key"
+          rm -f "$raw"
+          trap 'rm -f "$key"' EXIT
+          b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+          # JWT for the App Store Connect API (ES256): openssl returns the signature as DER, JWT needs r||s.
+          jwt() {
+            local now head body sig der r s
+            now=$(date +%s)
+            head=$(printf '{"alg":"ES256","kid":"%s","typ":"JWT"}' "$ASC_KEY_ID" | b64url)
+            body=$(printf '{"iss":"%s","iat":%d,"exp":%d,"aud":"appstoreconnect-v1"}' "$ASC_ISSUER_ID" "$now" $((now + 1200)) | b64url)
+            der="$RUNNER_TEMP/jwt.der"
+            printf '%s.%s' "$head" "$body" | openssl dgst -sha256 -sign "$key" -out "$der"
+            r=$(openssl asn1parse -inform DER -in "$der" | awk -F: '/INTEGER/{n++; if(n==1) print $NF}')
+            s=$(openssl asn1parse -inform DER -in "$der" | awk -F: '/INTEGER/{n++; if(n==2) print $NF}')
+            rm -f "$der"
+            sig=$( (printf '%064s' "$r" | tr ' ' 0 | tail -c 64; printf '%064s' "$s" | tr ' ' 0 | tail -c 64) | xxd -r -p | b64url)
+            printf '%s.%s.%s' "$head" "$body" "$sig"
+          }
+          api() { curl -fsS -H "Authorization: Bearer $(jwt)" -H "Content-Type: application/json" "$@"; }
+          base=https://api.appstoreconnect.apple.com/v1
+          app=$(api "$base/apps?filter%5BbundleId%5D=app.anynear&fields%5Bapps%5D=bundleId" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')
+          build=""
+          for _ in $(seq 1 40); do
+            build=$(api "$base/builds?filter%5Bapp%5D=$app&filter%5Bversion%5D=$BUILD&filter%5BpreReleaseVersion.version%5D=$MARKETING&fields%5Bbuilds%5D=version" \
+              | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; print(d[0]["id"] if d else "")')
+            [ -n "$build" ] && break
+            sleep 30
+          done
+          [ -n "$build" ] || { echo "::warning::Build $BUILD not found in App Store Connect, the test notes are missing."; exit 0; }
+          # First wait until Apple has processed the build; before that the API rejects test notes and groups (409).
+          state=""
+          for _ in $(seq 1 60); do
+            state=$(api "$base/builds/$build?fields%5Bbuilds%5D=processingState" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["attributes"]["processingState"])')
+            case "$state" in VALID|FAILED|INVALID) break ;; esac
+            sleep 30
+          done
+          [ "$state" = VALID ] || { echo "::warning::Build $BUILD has not been processed ($state), test notes and groups are missing."; exit 0; }
+
+          # Set the test notes (“What to Test”, whatsNew in the API) in every existing language; if German is missing, create it. If Apple rejects, Apple's
+          # reason is in the log (curl -f would swallow it); the build continues anyway.
+          text="anynear $NAME (Build $BUILD)"
+          send() {  # Methode, URL, JSON; gibt Apples Fehler als Warnung aus
+            local code
+            code=$(curl -sS -o "$RUNNER_TEMP/asc-res.json" -w '%{http_code}' -X "$1" -H "Authorization: Bearer $(jwt)" \
+              -H "Content-Type: application/json" "$2" -d "$3") || code=000
+            case "$code" in 2??) return 0 ;; esac
+            echo "::warning::$1 ${2#$base} → HTTP $code: $(python3 -c 'import json,sys
+          try: print("; ".join("%s: %s" % (e.get("code"), e.get("detail") or e.get("title")) for e in json.load(open(sys.argv[1])).get("errors", [])))
+          except Exception: print("no reason given")' "$RUNNER_TEMP/asc-res.json")"
+            return 1
+          }
+          locs=$(api "$base/builds/$build/betaBuildLocalizations?fields%5BbetaBuildLocalizations%5D=locale" \
+            | python3 -c 'import json,sys; [print(l["id"], l["attributes"]["locale"]) for l in json.load(sys.stdin)["data"]]')
+          echo "Existing test note languages: ${locs:-none}"
+          while read -r id locale; do
+            [ -n "$id" ] || continue
+            send PATCH "$base/betaBuildLocalizations/$id" \
+              "$(python3 -c 'import json,sys; print(json.dumps({"data":{"type":"betaBuildLocalizations","id":sys.argv[1],"attributes":{"whatsNew":sys.argv[2]}}}))' "$id" "$text")" \
+              && echo "Testhinweis ($locale) gesetzt."
+          done <<<"$locs"
+          if ! grep -q ' de-DE$' <<<"$locs"; then
+            send POST "$base/betaBuildLocalizations" \
+              "$(python3 -c 'import json,sys; print(json.dumps({"data":{"type":"betaBuildLocalizations","attributes":{"locale":"de-DE","whatsNew":sys.argv[2]},"relationships":{"build":{"data":{"type":"builds","id":sys.argv[1]}}}}}))' "$build" "$text")" \
+              && echo "Testhinweis (de-DE) angelegt."
+          fi
+          echo "Testhinweis: $text"
+
+          body=$(python3 -c 'import json,sys; print(json.dumps({"data":{"type":"betaAppReviewSubmissions","relationships":{"build":{"data":{"type":"builds","id":sys.argv[1]}}}}}))' "$build")
+          # Mostly rejected because a build of this version is already in review; the reason is then in the log.
+          send POST "$base/betaAppReviewSubmissions" "$body" && echo "Submitted for beta review." || true
+          groups=$(api "$base/betaGroups?filter%5Bapp%5D=$app&filter%5BisInternalGroup%5D=false&fields%5BbetaGroups%5D=name&limit=50" \
+            | python3 -c 'import json,sys; [print(g["id"]) for g in json.load(sys.stdin)["data"]]')
+          rm -f "$RUNNER_TEMP/asc-res.json"
+          [ -n "$groups" ] || echo "::notice::Keine externe TestFlight-Gruppe gefunden."
+          link=$(python3 -c 'import json,sys; print(json.dumps({"data":[{"type":"builds","id":sys.argv[1]}]}))' "$build")
+          for group in $groups; do
+            if api -X POST "$base/betaGroups/$group/relationships/builds" -d "$link" >/dev/null; then
+              echo "Build $BUILD assigned to the external group $group."
+            else
+              echo "::warning::Build $BUILD could not be assigned to the group $group."
+            fi
+          done
+
+      - name: Write ios.json
+        id: ios-json
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          cat > "$RUNNER_TEMP/ios.json" <<EOF
+          {
+            "version": "${{ steps.version.outputs.name }}",
+            "marketingVersion": "${{ steps.version.outputs.marketing }}",
+            "build": ${{ steps.version.outputs.code }},
+            "commit": "${{ steps.version.outputs.commit }}",
+            "date": "${{ steps.version.outputs.date }}"
+          }
+          EOF
+          cat "$RUNNER_TEMP/ios.json"
+          echo "built=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          name: ios-json
+          path: ${{ runner.temp }}/ios.json
+          retention-days: 7
+
+      # Symbols for reading crash reports (ADR 0082): MetricKit delivers only addresses, the dSYMs map them.
+      - name: Pack the dSYMs
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          if [ -d "$RUNNER_TEMP/anynear.xcarchive/dSYMs" ]; then
+            ditto -c -k --keepParent "$RUNNER_TEMP/anynear.xcarchive/dSYMs" "$RUNNER_TEMP/ios-dsyms.zip"
+          else
+            echo "::warning::Keine dSYMs im Archiv."
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          name: ios-dsyms
+          path: ${{ runner.temp }}/ios-dsyms.zip
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # The runner empties RUNNER_TEMP only at the next job; do not leave key and archive lying around that long.
+      - name: Clean up
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP"/asc-raw.p8 "$RUNNER_TEMP"/check.p8 "$RUNNER_TEMP"/asc.json "$RUNNER_TEMP"/anynear.xcarchive "$RUNNER_TEMP"/export "$RUNNER_TEMP"/ios-dsyms.zip
+
+  # Runs as soon as the Android release exists, even if iOS fails or is skipped.
+  publish:
+    needs: [android, ios]
+    if: always() && needs.android.result == 'success'
+    runs-on: ${{ fromJSON(vars.RUNNER_RELEASE || '"ubuntu-latest"') }}
+    environment: release
+    steps:
+      - uses: actions/download-artifact@v4
+        if: needs.ios.outputs.built == 'true'
+        with:
+          name: ios-json
+
+      - name: Attach ios.json to the release
+        if: needs.ios.outputs.built == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.android.outputs.tag }}
+        run: gh release upload "$TAG" ios.json --clobber --repo "$GITHUB_REPOSITORY"
+
+      - uses: actions/download-artifact@v4
+        if: needs.ios.outputs.built == 'true'
+        continue-on-error: true
+        with:
+          name: ios-dsyms
+
+      - name: Attach the dSYMs to the release
+        if: needs.ios.outputs.built == 'true' && hashFiles('ios-dsyms.zip') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.android.outputs.tag }}
+        run: gh release upload "$TAG" ios-dsyms.zip --clobber --repo "$GITHUB_REPOSITORY"
+
+      - uses: actions/create-github-app-token@v2
+        id: ci-token
+        if: vars.WEBSITE_REPO != ''
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_KEY }}
+          repositories: ${{ vars.WEBSITE_REPO }}
+          permission-contents: read
+
+      # The website goes live only with its own tag. Therefore the commit of its latest
+      # tag vX.Y.Z is rebuilt, not main; the build fetches the new app release in the process.
+      - name: Redeploy the website
+        env:
+          DEPLOYBASE_API_KEY: ${{ secrets.DEPLOYBASE_API_KEY }}
+          PROJECT_ID: ${{ vars.WEBSITE_PROJECT_ID }}
+          WEBSITE_REPO: ${{ vars.WEBSITE_REPO }}
+          GH_TOKEN: ${{ steps.ci-token.outputs.token }}
+          TAG: ${{ needs.android.outputs.tag }}
+        run: |
+          if [ -z "$DEPLOYBASE_API_KEY" ] || [ -z "$WEBSITE_REPO" ] || [ -z "$PROJECT_ID" ]; then
+            echo "::notice::DEPLOYBASE_API_KEY, WEBSITE_REPO or WEBSITE_PROJECT_ID is missing, please start the website deployment by hand."
+            exit 0
+          fi
+          refs=$(git -c versionsort.suffix=- ls-remote --tags --sort=-v:refname \
+            "https://x-access-token:$GH_TOKEN@github.com/anynear/$WEBSITE_REPO.git" 'v*.*.*')
+          # Only tags vX.Y.Z without suffix count; the newest is at the top.
+          site=$(awk '$2 ~ /^refs\/tags\/v[0-9]+\.[0-9]+\.[0-9]+(\^\{\})?$/ {sub("^refs/tags/", "", $2); sub(/\^\{\}$/, "", $2); print $2; exit}' <<<"$refs")
+          if [ -z "$site" ]; then
+            echo "::notice::The website has no tag vX.Y.Z yet, no deployment."
+            exit 0
+          fi
+          # Annotated tags: the commit is in the line with ^{}.
+          commit=$(awk -v ref="refs/tags/$site^{}" '$2 == ref {print $1}' <<<"$refs")
+          [ -n "$commit" ] || commit=$(awk -v ref="refs/tags/$site" '$2 == ref {print $1}' <<<"$refs")
+          echo "Website $site ($commit)"
+          curl -fsS -X POST https://api.deploybase.eu/api/v1/deployments \
+            -H "Authorization: Bearer $DEPLOYBASE_API_KEY" -H "Content-Type: application/json" \
+            -d "{\"project_id\": \"$PROJECT_ID\", \"branch\": \"main\", \"commit_hash\": \"$commit\", \"commit_message\": \"Website $site, anynear $TAG\"}" \
+            -o /dev/null -w "deploybase: HTTP %{http_code}\n"
