@@ -174,7 +174,7 @@ internal fun AddDeviceDialog(controller: AppController, initial: String?, onDism
                 } else {
                     Text(if (initial != null) texts.devices.addConfirmText else texts.devices.addText)
                     if (initial == null) {
-                        OutlinedTextField(value = link, onValueChange = { link = it; error = null }, minLines = 2, label = { Text(texts.devices.addPaste) })
+                        OutlinedTextField(value = link, onValueChange = { link = it; error = null }, minLines = 2, maxLines = 4, label = { Text(texts.devices.addPaste) }, modifier = Modifier.fillMaxWidth())
                         // A pasted link can come from anyone: only a device lying in front of you (ADR 0093).
                         Text(texts.devices.addPasteHint, style = MaterialTheme.typography.bodySmall)
                     }
