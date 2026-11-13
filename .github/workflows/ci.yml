@@ -63,3 +63,16 @@ jobs:
 
       - name: Unit tests and debug APK
         run: ./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug --console=plain
+
+      # Run workflow (any branch): additionally a test app "anynear Test" (own app ID ...anynear.test, own data, no
+      # self-update) that installs next to the beta on a phone; download it from the artifacts of the run.
+      - name: Test app for a phone
+        if: github.event_name == 'workflow_dispatch'
+        run: ./gradlew :androidApp:assembleDirectDebug -Papp.parallelInstall=true --console=plain
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: anynear-test-${{ github.ref_name == 'main' && 'main' || 'branch' }}-${{ github.sha }}
+          path: App/androidApp/build/outputs/apk/direct/debug/*.apk
+          retention-days: 14
