@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Radios on the USB port for which Android offers anynear (rescue via USB cable, ADR 0056).
+  List as in Meshtastic-Android (androidApp/src/main/res/xml/device_filter.xml, GPL-3.0), plus Adafruit and Seeed
+  entirely, because nRF52 radios (T1000-E: 0x239A/0x8029) use their IDs. Espressif entirely as well: an ESP32-S3 that is
+  empty, in its ROM download mode (0x303A/0x0002) or runs factory software (own product IDs) is still an ESP32, and
+  the app should be offered for it to install Meshtastic (ADR 0094). Same for the newer CH34x and Nordic's ID.
+-->
+<resources>
+    <!-- 0x0403 FTDI -->
+    <usb-device vendor-id="1027" product-id="24577" />
+    <usb-device vendor-id="1027" product-id="24592" />
+    <usb-device vendor-id="1027" product-id="24593" />
+    <usb-device vendor-id="1027" product-id="24596" />
+    <usb-device vendor-id="1027" product-id="24597" />
+    <!-- 0x10C4 Silabs CP210x -->
+    <usb-device vendor-id="4292" product-id="60000" />
+    <usb-device vendor-id="4292" product-id="60016" />
+    <usb-device vendor-id="4292" product-id="60017" />
+    <usb-device vendor-id="4292" product-id="60032" />
+    <!-- 0x067B Prolific PL2303 -->
+    <usb-device vendor-id="1659" product-id="8963" />
+    <usb-device vendor-id="1659" product-id="9123" />
+    <usb-device vendor-id="1659" product-id="9139" />
+    <usb-device vendor-id="1659" product-id="9155" />
+    <usb-device vendor-id="1659" product-id="9171" />
+    <usb-device vendor-id="1659" product-id="9187" />
+    <usb-device vendor-id="1659" product-id="9203" />
+    <!-- 0x1A86 Qinheng CH340, CH9102F -->
+    <usb-device vendor-id="6790" product-id="29987" />
+    <usb-device vendor-id="6790" product-id="21972" />
+    <!-- 0x1A86 Qinheng CH340K 0x7522, CH341 0x5523, CH342 0x55D2, CH343 0x55D3, CH9101 0x55D8 -->
+    <usb-device vendor-id="6790" product-id="29986" />
+    <usb-device vendor-id="6790" product-id="21795" />
+    <usb-device vendor-id="6790" product-id="21970" />
+    <usb-device vendor-id="6790" product-id="21971" />
+    <usb-device vendor-id="6790" product-id="21976" />
+    <!-- CDC -->
+    <usb-device vendor-id="9025" />                    <!-- 0x2341 Arduino -->
+    <usb-device vendor-id="5824" product-id="1155" />  <!-- 0x16C0/0x0483 Teensy -->
+    <usb-device vendor-id="1003" product-id="8260" />  <!-- 0x03EB/0x2044 Atmel Lufa -->
+    <usb-device vendor-id="7855" product-id="4" />     <!-- 0x1EAF/0x0004 Leaflabs Maple -->
+    <usb-device vendor-id="3368" product-id="516" />   <!-- 0x0D28/0x0204 ARM mbed -->
+    <usb-device vendor-id="9114" />                    <!-- 0x239A Adafruit (nRF52: RAK4631, T-Echo, T1000-E …) -->
+    <usb-device vendor-id="10374" />                   <!-- 0x2886 Seeed -->
+    <usb-device vendor-id="12346" />                   <!-- 0x303A Espressif (USB-Serial/JTAG 0x1001, ROM download 0x0002, …) -->
+    <usb-device vendor-id="6421" />                    <!-- 0x1915 Nordic (nRF52 with Nordic's IDs) -->
+    <usb-device vendor-id="11914" />                   <!-- 0x2E8A Raspberry Pi -->
+</resources>

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Compose Multiplatform prüft das beim Start (PlistSanityCheck) und bricht sonst ab: volle Bildrate auf ProMotion. -->
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>de</string>
+		<string>en</string>
+	</array>
+	<key>CFBundleDisplayName</key>
+	<string>anynear</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- Volle Kennung wie bei Android (0.1.0-beta.<Hash>); Apple erlaubt sie in den Versionsfeldern nicht. -->
+	<key>AppVersionName</key>
+	<string>$(APP_VERSION_NAME)</string>
+	<!-- Export Compliance: Krypto läuft auf iOS nur über Apple (CryptoKit, CommonCrypto, URLSession); erspart die Abfrage je Build in App Store Connect. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>anynear</string>
+			</array>
+		</dict>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>anynear öffnet deine Passwörter nur mit Face ID oder dem Gerätecode.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Damit du Fotos im Chat aufnehmen und QR-Codes von Einladungen und Kontakten scannen kannst.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Damit anynear in deinen Fotos nach wichtigen Dokumenten suchen kann. Die Suche läuft nur auf deinem iPhone.</string>
+	<key>PHPhotoLibraryPreventAutomaticLimitedAccessAlert</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Damit du Sprachnachrichten aufnehmen kannst.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Damit der Anfang deiner Sprachnachricht als Text auch über Funk ankommt. Die Erkennung läuft nur auf deinem iPhone.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>anynear verbindet sich per Bluetooth mit deinem Funkgerät, damit du Nachrichten auch ohne Internet senden und empfangen kannst.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>anynear sucht dein Funkgerät auch im WLAN, wenn dort WLAN eingeschaltet ist.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>anynear bestimmt deinen ungefähren Standort nur auf deinem iPhone, um dir amtliche Warnungen für deinen Kreis zu zeigen. Dein Standort verlässt das iPhone nicht.</string>
+	<key>NSLocationDefaultAccuracyReduced</key>
+	<true/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_meshtastic._tcp</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>app.anynear.docfinder</string>
+		<string>app.anynear.docfinder.new</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+		<string>processing</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<!-- Relays laufen per IP mit selbst signiertem Zertifikat, die App prüft den angepinnten Schlüssel selbst
+	     (ANDP §12, Pinned.kt). Ohne Ausnahme verwirft ATS diese Verbindungen trotz Pin (-9802). -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

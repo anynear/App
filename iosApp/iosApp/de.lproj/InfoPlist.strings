@@ -1,0 +1,9 @@
+/* Erklärtexte für die Abfragen von iOS (ADR 0026). Gleicher Wortlaut wie in Info.plist. */
+"NSCameraUsageDescription" = "Damit du Fotos im Chat aufnehmen und QR-Codes von Einladungen und Kontakten scannen kannst.";
+"NSBluetoothAlwaysUsageDescription" = "anynear verbindet sich per Bluetooth mit deinem Funkgerät, damit du Nachrichten auch ohne Internet senden und empfangen kannst.";
+"NSLocalNetworkUsageDescription" = "anynear sucht dein Funkgerät auch im WLAN, wenn dort WLAN eingeschaltet ist.";
+"NSMicrophoneUsageDescription" = "Damit du Sprachnachrichten aufnehmen kannst.";
+"NSSpeechRecognitionUsageDescription" = "Damit der Anfang deiner Sprachnachricht als Text auch über Funk ankommt. Die Erkennung läuft nur auf deinem iPhone.";
+"NSFaceIDUsageDescription" = "anynear öffnet deine Passwörter nur mit Face ID oder dem Gerätecode.";
+"NSLocationWhenInUseUsageDescription" = "anynear bestimmt deinen ungefähren Standort nur auf deinem iPhone, um dir amtliche Warnungen für deinen Kreis zu zeigen. Dein Standort verlässt das iPhone nicht.";
+"NSPhotoLibraryUsageDescription" = "Damit anynear in deinen Fotos nach wichtigen Dokumenten suchen kann. Die Suche läuft nur auf deinem iPhone.";

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only for the APK outside Google Play (flavor `direct`). Play does not allow these for a messenger,
+     the `play` build leaves them out: Play updates the app and there is no old app to offer for deletion. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- The APK updates itself from the GitHub releases (AppUpdater, ADR 0017). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- From the second update on (anynear is then the installation source) without an extra prompt from Android. -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <!-- After the move, offer the old app (former app ID, ADR 0025) for deletion: only a prompt from Android. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+
+    <!-- Needed from Android 11 on so that the app sees whether the old one is still installed. -->
+    <queries>
+        <package android:name="com.pyrsa.pyrsa" />
+    </queries>
+</manifest>

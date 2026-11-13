@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Brand colors anynear (draft 03.11.2026); the names stay until the renaming per ADR 0061. -->
+<resources>
+    <color name="brand_nachtblau">#FF082C35</color>
+    <color name="brand_nacht">#FF041A20</color>
+    <color name="brand_alpinweiss">#FFFAFAF7</color>
+</resources>

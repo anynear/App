@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash screen and window background in brand colors before Compose draws. -->
+    <style name="Theme.App" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/brand_alpinweiss</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="s" xmlns:tools="http://schemas.android.com/tools">@color/brand_nachtblau</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="s" xmlns:tools="http://schemas.android.com/tools">@drawable/ic_launcher_foreground</item>
+    </style>
+</resources>

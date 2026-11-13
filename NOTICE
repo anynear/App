@@ -1,0 +1,37 @@
+anynear (App)
+Copyright 2026 Kevin Schu
+
+This program is free software under the GNU General Public License, version 3 or later (see LICENSE).
+Name and logos are not covered by that license (see TRADEMARKS.md).
+
+Third-party material in this repository
+---------------------------------------
+
+Alert sounds (androidApp/src/main/res/raw/alarm.wav, amtlich.wav, hinweis.wav; iosApp/iosApp/Sounds/*.caf)
+  Made for anynear. Copyright 2026 Kevin Schu, licensed like the rest of the app.
+
+List of privileged browsers for passkeys (androidApp/src/main/res/raw/privileged_browsers.json)
+  Published by Google for use with the Android Credential Manager at
+  https://www.gstatic.com/gpm-passkeys-privileged-apps/apps.json; included unchanged. It lists package names and
+  signing certificate fingerprints of browsers that may act on behalf of websites.
+
+Text recognition models (androidApp/src/main/assets/ocr/)
+  PP-OCRv5 mobile from PaddleOCR, Apache License 2.0. See androidApp/src/main/assets/ocr/NOTICE.txt.
+
+Word vectors for finding documents (shared/src/commonMain/composeResources/files/doc-vectors.bin)
+  Derived from sentence-transformers/static-similarity-mrl-multilingual-v1, Apache License 2.0. See
+  shared/src/commonMain/composeResources/files/licenses/doc-vectors-NOTICE.txt.
+
+Font Inter (shared/src/commonMain/composeResources/font/inter.ttf)
+  SIL Open Font License 1.1. See shared/src/commonMain/composeResources/files/licenses/inter-ofl.txt.
+
+Municipalities and districts of Germany (shared/src/commonMain/composeResources/files/regions/)
+  Derived from the Gemeindeverzeichnis of the Statistisches Bundesamt (Destatis), 2026; reproduction permitted with
+  attribution. Details in README.md, section "License".
+
+Meshtastic
+  anynear is an independent project, not affiliated with or endorsed by Meshtastic LLC. Meshtastic(R) is a registered
+  trademark of Meshtastic LLC. The app uses the library meshtastic-sdk (GPL-3.0), which is why the app is licensed
+  under the GPL. The firmware update and the serial connection follow the procedures of Meshtastic-Android (GPL-3.0).
+
+Libraries are fetched at build time and keep their own licenses; see gradle/libs.versions.toml.

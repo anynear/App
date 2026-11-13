@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only texts Android shows itself before the app runs (tile in the quick settings). All others are in the
+     catalogues under shared/…/i18n (ADR 0026). -->
+<resources>
+    <string name="lifesign_tile">Check-in</string>
+</resources>

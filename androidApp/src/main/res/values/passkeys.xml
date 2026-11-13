@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Passkey provider only from Android 14 on (values-v34). -->
+    <bool name="passkeys">false</bool>
+</resources>

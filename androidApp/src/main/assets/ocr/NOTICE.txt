@@ -1,0 +1,4 @@
+Text recognition models (det.tflite, rec.tflite, keys.json): PP-OCRv5 mobile from PaddleOCR
+(https://github.com/PaddlePaddle/PaddleOCR), Copyright (c) PaddlePaddle Authors, licensed under the Apache License 2.0
+(https://www.apache.org/licenses/LICENSE-2.0). ONNX export from huggingface.co/nakamura196/ppocrv5-mobile-web-onnx;
+converted to LiteRT with fixed input sizes by tools/ocr-models/convert.sh, otherwise unchanged.
