@@ -216,7 +216,9 @@ private fun AddContactDialog(controller: AppController, onDismiss: () -> Unit, o
                     value = code,
                     onValueChange = { code = it; feedback = null },
                     minLines = 3,
+                    maxLines = 5,
                     placeholder = { Text("https://anynear.app/c#…") },
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 feedback?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
             }
