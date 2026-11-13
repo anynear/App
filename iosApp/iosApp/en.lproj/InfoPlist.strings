@@ -1,0 +1,9 @@
+/* Explanations for the iOS permission prompts (ADR 0026). */
+"NSCameraUsageDescription" = "So you can take photos in chats and scan the QR codes of invites and contacts.";
+"NSBluetoothAlwaysUsageDescription" = "anynear connects to your radio over Bluetooth, so you can send and receive messages even without internet.";
+"NSLocalNetworkUsageDescription" = "anynear also looks for your radio on your Wi-Fi network, if the radio has Wi-Fi turned on.";
+"NSMicrophoneUsageDescription" = "So you can record voice messages.";
+"NSSpeechRecognitionUsageDescription" = "So the start of your voice message also arrives as text over radio. Recognition runs only on your iPhone.";
+"NSFaceIDUsageDescription" = "anynear only opens your passwords with Face ID or your passcode.";
+"NSLocationWhenInUseUsageDescription" = "anynear uses your approximate location only on your iPhone to show you official warnings for your district. Your location never leaves your iPhone.";
+"NSPhotoLibraryUsageDescription" = "So anynear can look for important documents in your photos. The search runs only on your iPhone.";

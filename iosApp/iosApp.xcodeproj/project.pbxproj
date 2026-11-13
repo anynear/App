@@ -1,0 +1,942 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		C1A5E1022ED0000000B7A001 /* PasswordKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5E1012ED0000000B7A001 /* PasswordKeychain.swift */; };
+		C1A5E1522ED0000000B7A001 /* Passkeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5E1512ED0000000B7A001 /* Passkeys.swift */; };
+		C1A5E1532ED0000000B7A001 /* Passkeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5E1512ED0000000B7A001 /* Passkeys.swift */; };
+		C1A5E1032ED0000000B7A001 /* PasswordKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5E1012ED0000000B7A001 /* PasswordKeychain.swift */; };
+		C1A5E1052ED0000000B7A001 /* PasswordBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5E1042ED0000000B7A001 /* PasswordBridge.swift */; };
+		C1A5E1072ED0000000B7A001 /* CredentialProviderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5E1062ED0000000B7A001 /* CredentialProviderViewController.swift */; };
+		C1A5E1092ED0000000B7A001 /* PasswordVaultFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5E1082ED0000000B7A001 /* PasswordVaultFile.swift */; };
+		C1A5E10F2ED0000000B7A001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E10C2ED0000000B7A001 /* InfoPlist.strings */; };
+		C1A5E1112ED0000000B7A001 /* CredentialProvider.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C1A5E1102ED0000000B7A001 /* CredentialProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2152FB032600AC8F00CF470E /* iOSApp.swift */; };
+		7555FF83242A565900829871 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7555FF82242A565900829871 /* ContentView.swift */; };
+		C1A5E0302ED0000000B7A001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E0312ED0000000B7A001 /* InfoPlist.strings */; };
+		C1A5E0012ED0000000B7A001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E0022ED0000000B7A001 /* Assets.xcassets */; };
+		C1A5E0112ED0000000B7A001 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5E0102ED0000000B7A001 /* NotificationService.swift */; };
+		C1A5E0162ED0000000B7A001 /* NotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C1A5E0152ED0000000B7A001 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C1A5E2022ED0000000B7A001 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A5E2012ED0000000B7A001 /* ShareViewController.swift */; };
+		C1A5E2082ED0000000B7A001 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E2052ED0000000B7A001 /* Localizable.strings */; };
+		C1A5E20A2ED0000000B7A001 /* Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C1A5E2092ED0000000B7A001 /* Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C1A5E3052ED0000000B7A001 /* alarm.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3012ED0000000B7A001 /* alarm.caf */; };
+		C1A5E3062ED0000000B7A001 /* amtlich.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3022ED0000000B7A001 /* amtlich.caf */; };
+		C1A5E3072ED0000000B7A001 /* hinweis.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3032ED0000000B7A001 /* hinweis.caf */; };
+		C1A5E3122ED0000000B7A001 /* frage.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3112ED0000000B7A001 /* frage.caf */; };
+		C1A5E3082ED0000000B7A001 /* alarm.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3012ED0000000B7A001 /* alarm.caf */; };
+		C1A5E3092ED0000000B7A001 /* amtlich.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3022ED0000000B7A001 /* amtlich.caf */; };
+		C1A5E30A2ED0000000B7A001 /* hinweis.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3032ED0000000B7A001 /* hinweis.caf */; };
+		C1A5E3132ED0000000B7A001 /* frage.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3112ED0000000B7A001 /* frage.caf */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C1A5E1182ED0000000B7A001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7555FF73242A565900829871 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C1A5E1142ED0000000B7A001;
+			remoteInfo = CredentialProvider;
+		};
+		C1A5E01D2ED0000000B7A001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7555FF73242A565900829871 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C1A5E0182ED0000000B7A001;
+			remoteInfo = NotificationService;
+		};
+		C1A5E2102ED0000000B7A001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7555FF73242A565900829871 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C1A5E20C2ED0000000B7A001;
+			remoteInfo = Share;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C1A5E01C2ED0000000B7A001 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C1A5E0162ED0000000B7A001 /* NotificationService.appex in Embed Foundation Extensions */,
+				C1A5E1112ED0000000B7A001 /* CredentialProvider.appex in Embed Foundation Extensions */,
+				C1A5E20A2ED0000000B7A001 /* Share.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		C1A5E1512ED0000000B7A001 /* Passkeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Passkeys.swift; sourceTree = "<group>"; };
+		C1A5E1012ED0000000B7A001 /* PasswordKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordKeychain.swift; sourceTree = "<group>"; };
+		C1A5E1042ED0000000B7A001 /* PasswordBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordBridge.swift; sourceTree = "<group>"; };
+		C1A5E1062ED0000000B7A001 /* CredentialProviderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialProviderViewController.swift; sourceTree = "<group>"; };
+		C1A5E1082ED0000000B7A001 /* PasswordVaultFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordVaultFile.swift; sourceTree = "<group>"; };
+		C1A5E10A2ED0000000B7A001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C1A5E10B2ED0000000B7A001 /* CredentialProvider.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CredentialProvider.entitlements; sourceTree = "<group>"; };
+		C1A5E10D2ED0000000B7A001 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		C1A5E10E2ED0000000B7A001 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		C1A5E1102ED0000000B7A001 /* CredentialProvider.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CredentialProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		2152FB032600AC8F00CF470E /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
+		7555FF7B242A565900829871 /* anynear.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "anynear.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		7555FF82242A565900829871 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		7555FF8C242A565B00829871 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AB3632DC29227652001CCB65 /* Config.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		C1A5E0322ED0000000B7A001 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		C1A5E0332ED0000000B7A001 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		C1A5E0022ED0000000B7A001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C1A5E0102ED0000000B7A001 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		C1A5E0122ED0000000B7A001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C1A5E0132ED0000000B7A001 /* NotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NotificationService.entitlements; sourceTree = "<group>"; };
+		C1A5E0142ED0000000B7A001 /* iosApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iosApp.entitlements; sourceTree = "<group>"; };
+		C1A5E0152ED0000000B7A001 /* NotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1A5E2012ED0000000B7A001 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		C1A5E2032ED0000000B7A001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C1A5E2042ED0000000B7A001 /* Share.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Share.entitlements; sourceTree = "<group>"; };
+		C1A5E2062ED0000000B7A001 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/Localizable.strings; sourceTree = "<group>"; };
+		C1A5E2072ED0000000B7A001 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		C1A5E2092ED0000000B7A001 /* Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Share.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1A5E3012ED0000000B7A001 /* alarm.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = alarm.caf; sourceTree = "<group>"; };
+		C1A5E3022ED0000000B7A001 /* amtlich.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = amtlich.caf; sourceTree = "<group>"; };
+		C1A5E3032ED0000000B7A001 /* hinweis.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = hinweis.caf; sourceTree = "<group>"; };
+		C1A5E3112ED0000000B7A001 /* frage.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = frage.caf; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C1A5E1162ED0000000B7A001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B92378962B6B1156000C7307 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1A5E01A2ED0000000B7A001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1A5E20E2ED0000000B7A001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		C1A5E1122ED0000000B7A001 /* Passwords */ = {
+			isa = PBXGroup;
+			children = (
+				C1A5E1012ED0000000B7A001 /* PasswordKeychain.swift */,
+				C1A5E1512ED0000000B7A001 /* Passkeys.swift */,
+			);
+			path = Passwords;
+			sourceTree = "<group>";
+		};
+		C1A5E1132ED0000000B7A001 /* CredentialProvider */ = {
+			isa = PBXGroup;
+			children = (
+				C1A5E10B2ED0000000B7A001 /* CredentialProvider.entitlements */,
+				C1A5E1062ED0000000B7A001 /* CredentialProviderViewController.swift */,
+				C1A5E10A2ED0000000B7A001 /* Info.plist */,
+				C1A5E10C2ED0000000B7A001 /* InfoPlist.strings */,
+				C1A5E1082ED0000000B7A001 /* PasswordVaultFile.swift */,
+			);
+			path = CredentialProvider;
+			sourceTree = "<group>";
+		};
+		42799AB246E5F90AF97AA0EF /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		7555FF72242A565900829871 = {
+			isa = PBXGroup;
+			children = (
+				AB1DB47929225F7C00F7AF9C /* Configuration */,
+				7555FF7D242A565900829871 /* iosApp */,
+				C1A5E0172ED0000000B7A001 /* NotificationService */,
+				C1A5E1132ED0000000B7A001 /* CredentialProvider */,
+				C1A5E20B2ED0000000B7A001 /* Share */,
+				C1A5E1122ED0000000B7A001 /* Passwords */,
+				7555FF7C242A565900829871 /* Products */,
+				42799AB246E5F90AF97AA0EF /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		7555FF7C242A565900829871 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7555FF7B242A565900829871 /* anynear.app */,
+				C1A5E0152ED0000000B7A001 /* NotificationService.appex */,
+				C1A5E1102ED0000000B7A001 /* CredentialProvider.appex */,
+				C1A5E2092ED0000000B7A001 /* Share.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7555FF7D242A565900829871 /* iosApp */ = {
+			isa = PBXGroup;
+			children = (
+				C1A5E0022ED0000000B7A001 /* Assets.xcassets */,
+				7555FF82242A565900829871 /* ContentView.swift */,
+				7555FF8C242A565B00829871 /* Info.plist */,
+				C1A5E0312ED0000000B7A001 /* InfoPlist.strings */,
+				2152FB032600AC8F00CF470E /* iOSApp.swift */,
+				C1A5E1042ED0000000B7A001 /* PasswordBridge.swift */,
+				C1A5E0142ED0000000B7A001 /* iosApp.entitlements */,
+				C1A5E3042ED0000000B7A001 /* Sounds */,
+			);
+			path = iosApp;
+			sourceTree = "<group>";
+		};
+		AB1DB47929225F7C00F7AF9C /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				AB3632DC29227652001CCB65 /* Config.xcconfig */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+		C1A5E0172ED0000000B7A001 /* NotificationService */ = {
+			isa = PBXGroup;
+			children = (
+				C1A5E0122ED0000000B7A001 /* Info.plist */,
+				C1A5E0132ED0000000B7A001 /* NotificationService.entitlements */,
+				C1A5E0102ED0000000B7A001 /* NotificationService.swift */,
+			);
+			path = NotificationService;
+			sourceTree = "<group>";
+		};
+		C1A5E20B2ED0000000B7A001 /* Share */ = {
+			isa = PBXGroup;
+			children = (
+				C1A5E2032ED0000000B7A001 /* Info.plist */,
+				C1A5E2052ED0000000B7A001 /* Localizable.strings */,
+				C1A5E2042ED0000000B7A001 /* Share.entitlements */,
+				C1A5E2012ED0000000B7A001 /* ShareViewController.swift */,
+			);
+			path = Share;
+			sourceTree = "<group>";
+		};
+		C1A5E3042ED0000000B7A001 /* Sounds */ = {
+			isa = PBXGroup;
+			children = (
+				C1A5E3012ED0000000B7A001 /* alarm.caf */,
+				C1A5E3022ED0000000B7A001 /* amtlich.caf */,
+				C1A5E3032ED0000000B7A001 /* hinweis.caf */,
+				C1A5E3112ED0000000B7A001 /* frage.caf */,
+			);
+			path = Sounds;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C1A5E1142ED0000000B7A001 /* CredentialProvider */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1A5E11A2ED0000000B7A001 /* Build configuration list for PBXNativeTarget "CredentialProvider" */;
+			buildPhases = (
+				C1A5E1152ED0000000B7A001 /* Sources */,
+				C1A5E1162ED0000000B7A001 /* Frameworks */,
+				C1A5E1172ED0000000B7A001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CredentialProvider;
+			productName = CredentialProvider;
+			productReference = C1A5E1102ED0000000B7A001 /* CredentialProvider.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		7555FF7A242A565900829871 /* iosApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7555FFA5242A565B00829871 /* Build configuration list for PBXNativeTarget "iosApp" */;
+			buildPhases = (
+				F36B1CEB2AD83DDC00CB74D5 /* Compile Kotlin Framework */,
+				7555FF77242A565900829871 /* Sources */,
+				B92378962B6B1156000C7307 /* Frameworks */,
+				7555FF79242A565900829871 /* Resources */,
+				C1A5E01C2ED0000000B7A001 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C1A5E01E2ED0000000B7A001 /* PBXTargetDependency */,
+				C1A5E1192ED0000000B7A001 /* PBXTargetDependency */,
+				C1A5E2112ED0000000B7A001 /* PBXTargetDependency */,
+			);
+			name = iosApp;
+			packageProductDependencies = (
+			);
+			productName = iosApp;
+			productReference = 7555FF7B242A565900829871 /* anynear.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C1A5E0182ED0000000B7A001 /* NotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1A5E01F2ED0000000B7A001 /* Build configuration list for PBXNativeTarget "NotificationService" */;
+			buildPhases = (
+				C1A5E01B2ED0000000B7A001 /* Compile Kotlin Framework */,
+				C1A5E0192ED0000000B7A001 /* Sources */,
+				C1A5E01A2ED0000000B7A001 /* Frameworks */,
+				C1A5E30B2ED0000000B7A001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NotificationService;
+			productName = NotificationService;
+			productReference = C1A5E0152ED0000000B7A001 /* NotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		C1A5E20C2ED0000000B7A001 /* Share */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1A5E2122ED0000000B7A001 /* Build configuration list for PBXNativeTarget "Share" */;
+			buildPhases = (
+				C1A5E20D2ED0000000B7A001 /* Sources */,
+				C1A5E20E2ED0000000B7A001 /* Frameworks */,
+				C1A5E20F2ED0000000B7A001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Share;
+			productName = Share;
+			productReference = C1A5E2092ED0000000B7A001 /* Share.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		7555FF73242A565900829871 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 1540;
+				ORGANIZATIONNAME = anynear;
+				TargetAttributes = {
+					7555FF7A242A565900829871 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+					C1A5E0182ED0000000B7A001 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+					C1A5E1142ED0000000B7A001 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+					C1A5E20C2ED0000000B7A001 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+				};
+			};
+			buildConfigurationList = 7555FF76242A565900829871 /* Build configuration list for PBXProject "iosApp" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				de,
+				Base,
+			);
+			mainGroup = 7555FF72242A565900829871;
+			packageReferences = (
+			);
+			productRefGroup = 7555FF7C242A565900829871 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				7555FF7A242A565900829871 /* iosApp */,
+				C1A5E0182ED0000000B7A001 /* NotificationService */,
+				C1A5E1142ED0000000B7A001 /* CredentialProvider */,
+				C1A5E20C2ED0000000B7A001 /* Share */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXVariantGroup section */
+		C1A5E10C2ED0000000B7A001 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				C1A5E10D2ED0000000B7A001 /* de */,
+				C1A5E10E2ED0000000B7A001 /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		C1A5E0312ED0000000B7A001 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				C1A5E0322ED0000000B7A001 /* de */,
+				C1A5E0332ED0000000B7A001 /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		C1A5E2052ED0000000B7A001 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				C1A5E2062ED0000000B7A001 /* de */,
+				C1A5E2072ED0000000B7A001 /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C1A5E1172ED0000000B7A001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1A5E10F2ED0000000B7A001 /* InfoPlist.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7555FF79242A565900829871 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1A5E0012ED0000000B7A001 /* Assets.xcassets in Resources */,
+				C1A5E0302ED0000000B7A001 /* InfoPlist.strings in Resources */,
+				C1A5E3052ED0000000B7A001 /* alarm.caf in Resources */,
+				C1A5E3062ED0000000B7A001 /* amtlich.caf in Resources */,
+				C1A5E3072ED0000000B7A001 /* hinweis.caf in Resources */,
+				C1A5E3122ED0000000B7A001 /* frage.caf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1A5E20F2ED0000000B7A001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1A5E2082ED0000000B7A001 /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1A5E30B2ED0000000B7A001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1A5E3082ED0000000B7A001 /* alarm.caf in Resources */,
+				C1A5E3092ED0000000B7A001 /* amtlich.caf in Resources */,
+				C1A5E30A2ED0000000B7A001 /* hinweis.caf in Resources */,
+				C1A5E3132ED0000000B7A001 /* frage.caf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		F36B1CEB2AD83DDC00CB74D5 /* Compile Kotlin Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
+		};
+		C1A5E01B2ED0000000B7A001 /* Compile Kotlin Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C1A5E1152ED0000000B7A001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1A5E1072ED0000000B7A001 /* CredentialProviderViewController.swift in Sources */,
+				C1A5E1092ED0000000B7A001 /* PasswordVaultFile.swift in Sources */,
+				C1A5E1032ED0000000B7A001 /* PasswordKeychain.swift in Sources */,
+				C1A5E1532ED0000000B7A001 /* Passkeys.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7555FF77242A565900829871 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */,
+				7555FF83242A565900829871 /* ContentView.swift in Sources */,
+				C1A5E1022ED0000000B7A001 /* PasswordKeychain.swift in Sources */,
+				C1A5E1522ED0000000B7A001 /* Passkeys.swift in Sources */,
+				C1A5E1052ED0000000B7A001 /* PasswordBridge.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1A5E0192ED0000000B7A001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1A5E0112ED0000000B7A001 /* NotificationService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1A5E20D2ED0000000B7A001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1A5E2022ED0000000B7A001 /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C1A5E1192ED0000000B7A001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C1A5E1142ED0000000B7A001 /* CredentialProvider */;
+			targetProxy = C1A5E1182ED0000000B7A001 /* PBXContainerItemProxy */;
+		};
+		C1A5E01E2ED0000000B7A001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C1A5E0182ED0000000B7A001 /* NotificationService */;
+			targetProxy = C1A5E01D2ED0000000B7A001 /* PBXContainerItemProxy */;
+		};
+		C1A5E2112ED0000000B7A001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C1A5E20C2ED0000000B7A001 /* Share */;
+			targetProxy = C1A5E2102ED0000000B7A001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		C1A5E11B2ED0000000B7A001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = CredentialProvider/CredentialProvider.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				INFOPLIST_FILE = CredentialProvider/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}.credentials";
+				PRODUCT_NAME = CredentialProvider;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C1A5E11C2ED0000000B7A001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = CredentialProvider/CredentialProvider.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				INFOPLIST_FILE = CredentialProvider/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}.credentials";
+				PRODUCT_NAME = CredentialProvider;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		7555FFA3242A565B00829871 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AB3632DC29227652001CCB65 /* Config.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		7555FFA4242A565B00829871 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AB3632DC29227652001CCB65 /* Config.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		7555FFA6242A565B00829871 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
+				INFOPLIST_FILE = iosApp/Info.plist;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}";
+				PRODUCT_NAME = "${APP_NAME}";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7555FFA7242A565B00829871 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
+				INFOPLIST_FILE = iosApp/Info.plist;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}";
+				PRODUCT_NAME = "${APP_NAME}";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C1A5E0202ED0000000B7A001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = NotificationService/NotificationService.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
+				INFOPLIST_FILE = NotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}.notifications";
+				PRODUCT_NAME = NotificationService;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C1A5E0212ED0000000B7A001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = NotificationService/NotificationService.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
+				INFOPLIST_FILE = NotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}.notifications";
+				PRODUCT_NAME = NotificationService;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C1A5E2132ED0000000B7A001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Share/Share.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				INFOPLIST_FILE = Share/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}.share";
+				PRODUCT_NAME = Share;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C1A5E2142ED0000000B7A001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Share/Share.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				INFOPLIST_FILE = Share/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}.share";
+				PRODUCT_NAME = Share;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C1A5E11A2ED0000000B7A001 /* Build configuration list for PBXNativeTarget "CredentialProvider" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1A5E11B2ED0000000B7A001 /* Debug */,
+				C1A5E11C2ED0000000B7A001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7555FF76242A565900829871 /* Build configuration list for PBXProject "iosApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7555FFA3242A565B00829871 /* Debug */,
+				7555FFA4242A565B00829871 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7555FFA5242A565B00829871 /* Build configuration list for PBXNativeTarget "iosApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7555FFA6242A565B00829871 /* Debug */,
+				7555FFA7242A565B00829871 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C1A5E01F2ED0000000B7A001 /* Build configuration list for PBXNativeTarget "NotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1A5E0202ED0000000B7A001 /* Debug */,
+				C1A5E0212ED0000000B7A001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C1A5E2122ED0000000B7A001 /* Build configuration list for PBXNativeTarget "Share" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1A5E2132ED0000000B7A001 /* Debug */,
+				C1A5E2142ED0000000B7A001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 7555FF73242A565900829871 /* Project object */;
+}

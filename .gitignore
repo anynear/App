@@ -1,0 +1,19 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+captures/
+iosApp/build/
+xcuserdata/
+*.xcuserstate
+DerivedData/
+
+# Signierschlüssel nie committen (liegen nur in den GitHub Secrets)
+*.jks
+*.keystore
+
+# Eingebettete network list, legt der Beta-Workflow ab
+net.json

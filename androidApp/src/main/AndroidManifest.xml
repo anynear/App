@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+
+    <!-- Find the radio on Wi-Fi (mDNS) and connect, later device maintenance -->
+    <!-- Rescue via USB cable (ADR 0056); phones without USB host still get the app. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <!-- Android 12+: scan without deriving the location, connection to the radio -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Android 8–11 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+
+    <!-- Official warnings: district from the approximate location, only while the app is open, stays on the phone -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Foreground service keeps the BLE connection in the background (mandatory from Android 14 on) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Let the search run for documents finish in the background (ADR 0071 item 9). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Scan the QR code of an invitation or a contact; only requested when „QR-Code scannen“ is tapped. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Record voice messages (ADR 0030); only requested when the microphone is tapped. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <!-- Search the phone for important documents (ADR 0071): images only, only requested when „Suchen“ is tapped,
+         from Android 13 on given back after the search run. From 14 on also „Fotos auswählen“. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Search the whole phone and the „Download“ folder (ADR 0071): only after tapping, granted in the settings.
+         Also in the Play build (ADR 0089): declared in the Play Console as on-device file search for documents. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
+    <!-- Passwords open only with fingerprint or device lock (ADR 0039), prompted by the system. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!-- Receive messages in the background without Google's push service (ADR 0008): our own
+         foreground service, which starts again after a restart of the phone and after app updates. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Stay awake briefly after the alarm has woken the phone for receiving (WakeAlarm). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Direct system dialog „Akku-Optimierung für anynear ausschalten“ (needed without FCM, ADR 0008). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Alarms from alerts (ADR 0062 §6): through „Nicht stören“ (the person grants access in the settings)
+         and as full screen on the lock screen. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Check-ins (ADR 0083): question, hint and alarm on the minute; without permission inexact. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <!-- Permissions and queries only for the APK outside Google Play: src/direct/AndroidManifest.xml. -->
+    <queries>
+        <!-- On-device speech recognition for the text preview of voice messages (ADR 0030). -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".MainApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="${appLabel}"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.App">
+
+        <!-- singleTask: sharing, links and notifications go to the running window (onNewIntent). With singleTop
+             the share menu opened a second one, and its outdated draft was sent a second time. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Invitation links (/k#…), contact links (/c#…), device links (/p#…), channel links (/a#…,
+                 ADR 0062) and the settings link (/s#erase, ADR 0089) open the app directly (ADR 0036): created on
+                 anynear.app, also recognized on anynear.net (ADR 0061, decision 4). Verified via
+                 /.well-known/assetlinks.json of both hosts (website, relays). Exact paths, not prefixes: „/a“ as a prefix
+                 also caught website pages such as /app-laden/ and /app/download/. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="anynear.app" />
+                <data android:host="anynear.net" />
+                <data android:path="/k" />
+                <data android:path="/k/" />
+                <data android:path="/c" />
+                <data android:path="/c/" />
+                <data android:path="/p" />
+                <data android:path="/p/" />
+                <data android:path="/a" />
+                <data android:path="/a/" />
+                <data android:path="/s" />
+                <data android:path="/s/" />
+            </intent-filter>
+            <!-- Share from other apps (link, text, photos, files): anynear asks to whom and stores it as a draft. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <!-- Radio plugged in via USB cable: offer anynear in the chooser, opens the rescue (ADR 0056). -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_radio_filter" />
+        </activity>
+
+        <!-- Launcher icon and name on the home screen. An alias, because the brand tests could disable it;
+             AppBrand.restoreLauncher enables it again (the name stays, otherwise the icon disappears). -->
+        <activity-alias
+            android:name=".Launcher"
+            android:exported="true"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Direct share: latest conversations in share menu (ShareShortcuts, share-target in shortcuts.xml). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity-alias>
+
+        <!-- Alarm as full screen over the lock screen (ADR 0062 §6); its own task, not in the list of recent apps. -->
+        <activity
+            android:name=".AlarmActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.App" />
+
+        <!-- Self-started search run for documents in the background (ADR 0071 item 9). -->
+        <service
+            android:name=".DocFinderService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Update radios (ADR 0056): nRF52 via DFU with the Nordic library. -->
+        <service
+            android:name=".FirmwareDfuService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice">
+            <intent-filter>
+                <action android:name="no.nordicsemi.android.dfu.broadcast.BROADCAST_ACTION" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".MeshConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|remoteMessaging" />
+
+        <!-- Check-ins (ADR 0083): tile „Alles gut“ in the quick settings. -->
+        <service
+            android:name=".LifeSignTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_app"
+            android:label="@string/lifesign_tile"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- Autofill with passwords (ADR 0039); can only be enabled in the system settings. -->
+        <service
+            android:name=".autofill.PasswordAutofillService"
+            android:exported="true"
+            android:label="${appLabel}"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.autofill.AutofillService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.autofill"
+                android:resource="@xml/autofill_service" />
+        </service>
+
+        <!-- Passkeys from Android 14 on (ADR 0052); enable under „Passwörter, Passkeys und Konten“. -->
+        <service
+            android:name=".autofill.PasskeyProviderService"
+            android:enabled="@bool/passkeys"
+            android:exported="true"
+            android:label="${appLabel}"
+            android:icon="@mipmap/ic_launcher"
+            android:permission="android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.credentials.CredentialProviderService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.credentials.provider"
+                android:resource="@xml/passkey_provider" />
+        </service>
+
+        <!-- Device lock, then create a passkey or sign in; its own task as with autofill. -->
+        <activity
+            android:name=".autofill.PasskeyActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.App" />
+
+        <!-- Device lock and selection during autofill; its own task so that it does not end up in the app. -->
+        <activity
+            android:name=".autofill.AutofillAuthActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.App" />
+
+        <!-- Open PDFs with the system viewer: briefly decrypted copy in the cache. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Result from the package installer for an update (AppUpdater). -->
+        <receiver
+            android:name=".UpdateInstallReceiver"
+            android:exported="false" />
+
+        <!-- „Ton aus“ or swiping away an alarm (AlertNotifier). -->
+        <receiver
+            android:name=".AlarmStopReceiver"
+            android:exported="false" />
+
+        <!-- Alarm against stalled receiving in deep sleep (WakeAlarm). -->
+        <receiver
+            android:name=".WakeReceiver"
+            android:exported="false" />
+
+        <!-- Check-ins (ADR 0083): alarm at the deadline and buttons in the notification. -->
+        <receiver
+            android:name=".LifeSignWakeReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".LifeSignActionReceiver"
+            android:exported="false" />
+
+        <!-- Scheduled reminders, e.g. to charge the radio (ADR 0085). -->
+        <receiver
+            android:name=".ReminderReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".StartReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

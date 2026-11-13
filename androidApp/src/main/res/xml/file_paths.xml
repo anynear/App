@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the directory for opened PDFs and the one for camera photos (briefly, until they are read), nothing else from the app storage. -->
+<paths>
+    <cache-path name="open" path="open/" />
+    <cache-path name="camera" path="camera/" />
+</paths>

@@ -1,0 +1,4 @@
+doc-vectors.bin: derived from sentence-transformers/static-similarity-mrl-multilingual-v1
+(https://huggingface.co/sentence-transformers/static-similarity-mrl-multilingual-v1), licensed under the Apache
+License 2.0 (https://www.apache.org/licenses/LICENSE-2.0). Changed: cut to the first 256 values, 8-bit values with one
+scale per word piece, only word pieces in Latin script (ANMP tools/doc-vectors/make.py).

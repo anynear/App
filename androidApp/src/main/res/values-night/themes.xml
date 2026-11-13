@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.App" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/brand_nacht</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="s" xmlns:tools="http://schemas.android.com/tools">@color/brand_nachtblau</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="s" xmlns:tools="http://schemas.android.com/tools">@drawable/ic_launcher_foreground</item>
+    </style>
+</resources>

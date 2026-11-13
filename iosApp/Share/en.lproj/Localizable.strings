@@ -1,0 +1,5 @@
+"shared.title" = "Ready for anynear";
+"shared.message" = "Open anynear and choose who gets it.";
+"failed.title" = "Didn't work";
+"failed.message" = "anynear couldn't take this.";
+"ok" = "OK";

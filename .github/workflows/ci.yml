@@ -1,0 +1,65 @@
+# Check for every pull request and every push to main: unit tests and debug APK, without signing and
+# without a release.
+#
+# Required secrets: CI_APP_ID and CI_APP_KEY (GitHub App anynear CI, reads ANMP and ANDP for the composite build).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Runners: GitHub's runners, unless the repository variable RUNNER_LINUX names others (a JSON label list). Only the
+    # project's working repository sets it.
+    runs-on: ${{ fromJSON(vars.RUNNER_LINUX || '"ubuntu-latest"') }}
+    defaults:
+      run:
+        working-directory: App
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: App
+
+      # ANMP core and ANDP client via composite build from the neighbouring folders (ADR 0036).
+      # ANMP and ANDP: as long as the repos are private, with a short-lived token of the organisation's GitHub App;
+      # once they are public, the workflow's token is enough (pull requests from forks get no secrets).
+      - uses: actions/create-github-app-token@v2
+        id: ci-token
+        if: github.event.repository.private
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_KEY }}
+          repositories: ${{ vars.ANMP_REPO || 'ANMP' }},${{ vars.ANDP_REPO || 'ANDP' }}
+          permission-contents: read
+
+      - uses: actions/checkout@v4
+        with:
+          repository: anynear/${{ vars.ANMP_REPO || 'ANMP' }}
+          token: ${{ steps.ci-token.outputs.token || github.token }}
+          path: ANMP
+
+      - uses: actions/checkout@v4
+        with:
+          repository: anynear/${{ vars.ANDP_REPO || 'ANDP' }}
+          token: ${{ steps.ci-token.outputs.token || github.token }}
+          path: ANDP
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests and debug APK
+        run: ./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug --console=plain
