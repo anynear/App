@@ -159,6 +159,8 @@ class DocFinderService : Service() {
                     .setContentIntent(openApp(context))
                     .addAction(0, texts.find.stop, stopIntent)
                     .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                    // Own group, not bundled with messages (like [MeshConnectionService]).
+                    .setGroup(CHANNEL_ID)
                     .build()
             }
         }
