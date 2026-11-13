@@ -41,16 +41,13 @@ internal fun CirclesScreen(controller: AppController, onOpenCircle: (String) -> 
     val shown = circles.filter { matchesSearch(query, it.name) }
 
     Column(Modifier.fillMaxSize()) {
-        AppHeader(texts.setup.tabCircles)
+        // Invitations mostly arrive as a link that opens the app by itself, so accepting one by hand is in the ⋮ menu (ADR 0101).
+        AppHeader(texts.setup.tabCircles, menu = listOf(MenuAction(texts.people.acceptInvite, AppIcons.Link) { mode = CircleAction.Menu }))
         Column(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            // Both paths equally easy to find: one below the other, full width, fully readable even with large font.
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                AppButton(texts.people.startCircle, { mode = CircleAction.Create }, Modifier.fillMaxWidth(), kind = ButtonKind.Main, icon = AppIcons.Plus)
-                AppButton(texts.people.acceptInvite, { mode = CircleAction.Menu }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary, icon = AppIcons.Link)
-            }
+            AppButton(texts.people.startCircle, { mode = CircleAction.Create }, Modifier.fillMaxWidth(), kind = ButtonKind.Main, icon = AppIcons.Plus)
             if (circles.isEmpty()) {
                 Text(
                     texts.people.circleExplained,

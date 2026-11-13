@@ -69,6 +69,8 @@ import app.anynear.alerts.statusAt
 import app.anynear.attachments.AttachmentKind
 import app.anynear.circles.Circle
 import app.anynear.lifesigns.LifeSigns
+import app.anynear.anmp.core.AliveStatus
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import app.anynear.attachments.mimeTypeOf
 import app.anynear.i18n.texts
@@ -81,6 +83,9 @@ import org.jetbrains.compose.resources.decodeToImageBitmap
 
 // „Meldungen“ area (ADR 0062 §9): at the top what matters right now, below it the channels; in the channel history
 // and settings. There are no replies here.
+
+/** Without check-ins (no core yet): nothing runs. */
+private val NoLifeSigns = MutableStateFlow(emptyList<AliveStatus>())
 
 private fun nowMillis() = Clock.System.now().toEpochMilliseconds()
 
@@ -113,13 +118,21 @@ internal fun AlertsScreen(alerts: Alerts, lifeSigns: LifeSigns?, circles: StateF
     // Acknowledged ones stay in the history, the top shows only open ones (for this person only, on all their devices).
     val (ackedActive, active) = allActive.partition { AlertAcks.isAcked(acked, it.id) }
     val replaced = replacedIds(list)
+    // Rarely needed, so in the ⋮ menu instead of on the page (ADR 0101); a running check-in stays at the top.
+    var startingLifeSign by remember { mutableStateOf(false) }
+    val lifeSignStatuses by (lifeSigns?.statuses ?: NoLifeSigns).collectAsState()
+    val ownRunning = lifeSignStatuses.any { it.own && it.phase != AliveStatus.ENDED }
+    val menu = listOfNotNull(
+        if (lifeSigns != null && !ownRunning) MenuAction(texts.lifeSigns.start, AppIcons.Uhr) { startingLifeSign = true } else null,
+        MenuAction(texts.alerts.createChannel, AppIcons.Plus) { creating = true },
+    )
     Column(Modifier.fillMaxSize()) {
-        AppHeader(texts.alerts.title)
+        AppHeader(texts.alerts.title, menu = menu)
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            if (lifeSigns != null) LifeSignsSection(lifeSigns, circles, onCreateCircle)
+            if (lifeSigns != null) LifeSignsSection(lifeSigns, circles, onCreateCircle, startingLifeSign, onStartingDone = { startingLifeSign = false })
             if (allActive.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionTitle(texts.alerts.activeSection)
@@ -157,7 +170,6 @@ internal fun AlertsScreen(alerts: Alerts, lifeSigns: LifeSigns?, circles: StateF
                     own.forEach { row -> ChannelRowView(row, now) { onOpenChannel(row.channel.id) } }
                 }
             }
-            AppButton(texts.alerts.createChannel, { creating = true }, Modifier.fillMaxWidth(), kind = ButtonKind.Main, icon = AppIcons.Plus)
             // Official warnings only if the curated channel is set up (implementation plan §5).
             if (alerts.curatedLink != null || curated != null) OfficialSection(alerts, curated, rows, now, onOpenChannel)
         }

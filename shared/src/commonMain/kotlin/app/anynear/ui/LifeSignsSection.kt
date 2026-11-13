@@ -53,9 +53,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
-/** Section „Lebenszeichen“ at the top of „Meldungen“ (ADR 0083 §1, §5): start and run the own one, watch others. */
+/**
+ * Section „Lebenszeichen“ at the top of „Meldungen“ (ADR 0083 §1, §5): run the own one, watch others. Starting is in the
+ * ⋮ menu of „Meldungen“ (ADR 0101); [starting] opens the start dialog from there. Without a running one the section is
+ * not shown at all.
+ */
 @Composable
-internal fun LifeSignsSection(lifeSigns: LifeSigns, circles: StateFlow<List<Circle>>, onCreateCircle: () -> Unit) {
+internal fun LifeSignsSection(
+    lifeSigns: LifeSigns,
+    circles: StateFlow<List<Circle>>,
+    onCreateCircle: () -> Unit,
+    starting: Boolean,
+    onStartingDone: () -> Unit,
+) {
     val all by lifeSigns.statuses.collectAsState()
     val exactMissing by lifeSigns.exactAlarmMissing.collectAsState()
     val fullScreen by lifeSigns.fullScreen.collectAsState()
@@ -63,19 +73,14 @@ internal fun LifeSignsSection(lifeSigns: LifeSigns, circles: StateFlow<List<Circ
     val now = rememberSecondNow()
     val own = all.firstOrNull { it.own && it.phase != AliveStatus.ENDED }
     val watched = all.filter { !it.own && it.phase != AliveStatus.ENDED }
-    var starting by remember { mutableStateOf(false) }
     var ending by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val lt = texts.lifeSigns
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    if (own != null || watched.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(lt.section, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         watched.forEach { WatchedCard(lifeSigns, it, now) }
         if (own != null) {
             OwnCard(lifeSigns, own, now, onConfirm = { scope.launch { lifeSigns.confirm(own.plan.id) } }, onEnd = { ending = true })
-        } else {
-            AppSection(footer = lt.intro) {
-                AppButton(lt.start, { starting = true }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary, icon = AppIcons.Uhr)
-            }
         }
         if (exactMissing) {
             AppSection(footer = lt.exactAlarmHint) {
@@ -87,8 +92,8 @@ internal fun LifeSignsSection(lifeSigns: LifeSigns, circles: StateFlow<List<Circ
         FullScreenCheckIn(lifeSigns, own, now, onConfirm = { scope.launch { lifeSigns.confirm(own.plan.id) } }, onEnd = { ending = true })
     }
     if (starting) {
-        StartDialog(lifeSigns, lifeSigns.choices(circleList), onDismiss = { starting = false }, onCreateCircle = {
-            starting = false
+        StartDialog(lifeSigns, lifeSigns.choices(circleList), onDismiss = onStartingDone, onCreateCircle = {
+            onStartingDone()
             onCreateCircle()
         })
     }
@@ -255,6 +260,8 @@ private fun StartDialog(lifeSigns: LifeSigns, circles: List<Circle>, onDismiss: 
         title = { Text(lt.startTitle) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // The explanation stood under the start button before; since starting is in the ⋮ menu it is here (ADR 0101).
+                Text(lt.intro, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (usable.isEmpty()) {
                     // No circle yet: straight to creating one (afterwards its chat opens with „Lade jemanden ein“).
                     Text(lt.noCircle)
