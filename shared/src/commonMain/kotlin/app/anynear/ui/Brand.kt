@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -99,6 +100,15 @@ internal val LocalHeaderTasks = staticCompositionLocalOf<(@Composable () -> Unit
 /** ⋮ menu at the far right in the header of every main page (ADR 0062 §1): everywhere in the same place, with the same entries. */
 internal val LocalHeaderMenu = staticCompositionLocalOf<(@Composable () -> Unit)?> { null }
 
+/** One entry in the context part of the ⋮ menu (ADR 0101): something rarely needed that belongs to this page. */
+internal class MenuAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
+
+/** Context part of the ⋮ menu (ADR 0101): heading (the page title) and the entries of the page that is open. */
+internal class HeaderContext(val title: String, val actions: List<MenuAction>)
+
+/** Set by [AppHeader] for the ⋮ menu; empty on pages without own entries. */
+internal val LocalHeaderContext = staticCompositionLocalOf<HeaderContext?> { null }
+
 /**
  * Header area of every main screen, light like the surface below it (anynear design). [onTitleClick] makes picture and title tappable (e.g. in the
  * chat to the detail page of the circle), [trailing] takes actions on the right (e.g. share).
@@ -116,6 +126,8 @@ internal fun AppHeader(
     trailing: (@Composable () -> Unit)? = null,
     /** Main page of a tab: only there radio and menu, so that chats and subpages have room for the title. */
     main: Boolean = leading == null,
+    /** Rarely needed actions of this page, at the top of the ⋮ menu, set apart from its fixed entries (ADR 0101). */
+    menu: List<MenuAction> = emptyList(),
 ) {
     val colors = AppTheme.colors
     Surface(color = colors.header, contentColor = colors.onHeader, modifier = Modifier.fillMaxWidth()) {
@@ -156,7 +168,9 @@ internal fun AppHeader(
             if (main) {
                 // No emblem in the header: app icon and start screen carry the brand, the header stays for title and state.
                 LocalHeaderStatus.current?.invoke()
-                LocalHeaderMenu.current?.invoke()
+                CompositionLocalProvider(LocalHeaderContext provides menu.takeIf { it.isNotEmpty() }?.let { HeaderContext(title, it) }) {
+                    LocalHeaderMenu.current?.invoke()
+                }
             }
         }
     }
