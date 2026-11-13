@@ -62,8 +62,8 @@ internal fun updateHint(state: AppUpdateState): String? = when (state) {
 }
 
 /**
- * „Mein Profil“: name and picture (apply in all circles) and your own contact. The same page from „Mehr“
- * and via your own card under „Menschen“. No message to yourself.
+ * „Mein Profil“: name and picture (apply in all circles) and your own contact. The same page from the ⋮ menu.
+ * No message to yourself.
  */
 @Composable
 internal fun ProfileScreen(controller: AppController, onBack: () -> Unit) {
@@ -92,7 +92,7 @@ internal fun ProfileScreen(controller: AppController, onBack: () -> Unit) {
                 Text(texts.settings.profileSubtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
             AppButton(texts.settings.editProfile, { editing = true }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary, icon = AppIcons.Stift)
-            // The same dialog as under „Menschen“: QR code, share link, copy.
+            // The same dialog as under „Kontakt hinzufügen“: QR code, share link, copy.
             AppSection(texts.people.myContact, footer = texts.people.ownContactText) {
                 SectionContent {
                     AppButton(texts.people.shareMyContact, { sharing = true }, Modifier.fillMaxWidth(), kind = ButtonKind.Main, icon = AppIcons.Teilen)

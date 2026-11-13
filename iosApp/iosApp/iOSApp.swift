@@ -40,7 +40,7 @@ struct AppCommands: Commands {
         }
         CommandMenu(MainViewControllerKt.menuText(key: "GoTo")) {
             item("ShowChats", "1")
-            item("ShowPeople", "2")
+            item("ShowCircles", "2")
             item("ShowFiles", "3")
             item("ShowAlerts", "4")
             Divider()

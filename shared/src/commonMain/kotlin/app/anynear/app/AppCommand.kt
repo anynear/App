@@ -6,7 +6,7 @@ enum class AppCommand {
     Settings,
     Help,
     ShowChats,
-    ShowPeople,
+    ShowCircles,
     ShowFiles,
     ShowAlerts,
     Back,
