@@ -135,7 +135,19 @@ internal fun AppHeader(
                     // Hyphenate long names at syllable boundaries with large font instead of in the middle of the word.
                     // Main pages with a large title as in the design, chats and subpages more compact.
                     val titleStyle = if (main) MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold) else MaterialTheme.typography.titleLarge
-                    Text(title, style = titleStyle.copy(hyphens = Hyphens.Auto, lineBreak = LineBreak.Paragraph), modifier = Modifier.semantics { heading() })
+                    val titleText = @Composable { modifier: Modifier ->
+                        Text(title, style = titleStyle.copy(hyphens = Hyphens.Auto, lineBreak = LineBreak.Paragraph), modifier = modifier.semantics { heading() })
+                    }
+                    if (onTitleClick != null) {
+                        // Same arrow as on rows that lead on: shows that tapping the title opens the page of the circle,
+                        // contact or channel, everywhere where that is possible.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            titleText(Modifier.weight(1f, fill = false))
+                            Chevron(Modifier.padding(start = 2.dp), tint = colors.headerAccent)
+                        }
+                    } else {
+                        titleText(Modifier)
+                    }
                     subtitle?.let { Text(it, style = MaterialTheme.typography.labelMedium.copy(hyphens = Hyphens.Auto, lineBreak = LineBreak.Paragraph), color = colors.headerAccent) }
                 }
             }
