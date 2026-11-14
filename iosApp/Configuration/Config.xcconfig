@@ -3,7 +3,7 @@ TEAM_ID=JQUZ59NS5G
 BUNDLE_ID=app.anynear
 APP_NAME=anynear
 
-// Local builds. CI sets all three when archiving (.github/workflows/beta-release.yml, job ios):
+// Local builds. CI sets all three when archiving (.github/workflows/release.yml, job ios):
 // MARKETING_VERSION = tag without v and suffix (Apple only allows numbers, e.g. v0.2.0-beta.1 -> 0.2.0),
 // CURRENT_PROJECT_VERSION = number of commits like versionCode on Android,
 // APP_VERSION_NAME = full identifier as on Android (tag without v, e.g. 0.2.0-beta.1), shown under „Über anynear“.

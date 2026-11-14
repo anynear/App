@@ -198,7 +198,7 @@ ADR 0051 there are no channels per circle anymore; P5 and P9 are therefore dropp
 ## iOS notifications via APNs (ADR 0009) – none of it tested
 
 The app is now built, signed and uploaded to TestFlight on a dedicated Mac runner with every release build
-(`beta-release.yml`, job `ios`). The wake-up calls themselves have been tested **on no real iPhone**. Originally only
+(`release.yml`, job `ios`). The wake-up calls themselves have been tested **on no real iPhone**. Originally only
 the relay side (with a mock APNs server over HTTP/2), the
 shared Kotlin code (`PushTest`) and that the iOS Kotlin code compiles were tested. Swift parts
 (`iosApp/iosApp/iOSApp.swift`, `iosApp/NotificationService/`) and the Xcode project are unbuilt.
