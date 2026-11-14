@@ -253,7 +253,7 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   call stack, last 200 log lines, cleaned (nothing after `#` in addresses, no long key sequences,
   no paths). At most 5, identical ones combined, 14 days. On the next start a card at the top of “Messages”
   (“Review and send”, “Don't send”); sending goes via “Report a problem” with `absturz.txt` and the log, without a
-  support identity via “Share”. Under “Troubleshooting” the line “Crash reports”. `beta-release.yml` attaches dSYMs
+  support identity via “Share”. Under “Troubleshooting” the line “Crash reports”. `release.yml` attaches dSYMs
   to the release as `ios-dsyms.zip`.
 - Alerts under “Active now” can be hidden with “Got it”, only for the person, on all their devices
   (setting `alerts_acked` in the profile, ADR 0050); a replacing alert appears again (ADR 0065).

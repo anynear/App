@@ -64,7 +64,7 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
     @OptIn(kotlin.experimental.ExperimentalNativeApi::class)
     override val testBuild: Boolean = kotlin.native.Platform.isDebugBinary
 
-    /** `CURRENT_PROJECT_VERSION` like `versionCode` on Android (from the number of commits, see beta-release.yml). */
+    /** `CURRENT_PROJECT_VERSION` like `versionCode` on Android (from the number of commits, see release.yml). */
     override val appBuild: Long? = (NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleVersion") as? String)?.toLongOrNull()
 
     // New version from the App Store, without the signed list (ADR 0096 §7); TestFlight reports itself.

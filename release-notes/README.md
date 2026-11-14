@@ -1,7 +1,15 @@
 # Release notes
 
-One file per version: `release-notes/<X.Y.Z>.md`. The release workflow copies it into the GitHub release of the tag
-`vX.Y.Z` and stops if it is missing; the website shows the same text. Builds between versions get no notes.
+One file per version: `release-notes/<X.Y.Z>.md`. The file also decides which version comes next: the highest
+`X.Y.Z.md` without a tag `vX.Y.Z` is the open version, and every release from `main` is a pre-release of
+it, `vX.Y.Z-pre.<build>` (Semantic Versioning, `scripts/version.sh`). To aim for another version, rename the file.
+
+- **Pre-release** (release from `main`): a GitHub pre-release with a line on top and the current state of the file;
+  TestFlight shows the same text as “What to Test”.
+- **Version** (release from the tag `vX.Y.Z`): the GitHub release carries the file as it is; the website shows the same
+  text. After it, start the file of the next version.
+
+Both stop if the file is missing or incomplete.
 
 Write for the people who use anynear: what is new, what got better, what was fixed. Short sentences, no internal
 numbers, no names of people, nothing about the size or the operation of the network.
