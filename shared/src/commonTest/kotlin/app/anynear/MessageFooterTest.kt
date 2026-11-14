@@ -66,7 +66,7 @@ class MessageFooterTest {
         assertFalse(app.anynear.chats.isSettingsLink("https://anynear.app/settings#erase"))
         // Created on anynear.app (ADR 0061, decision 4); links of earlier hosts no longer exist.
         assertEquals("https://anynear.app/k#abc", findAppLink("https://anynear.app/k#abc"))
-        assertNull(findAppLink("https://pyrsa.net/k#abc"))
+        assertNull(findAppLink("https://old-host.example/k#abc"))
         assertNull(findAppLink("https://example.com/k#abc"))
     }
 }

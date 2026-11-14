@@ -42,13 +42,13 @@ class CoreGlueTest {
         val circle = repo.circles.first { it.isNotEmpty() }.single()
         assertEquals("kreis-1", circle.id)
         assertEquals("Familie", circle.name)
-        // There are no channels per circle (ADR 0051): an old circle channel `PYRSA-xxxxx` is cleared away.
+        // There are no channels per circle (ADR 0051): a former circle channel is cleared away.
         assertTrue(AppConfig.isOldChannelName("PYRSA-K3V9Q"))
     }
 
     @Test
     fun channelsOfEarlierAppsAreOld() {
-        // ADR 0061, decision 6: the app clears away `PYRSA` and `PYRSA-xxxxx`, likewise those of PINA.
+        // ADR 0061, decision 6: the app clears away the channels of earlier versions.
         assertTrue(AppConfig.isOldChannelName("PYRSA"))
         assertTrue(AppConfig.isOldChannelName("PYRSA-K3V9Q"))
         assertTrue(AppConfig.isOldChannelName("PINA"))
@@ -65,7 +65,7 @@ class CoreGlueTest {
         assertEquals("https://anynear.app/k#abc", findAppLink("Komm dazu: https://anynear.app/k#abc"))
         assertEquals("https://anynear.net/k#abc", findAppLink("Komm dazu: https://anynear.net/k#abc"))
         assertEquals("https://anynear.net/c#xyz", findAppLink("https://anynear.net/c#xyz"))
-        assertNull(findAppLink("https://pyrsa.net/k#abc"))
+        assertNull(findAppLink("https://old-host.example/k#abc"))
         assertNull(findAppLink("https://example.org/k#abc"))
     }
 

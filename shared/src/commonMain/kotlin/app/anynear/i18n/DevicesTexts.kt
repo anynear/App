@@ -215,7 +215,7 @@ internal object DevicesTextsEn : DevicesTexts {
     override val addInvalid = "This code does not fit. Show the code on the new device again."
     override val remove = "Remove"
     override fun removeTitle(name: String) = "Remove “$name”?"
-    override val removeText = "It will not get messages any more."
+    override val removeText = "It will not get messages anymore."
     override val lockOut = "Stolen? Lock it out for good"
     override val lockOutText = "Enter the code of your emergency card. Afterwards the device cannot read anything, even if someone unlocks it."
     override val lockOutTextNoCode = "Afterwards the device cannot read anything, even if someone unlocks it."

@@ -17,7 +17,7 @@ class ContactRepositoryTest {
 
         val reloaded = ContactRepository(store)
         assertEquals(listOf("Testgerät Sieben"), reloaded.contacts.value.map { it.displayName })
-        // Without the former prefix `PINA1:` (ADR 0034).
+        // Without the former prefix (ADR 0034).
         assertEquals(false, store.getString("contacts.v2").orEmpty().contains("PINA"))
     }
 

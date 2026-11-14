@@ -176,7 +176,7 @@ fun App(controller: AppController) {
                             FamilySetupScreen(controller)
                         }
                     } else if (updateNotice is UpdateNotice.Block) {
-                        // Required update (Docs ADR 0096 §5): only the interface is covered, the core keeps running.
+                        // Required update (ADR 0096 §5): only the interface is covered, the core keeps running.
                         Box(Modifier.weight(1f)) { UpdateBlockScreen(controller) }
                     } else {
                         Box(Modifier.weight(1f)) { MainScreen(controller) }

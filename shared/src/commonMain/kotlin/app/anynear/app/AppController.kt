@@ -347,7 +347,7 @@ class AppController(
     private val _oldAppToRemove = MutableStateFlow(false)
 
     /**
-     * The old app (former app ID `com.pyrsa.pyrsa`) is still installed. Since the hard cut (ADR 0061) it can do
+     * The old app ([AppConfig.OLD_APP_ID]) is still installed. Since the hard cut (ADR 0061) it can do
      * nothing any more and nothing migrates from it; it should go so that nobody opens the wrong one.
      */
     val oldAppToRemove: StateFlow<Boolean> = _oldAppToRemove.asStateFlow()
@@ -690,7 +690,7 @@ class AppController(
 
     fun installAppUpdate() = hooks.installAppUpdate()
 
-    // --- Update requested by the network (Docs ADR 0096) ---
+    // --- Update requested by the network (ADR 0096) ---
 
     /** How this installation gets to a new version (ADR 0096 §6). */
     private val updateWay: StateFlow<UpdateWay> =
@@ -1163,7 +1163,7 @@ class AppController(
     val deviceSetupPrompt: StateFlow<DeviceSetupPrompt?> =
         combine(deviceSetupNeeded, pairedDevices.skippedSetup, _setupRequested, otherDeviceNames, link.ownDevice) { check, skipped, requested, taken, own ->
             check?.takeIf { requested || it.signature != skipped }?.let {
-                // An existing name stays (shared device; an old „anynear …“, „PYRSA …“ or „PINA …“ becomes „anynear.app | …“), otherwise derived from the node number.
+                // An existing name stays (shared device; a name with an older prefix becomes „anynear.app | …“), otherwise derived from the node number.
                 val suggestion = DeviceName.suffixOf(it.currentName)
                     ?: own?.let { device -> DeviceName.derived(device.nodeNum, taken) }
                     ?: randomNameSuffix
@@ -2167,7 +2167,7 @@ class AppController(
         }
     }
 
-    /** Clear away old channels (`PYRSA`, `PYRSA-xxxxx`, PINA) as soon as the radio is connected (ADR 0061, decision 6). */
+    /** Clear away channels of earlier versions as soon as the radio is connected (ADR 0061, decision 6). */
     private suspend fun removeOldRadioChannels() {
         combine(linkState, link.oldCircleChannels) { state, old -> old.takeIf { state == LinkState.Connected }.orEmpty() }
             .distinctUntilChanged()
@@ -4404,7 +4404,7 @@ class AppController(
 /** Content of the dialog „Funkgerät einrichten“. */
 data class DeviceSetupPrompt(
     val check: DeviceSetupCheck,
-    /** Suggestion for the part after `anynear `: existing name (also an old „PYRSA …“ or „PINA …“) or derived from the node number. */
+    /** Suggestion for the part after `anynear `: existing name (also with an older prefix) or derived from the node number. */
     val suggestedNameSuffix: String,
     /** Names of other radios in range, for the notice „gibt es schon“. */
     val takenNames: Set<String> = emptySet(),

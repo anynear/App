@@ -6,7 +6,7 @@ import app.anynear.app.AppUpdateState
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Updates through the app store from within the app (Docs ADR 0096 §6, §7): flavor `play` asks Google Play
+ * Updates through the app store from within the app (ADR 0096 §6, §7): flavor `play` asks Google Play
  * (In-App Updates); flavor `direct` has none ([storeUpdates] is `null` there, the own [AppUpdater] takes over).
  * The state is the same [AppUpdateState] as with the own updater, so the app shows the same notice.
  */

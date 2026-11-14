@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Flavor `play`: Google Play In-App Updates (Docs ADR 0096 §6, §7). */
+/** Flavor `play`: Google Play In-App Updates (ADR 0096 §6, §7). */
 fun storeUpdates(context: Context): StoreUpdates? = PlayUpdates(context)
 
 /**

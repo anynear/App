@@ -389,8 +389,8 @@ internal object AlertTextsEn : AlertTexts {
     override val leave = "Leave channel"
     override val remove = "Remove channel"
     override fun leaveTitle(name: String) = "Leave “$name”?"
-    override val leaveText = "You won't get alerts from this channel any more."
-    override val removeText = "The channel disappears from this device. Those who subscribed won't get new alerts from you any more."
+    override val leaveText = "You won't get alerts from this channel anymore."
+    override val removeText = "The channel disappears from this device. Those who subscribed won't get new alerts from you anymore."
 
     override val testAlarm = "Test alarm"
     override val testAlarmSubtitle = "Check that an alarm really rings here"
@@ -423,7 +423,7 @@ internal object AlertTextsEn : AlertTexts {
     override val subscribersFooter = "Only you see who is in. People with an older version of $APP are missing here."
     override fun subscriberSince(date: String) = "since $date"
     override fun removeSubscriberTitle(name: String) = "Remove $name?"
-    override fun removeSubscriberText(name: String) = "$name won't get new alerts any more. Everyone else stays. Anyone who should still subscribe needs the new link afterwards."
+    override fun removeSubscriberText(name: String) = "$name won't get new alerts anymore. Everyone else stays. Anyone who should still subscribe needs the new link afterwards."
     override val removeSubscriber = "Remove"
     override fun subscriberRemoved(name: String) = "$name is no longer in."
     override val someone = "No name"
@@ -432,7 +432,7 @@ internal object AlertTextsEn : AlertTexts {
     override val endAlert = "Give all clear"
     override fun endAlertTitle(title: String) = "Send all clear for “$title”?"
     override val endAlertText = "Everyone in the channel will see that it's over."
-    override val endAlertDefaultText = "Cancelled."
+    override val endAlertDefaultText = "Canceled."
     override val endAlertSent = "All clear sent"
 
     override val addressesSection = "Addresses for devices"

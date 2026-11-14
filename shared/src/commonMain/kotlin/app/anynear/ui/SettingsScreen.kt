@@ -255,7 +255,7 @@ private fun StartOverDialog(controller: AppController, kind: StartOver, onDismis
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val erase = kind == StartOver.Erase
-    // Deleting everything also removes the other own devices: only after the device lock (audit 11.11.2026).
+    // Deleting everything also removes the other own devices: only after the device lock.
     val confirmErase = app.anynear.ui.rememberLockCheck {
         scope.launch {
             busy = true

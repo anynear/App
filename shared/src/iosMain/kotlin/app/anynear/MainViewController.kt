@@ -67,7 +67,7 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
     /** `CURRENT_PROJECT_VERSION` like `versionCode` on Android (from the number of commits, see beta-release.yml). */
     override val appBuild: Long? = (NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleVersion") as? String)?.toLongOrNull()
 
-    // New version from the App Store, without the signed list (Docs ADR 0096 §7); TestFlight reports itself.
+    // New version from the App Store, without the signed list (ADR 0096 §7); TestFlight reports itself.
     private val appStore = AppStoreUpdates(debug = testBuild)
 
     override val appUpdate: StateFlow<AppUpdateState> get() = appStore.state
@@ -78,7 +78,7 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
         if (!appStore.openStore()) openUpdatePage()
     }
 
-    // Required update (Docs ADR 0096 §6): iOS cannot ask for the build number, the button opens its place.
+    // Required update (ADR 0096 §6): iOS cannot ask for the build number, the button opens its place.
     override val opensUpdatePage: Boolean = true
 
     override fun openUpdatePage() {

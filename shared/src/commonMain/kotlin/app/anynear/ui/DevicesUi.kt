@@ -66,7 +66,7 @@ internal fun MyDevicesScreen(controller: AppController, onBack: () -> Unit) {
         }
     }
     if (adding) AddDeviceDialog(controller, initial = null) { adding = false }
-    // Removing another own device locks the person out there: only after the device lock (ADR 0042, audit 11.11.2026).
+    // Removing another own device locks the person out there: only after the device lock (ADR 0042).
     val confirmRemove = rememberLockCheck { removing?.let { controller.removeDevice(it.deviceId) }; removing = null }
     removing?.let { d ->
         AlertDialog(

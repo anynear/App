@@ -84,12 +84,12 @@ class AboPreviewTest {
         val p = AboPreview.parse(
             """
             {"trialMonths":3,"plans":[{"id":"free","monthlyCents":0},{"id":"plus","monthlyCents":500,"yearlyCents":5000}],
-             "compare":{"en":{"rows":[{"label":"Quota","values":{"free":"250 MB","plus":"20 GB"}},{"label":"Bin","values":{"free":"7 days"}}],
+             "compare":{"en":{"rows":[{"label":"Quota","values":{"free":"250 MB","plus":"20 GB"}},{"label":"Trash","values":{"free":"7 days"}}],
                               "note":"All plans include messages."}}}
             """.trimIndent(),
         )!!
         val c = p.compare(german = true)!!
-        assertEquals(listOf("Quota", "Bin"), c.rows.map { it.label })
+        assertEquals(listOf("Quota", "Trash"), c.rows.map { it.label })
         assertEquals("20 GB", c.rows[0].value(p.paid.first()))
         assertEquals("–", c.rows[1].value(p.paid.first()))
         assertEquals("All plans include messages.", c.note)

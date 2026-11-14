@@ -55,7 +55,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    // Dialogs of Google Play for an update (flavor `play`, Docs ADR 0096).
+    // Dialogs of Google Play for an update (flavor `play`, ADR 0096).
     private val storeUpdateLauncher =
         registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
             app.hooks.store?.onFlowResult(result.resultCode)
