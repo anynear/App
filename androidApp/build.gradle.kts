@@ -17,7 +17,7 @@ android {
         applicationId = "app.anynear"
         minSdk = libs.versions.androidMinSdk.get().toInt()
         targetSdk = libs.versions.androidTargetSdk.get().toInt()
-        // CI sets both via -Papp.versionCode / -Papp.versionName (.github/workflows/beta-release.yml).
+        // CI sets both via -Papp.versionCode / -Papp.versionName (.github/workflows/release.yml).
         versionCode = providers.gradleProperty("app.versionCode").orNull?.toInt() ?: 1
         versionName = providers.gradleProperty("app.versionName").orNull
             ?: providers.gradleProperty("app.versionBase").get()

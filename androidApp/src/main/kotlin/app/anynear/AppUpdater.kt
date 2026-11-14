@@ -83,7 +83,7 @@ class AppUpdater(private val context: Context) {
 
     val version: String? get() = installed.versionName
 
-    /** versionCode from the number of commits (2n after the merge, 2n+1 at the tag; see beta-release.yml). */
+    /** versionCode from the number of commits (2n for a pre-release, 2n+1 for the tag vX.Y.Z; see release.yml). */
     val build: Long get() = PackageInfoCompat.getLongVersionCode(installed)
 
     /** An app store installed the app and updates it. */
@@ -579,7 +579,7 @@ class AppUpdater(private val context: Context) {
         private const val SITE_HOST = "anynear.app"
         private const val SITE = "https://$SITE_HOST"
 
-        /** Releases of the app with `build.json` and `anynear-v<version>.apk` (job android in beta-release.yml). */
+        /** Releases of the app with `build.json` and `anynear-v<version>.apk` (job android in release.yml). */
         private const val GITHUB = "https://github.com/anynear/App"
         const val GITHUB_MANIFEST_URL = "$GITHUB/releases/latest/download/build.json"
 
@@ -595,7 +595,8 @@ class AppUpdater(private val context: Context) {
         )
         private const val MAX_REDIRECTS = 5
         private val REDIRECTS = setOf(301, 302, 303, 307, 308)
-        private val VERSION_NAME = Regex("^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9a-f]{7})?$")
+        /** X.Y.Z, pre-release X.Y.Z-pre.<build> (scripts/version.sh) or an older build X.Y.Z-<commit>. */
+        private val VERSION_NAME = Regex("^[0-9]+\\.[0-9]+\\.[0-9]+(-pre\\.[0-9]+|-[0-9a-f]{7})?$")
 
         private const val KEY_LAST_CHECK = "last_check"
 

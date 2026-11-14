@@ -1,22 +1,26 @@
 # Release of the app (APK as a GitHub release, Google Play closed test, TestFlight, website), by hand only. Start via
-# "Actions -> Beta-Release -> Run workflow" or `gh workflow run beta-release.yml --ref <ref>`, with one of two refs:
+# "Actions -> Release -> Run workflow" or `gh workflow run release.yml --ref <ref>`, with one of two refs:
 #
-#   main            Build vX.Y.Z-<hash>: X.Y.Z = latest tag vX.Y.Z on main, <hash> = commit (7 characters),
-#                   e.g. v0.3.0-1a2b3c4. The workflow creates the release and its tag itself.
-#   Tag vX.Y.Z      new version (needs release-notes/X.Y.Z.md). The tag alone starts nothing.
+#   main            Pre-release vX.Y.Z-pre.<build>, e.g. v0.9.0-pre.10030, as a GitHub pre-release. X.Y.Z is the open version:
+#                   the highest release-notes/X.Y.Z.md without a tag vX.Y.Z (scripts/version.sh). The workflow creates
+#                   the pre-release and its tag itself; its text is the current state of that file.
+#   Tag vX.Y.Z      the version itself (needs release-notes/X.Y.Z.md), as the latest release. The tag alone starts nothing.
 #
-# Why builds instead of versions: TestFlight sends the first build of a new version X.Y.Z into Apple's beta review,
-# further builds of the same version go to the external testers without review.
+# Versions follow Semantic Versioning: 0.9.0-pre.10030 < 0.9.0-pre.10032 < 0.9.0. Why pre-releases instead of versions:
+# TestFlight sends the first build of a new version X.Y.Z into Apple's beta review, further builds of the same version
+# go to the external testers without review. The tag vX.Y.Z later reuses the number and needs no review either.
 #
 #   android  signed APK (flavor direct) as GitHub release v<version> with the assets anynear-v<version>.apk and
-#            build.json (the APK updates itself from there), plus the app bundle for Google Play (flavor play) as a
-#            workflow artifact; with PLAY_SERVICE_ACCOUNT_JSON also released to the closed test track
-#   ios      upload to TestFlight (closed beta, invited testers only)
-#   publish  attaches ios.json to the release and redeploys the website, which shows the latest release
+#            build.json (the website picks the newest release, pre-releases included, and the APK
+#            updates itself through the website), plus the app bundle for Google Play (flavor play) as a workflow
+#            artifact; with PLAY_SERVICE_ACCOUNT_JSON also released to the closed test track
+#   ios      upload to TestFlight (closed beta, invited testers only), with the release notes as “What to Test”
+#   publish  attaches ios.json to the release and redeploys the website, which shows the newest release
 #
-# Version = tag without "v"; iOS gets only X.Y.Z of it (Apple allows only numbers). versionCode and iOS build number:
-# VERSION_CODE_BASE + 2n for a build, + 2n+1 for a tag vX.Y.Z on the same commit (n = number of commits), so that the
-# tag build installs as an update and App Store Connect gets no number twice.
+# Version without "v" is the versionName; iOS gets only X.Y.Z of it (Apple allows only numbers). versionCode and iOS
+# build number: VERSION_CODE_BASE + 2n for a pre-release, + 2n+1 for a tag vX.Y.Z on the same commit (n = number of
+# commits), so that the tag build installs as an update and App Store Connect gets no number twice. The pre-release
+# carries the same number in its name.
 #
 # Secrets (environment "release"): KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD (key CN=anynear,
 # ADR 0061); for iOS ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (App Store Connect API key, role Admin; without them iOS is
@@ -25,7 +29,7 @@
 # RUNNER_RELEASE, RUNNER_MAC (JSON label lists, default GitHub's runners), VERSION_CODE_BASE (default 0), NETWORK_REPO
 # (repository whose latest release carries net.json; otherwise https://anynear.net/andp/v1/net). While ANMP and ANDP are
 # private, CI_APP_ID and CI_APP_KEY give read access to them.
-name: Beta-Release
+name: Release
 
 # By hand only: merges and tags no longer start a release.
 on:
@@ -40,7 +44,7 @@ env:
 # One release at a time. Cancelling would leave half a TestFlight upload behind. If several merges come
 # in quick succession, only the newest waits; builds in between are dropped.
 concurrency:
-  group: beta-release
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -53,13 +57,13 @@ jobs:
       run:
         working-directory: App
     steps:
-      # A repository can switch releases off (variable BETA_RELEASE=off), e.g. a private copy whose builds would
+      # A repository can switch releases off (variable RELEASE=off), e.g. a private copy whose builds would
       # carry lower version codes than the public releases. Test apps for a phone come from ci.yml (Run workflow).
       - name: Releases allowed here
-        if: vars.BETA_RELEASE == 'off'
+        if: vars.RELEASE == 'off'
         working-directory: .
         run: |
-          echo "::error::Releases are switched off in this repository (BETA_RELEASE=off). Run ci.yml for a test app." >&2
+          echo "::error::Releases are switched off in this repository (RELEASE=off). Run ci.yml for a test app." >&2
           exit 1
 
       - uses: actions/checkout@v4
@@ -67,10 +71,15 @@ jobs:
           path: App
           fetch-depth: 0 # for versionCode from the number of commits
 
-      # A version (tag vX.Y.Z) needs its release notes in release-notes/X.Y.Z.md; stop before anything is built.
-      - name: Check the release notes
-        if: startsWith(github.ref, 'refs/tags/')
-        run: scripts/release-notes.sh "$GITHUB_REF_NAME" > /dev/null
+      # Version and pre-release come from scripts/version.sh; both need complete release notes in release-notes/X.Y.Z.md.
+      # Stop before anything is built.
+      - name: Version
+        id: version
+        run: |
+          set -euo pipefail
+          scripts/version.sh > "$RUNNER_TEMP/version"
+          tee -a "$GITHUB_OUTPUT" < "$RUNNER_TEMP/version"
+          scripts/release-notes.sh "$(sed -n 's/^marketing=//p' "$RUNNER_TEMP/version")" > /dev/null
 
       # ANMP core and ANDP client via composite build from the neighbouring folders (ADR 0036). While they are private,
       # read access via a short-lived token of the GitHub App anynear CI (secrets CI_APP_ID, CI_APP_KEY; Contents read).
@@ -101,38 +110,6 @@ jobs:
           java-version: "21"
 
       - uses: gradle/actions/setup-gradle@v4
-
-      - name: Version
-        id: version
-        run: |
-          set -euo pipefail
-          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$GITHUB_REF is not on main." >&2; exit 1; }
-          count=$(git rev-list --count HEAD)
-          commit=$(git rev-parse --short=7 HEAD)
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            # New version: tag vX.Y.Z without suffix (build tags vX.Y.Z-<hash> are created only by this workflow).
-            [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "::error::Releases only from main or a tag vX.Y.Z without a suffix, not from $GITHUB_REF_NAME." >&2; exit 1; }
-            marketing="${BASH_REMATCH[1]}"
-            name="$marketing"
-            code=$((VERSION_CODE_BASE + 2 * count + 1))
-          elif [ "$GITHUB_REF" = refs/heads/main ]; then
-            # Build: version of the latest tag vX.Y.Z on main plus commit.
-            base=$(git tag --merged HEAD --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
-            [ -n "$base" ] || { echo "::error::There is no tag vX.Y.Z on main yet." >&2; exit 1; }
-            marketing="${base#v}"
-            name="$marketing-$commit"
-            code=$((VERSION_CODE_BASE + 2 * count))
-          else
-            echo "::error::Releases only from main or a tag vX.Y.Z, not from $GITHUB_REF." >&2
-            exit 1
-          fi
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "tag=v$name" >> "$GITHUB_OUTPUT"
-          echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
-          echo "Version $name, Build $code"
 
       - name: Embed the network list
         # Signed network list unchanged (ADR 0015, 0035 §6): release asset net.json of the latest
@@ -173,7 +150,7 @@ jobs:
       - name: Prepare the assets
         run: |
           mkdir -p dist
-          # File name with version, e.g. anynear-v0.3.0-1a2b3c4.apk; the website looks for exactly this name (repo Website).
+          # File name with version, e.g. anynear-v0.9.0-pre.10030.apk; the website looks for exactly this name (repo Website).
           apk="dist/anynear-${{ steps.version.outputs.tag }}.apk"
           cp androidApp/build/outputs/apk/direct/release/androidApp-direct-release.apk "$apk"
           cp androidApp/build/outputs/bundle/playRelease/androidApp-play-release.aab "dist/anynear-play-${{ steps.version.outputs.tag }}.aab"
@@ -209,25 +186,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
+          MARKETING: ${{ steps.version.outputs.marketing }}
+          BUILD: ${{ steps.version.outputs.code }}
+          PRE: ${{ steps.version.outputs.pre }}
         run: |
-          # Repeated run: replace the assets in the existing release. Tags vX.Y.Z are created only by the project owner; the build tag
-          # vX.Y.Z-<hash> is created by gh release create on the built commit. --latest so that the website takes it.
-          # A version carries the release notes from release-notes/X.Y.Z.md (README there); a build between versions
-          # only points to the version it follows.
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            scripts/release-notes.sh "$TAG" > "$RUNNER_TEMP/release-notes.md"
+          set -euo pipefail
+          # Repeated run: replace the assets in the existing release. Tags vX.Y.Z are created only by the project owner;
+          # the tag vX.Y.Z-pre.<build> is created by gh release create on the built commit. It is a GitHub pre-release
+          # with a line on top and the current state of release-notes/X.Y.Z.md; the version is the latest release with
+          # the file as it is (README there). The website picks the newest release either way.
+          if [ "$PRE" = true ]; then
+            scripts/release-notes.sh --pre "$BUILD" "$MARKETING" > "$RUNNER_TEMP/release-notes.md"
+            kind=(--prerelease)
           else
-            echo "Build of main after version ${TAG%-*}. What that version brought is in its release notes." > "$RUNNER_TEMP/release-notes.md"
+            scripts/release-notes.sh "$MARKETING" > "$RUNNER_TEMP/release-notes.md"
+            kind=(--latest)
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "dist/anynear-$TAG.apk" dist/build.json --clobber
             gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
-          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            gh release create "$TAG" "dist/anynear-$TAG.apk" dist/build.json --verify-tag \
-              --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --latest
-          else
+          elif [ "$PRE" = true ]; then
             gh release create "$TAG" "dist/anynear-$TAG.apk" dist/build.json --target "$GITHUB_SHA" \
-              --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --latest
+              --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md" "${kind[@]}"
+          else
+            gh release create "$TAG" "dist/anynear-$TAG.apk" dist/build.json --verify-tag \
+              --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md" "${kind[@]}"
           fi
 
       # The app bundle is not a release asset: the website and the APK update only look at the APK.
@@ -262,7 +245,7 @@ jobs:
           status: completed
 
   ios:
-    if: vars.BETA_RELEASE != 'off'
+    if: vars.RELEASE != 'off'
     runs-on: ${{ fromJSON(vars.RUNNER_MAC || '"macos-26"') }}
     environment: release
     outputs:
@@ -475,33 +458,7 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          git merge-base --is-ancestor HEAD origin/main || { echo "::error::$GITHUB_REF is not on main." >&2; exit 1; }
-          count=$(git rev-list --count HEAD)
-          commit=$(git rev-parse --short=7 HEAD)
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            # New version: tag vX.Y.Z without suffix (build tags vX.Y.Z-<hash> are created only by this workflow).
-            [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "::error::Releases only from main or a tag vX.Y.Z without a suffix, not from $GITHUB_REF_NAME." >&2; exit 1; }
-            marketing="${BASH_REMATCH[1]}"
-            name="$marketing"
-            code=$((VERSION_CODE_BASE + 2 * count + 1))
-          elif [ "$GITHUB_REF" = refs/heads/main ]; then
-            # Build: version of the latest tag vX.Y.Z on main plus commit.
-            base=$(git tag --merged HEAD --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
-            [ -n "$base" ] || { echo "::error::There is no tag vX.Y.Z on main yet." >&2; exit 1; }
-            marketing="${base#v}"
-            name="$marketing-$commit"
-            code=$((VERSION_CODE_BASE + 2 * count))
-          else
-            echo "::error::Releases only from main or a tag vX.Y.Z, not from $GITHUB_REF." >&2
-            exit 1
-          fi
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "tag=v$name" >> "$GITHUB_OUTPUT"
-          echo "marketing=$marketing" >> "$GITHUB_OUTPUT"
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
-          echo "Version $name, Build $code"
+          scripts/version.sh | tee -a "$GITHUB_OUTPUT"
 
       - name: Embed the network list
         # Signed network list unchanged (ADR 0015, 0035 §6): release asset net.json of the latest
@@ -639,6 +596,7 @@ jobs:
           NAME: ${{ steps.version.outputs.name }}
           MARKETING: ${{ steps.version.outputs.marketing }}
           BUILD: ${{ steps.version.outputs.code }}
+          PRE: ${{ steps.version.outputs.pre }}
         run: |
           set -euo pipefail
           raw="$RUNNER_TEMP/asc-raw.p8"
@@ -684,7 +642,16 @@ jobs:
 
           # Set the test notes (“What to Test”, whatsNew in the API) in every existing language; if German is missing, create it. If Apple rejects, Apple's
           # reason is in the log (curl -f would swallow it); the build continues anyway.
-          text="anynear $NAME (Build $BUILD)"
+          # Text per language: the build on top (Apple shows only numbers), then the release notes of the version as plain
+          # text; Apple allows 4000 characters. English for every language except German.
+          notes() {  # Sprache, Kopfzeile
+            local head="$2"
+            [ "$PRE" = true ] || head="anynear $NAME (Build $BUILD)"
+            { printf '%s\n\n' "$head"; scripts/release-notes.sh --plain "$1" "$MARKETING" 2>/dev/null || true; } \
+              | python3 -c 'import sys; t=sys.stdin.read().strip(); print(t if len(t)<=4000 else t[:3999].rstrip()+"…")'
+          }
+          text_en=$(notes English "Pre-release of anynear $MARKETING (build $BUILD).")
+          text_de=$(notes Deutsch "Vorabversion von anynear $MARKETING (Build $BUILD).")
           send() {  # Methode, URL, JSON; gibt Apples Fehler als Warnung aus
             local code
             code=$(curl -sS -o "$RUNNER_TEMP/asc-res.json" -w '%{http_code}' -X "$1" -H "Authorization: Bearer $(jwt)" \
@@ -700,16 +667,17 @@ jobs:
           echo "Existing test note languages: ${locs:-none}"
           while read -r id locale; do
             [ -n "$id" ] || continue
+            case "$locale" in de*) text="$text_de" ;; *) text="$text_en" ;; esac
             send PATCH "$base/betaBuildLocalizations/$id" \
               "$(python3 -c 'import json,sys; print(json.dumps({"data":{"type":"betaBuildLocalizations","id":sys.argv[1],"attributes":{"whatsNew":sys.argv[2]}}}))' "$id" "$text")" \
               && echo "Testhinweis ($locale) gesetzt."
           done <<<"$locs"
           if ! grep -q ' de-DE$' <<<"$locs"; then
             send POST "$base/betaBuildLocalizations" \
-              "$(python3 -c 'import json,sys; print(json.dumps({"data":{"type":"betaBuildLocalizations","attributes":{"locale":"de-DE","whatsNew":sys.argv[2]},"relationships":{"build":{"data":{"type":"builds","id":sys.argv[1]}}}}}))' "$build" "$text")" \
+              "$(python3 -c 'import json,sys; print(json.dumps({"data":{"type":"betaBuildLocalizations","attributes":{"locale":"de-DE","whatsNew":sys.argv[2]},"relationships":{"build":{"data":{"type":"builds","id":sys.argv[1]}}}}}))' "$build" "$text_de")" \
               && echo "Testhinweis (de-DE) angelegt."
           fi
-          echo "Testhinweis: $text"
+          printf 'Testhinweis:\n%s\n' "$text_en"
 
           body=$(python3 -c 'import json,sys; print(json.dumps({"data":{"type":"betaAppReviewSubmissions","relationships":{"build":{"data":{"type":"builds","id":sys.argv[1]}}}}}))' "$build")
           # Mostly rejected because a build of this version is already in review; the reason is then in the log.
