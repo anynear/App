@@ -9,7 +9,6 @@ interface FindTexts {
     val moreAbout: String
     val moreText: String
     val menuEntry: String
-    val entryHint: String
     fun menuRunning(checked: Int, total: Int): String
     val keepsRunning: String
     val show: String
@@ -78,7 +77,6 @@ internal object FindTextsDe : FindTexts {
         "Den Zugriff kannst du in den Einstellungen des Handys jederzeit wieder entziehen. " +
         "Auch Ordner aus Dropbox, Synology Drive oder ähnlichen Apps lassen sich durchsuchen."
     override val menuEntry = "Handy nach Dokumenten durchsuchen"
-    override val entryHint = "Ausweise, Urkunden, Impfpässe und Arztbriefe in deinen Fotos und Ordnern finden"
     override fun menuRunning(checked: Int, total: Int) = "Suche läuft: $checked von $total"
     override val show = "Ansehen"
     override val keepsRunning = "Du kannst anynear weiter benutzen. Die Suche läuft weiter, auch wenn du zurückgehst."
@@ -143,7 +141,6 @@ internal object FindTextsEn : FindTexts {
         "You can take back access at any time in your phone's settings. " +
         "Folders from Dropbox, Synology Drive or similar apps can be searched too."
     override val menuEntry = "Search phone for documents"
-    override val entryHint = "Find IDs, certificates, vaccination records and medical letters in your photos and folders"
     override fun menuRunning(checked: Int, total: Int) = "Search running: $checked of $total"
     override val show = "Show"
     override val keepsRunning = "You can keep using anynear. The search keeps going when you go back."

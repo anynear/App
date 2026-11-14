@@ -217,8 +217,6 @@ internal fun PersonalFilesScreen(controller: AppController, onBack: () -> Unit, 
                 ActionTile(texts.files.addPhoto, AppIcons.Bild) { picker.pickImages(AttachmentLimits.MAX_PER_MESSAGE) }
                 ActionTile(texts.files.addFile, AppIcons.Dokument) { picker.pickFiles() }
             }
-            // Search the phone for documents, right below adding (ADR 0071 item 1, no ⋮ menu).
-            finder?.let { f -> FindDocsRow(f) { finding = false } }
             if (files.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (hasPhotos && hasDocs) ViewSwitch(gallery) { photosView = it }

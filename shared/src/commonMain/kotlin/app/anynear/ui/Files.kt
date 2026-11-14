@@ -70,7 +70,10 @@ internal fun FilesScreen(
         return
     }
     Column(Modifier.fillMaxSize()) {
-        AppHeader(texts.setup.tabFiles)
+        // Searching the phone for documents (ADR 0071) is rarely needed: context area of the ⋮ menu (ADR 0101), it
+        // opens „Dokumente finden“ in „Meine Ablage“.
+        val menu = listOfNotNull(controller.docFinder?.let { MenuAction(texts.find.menuEntry, AppIcons.Suche, controller::openFindDocs) })
+        AppHeader(texts.setup.tabFiles, menu = menu)
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
