@@ -641,7 +641,7 @@ internal object SettingsTextsEn : SettingsTexts {
     override val backgroundStopped = "Was closed in the background. Tap to allow it."
     override val license = "License"
     override val licenseShort = "Free software, GPL-3.0-or-later"
-    override val licenseText = "$APP is free software. The source code is licensed under the GNU General Public License, version 3 or later (GPL-3.0-or-later). You may use, change and share it under its terms. The name $APP and the logos are excluded.\n\nOfficial warnings: districts and municipality centre points from the municipality directory GV-ISys, as of 31 Dec 2025, © Federal Statistical Office of Germany (Destatis), 2026; coordinates: Federal Agency for Cartography and Geodesy (BKG)."
+    override val licenseText = "$APP is free software. The source code is licensed under the GNU General Public License, version 3 or later (GPL-3.0-or-later). You may use, change and share it under its terms. The name $APP and the logos are excluded.\n\nOfficial warnings: districts and municipality center points from the municipality directory GV-ISys, as of 31 Dec 2025, © Federal Statistical Office of Germany (Destatis), 2026; coordinates: Federal Agency for Cartography and Geodesy (BKG)."
     override val notificationsOnOff = "On or off"
     override val myProfile = "My profile"
     override val myProfileHint = "My profile · name, picture, share contact"

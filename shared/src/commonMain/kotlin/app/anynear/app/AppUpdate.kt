@@ -7,7 +7,7 @@ package app.anynear.app
  * the same key as the installed app.
  *
  * On iOS, in debug builds and when installed via an app store: [Unsupported]. The Google Play build (flavor `play`)
- * reports Play's In-App Updates with the same states (Docs ADR 0096 §7); Play names no version, so `version` is empty.
+ * reports Play's In-App Updates with the same states (ADR 0096 §7); Play names no version, so `version` is empty.
  */
 sealed interface AppUpdateState {
     /** There is no update via the app here. */
@@ -74,7 +74,7 @@ fun classifyUpdate(
 }
 
 /**
- * Whether the store's version [candidate] is newer than [installed], both `X.Y.Z` (App Store, Docs ADR 0096 §7).
+ * Whether the store's version [candidate] is newer than [installed], both `X.Y.Z` (App Store, ADR 0096 §7).
  * Missing parts count as 0; anything after a `-` or `+` is ignored; unreadable versions are never newer.
  */
 fun isNewerVersion(candidate: String, installed: String): Boolean {

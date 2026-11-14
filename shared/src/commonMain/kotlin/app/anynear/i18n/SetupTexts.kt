@@ -434,10 +434,10 @@ internal object SetupTextsEn : SetupTexts {
     override val radioFound = "Radio found"
     override fun suggestedRadio(deviceName: String) =
         "The radio “$deviceName” is on your Wi-Fi. Do you want to connect it to $APP? " +
-            "Then your circles can reach you even when internet and mobile service are down."
+            "Then your circles can reach you even when internet and cell service are down."
     override fun suggestedKnownRadio(deviceName: String) =
         "Your radio “$deviceName” is nearby. Do you want to connect it to $APP again? " +
-            "Then your circles can reach you even when internet and mobile service are down."
+            "Then your circles can reach you even when internet and cell service are down."
     override val invite = "Invite"
     override fun invitedTo(circle: String) = "You've been invited to the circle “$circle”."
 
@@ -494,7 +494,7 @@ internal object SetupTextsEn : SetupTexts {
     override val alertsTurnOn = "Turn on warnings"
     override val alertsFailed = "That didn't work just now. You can turn on warnings later under Alerts."
     override val radioTitle = "Do you have a radio?"
-    override val radioText = "With a radio, messages get through even without internet, for example when the mobile network fails."
+    override val radioText = "With a radio, messages get through even without internet, for example when the cell network fails."
     override val radioYes = "Yes, connect now"
     override val radioNotYet = "Not yet"
     override val radioSearchTitle = "Connect radio"

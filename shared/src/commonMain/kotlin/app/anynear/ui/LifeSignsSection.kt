@@ -115,7 +115,7 @@ internal fun LifeSignsSection(
 
 /**
  * Only the running own check-in with „Alles gut“ and „Bin fertig“, e.g. on the block screen of a required update
- * (Docs ADR 0096 §5); nothing if none runs.
+ * (ADR 0096 §5); nothing if none runs.
  */
 @Composable
 internal fun RunningLifeSignCard(lifeSigns: LifeSigns) {

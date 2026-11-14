@@ -18,7 +18,7 @@ interface MeshLink {
     /** The radio channel `anynear` on the connected radio (ADR 0051), as a list; `null` as long as it is not known. */
     val circleChannels: StateFlow<List<RadioChannel>?>
 
-    /** Names of old channels ([app.anynear.AppConfig.isOldChannelName]: `PYRSA`, `PYRSA-xxxxx`, `PINA`, `PINA-xxxxxx`); the app clears them away. */
+    /** Names of old channels ([app.anynear.AppConfig.isOldChannelName], channels of earlier versions); the app clears them away. */
     val oldCircleChannels: StateFlow<List<String>> get() = NoOldChannels
 
     /**

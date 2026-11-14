@@ -13,7 +13,7 @@ android {
     compileSdk = libs.versions.androidCompileSdk.get().toInt()
 
     defaultConfig {
-        // Fixed forever (ADR 0061, decisions 3 and 13): new app next to `com.pyrsa.pyrsa`, which starts from scratch.
+        // Fixed forever (ADR 0061, decisions 3 and 13): new app ID that starts from scratch.
         applicationId = "app.anynear"
         minSdk = libs.versions.androidMinSdk.get().toInt()
         targetSdk = libs.versions.androidTargetSdk.get().toInt()
@@ -144,6 +144,6 @@ dependencies {
     implementation(libs.androidx.fragment)
     implementation(libs.androidx.work)
     implementation(libs.serialization.json)
-    // Google Play In-App Updates (Docs ADR 0096): only the Play build talks to Play; `direct` stays without it.
+    // Google Play In-App Updates (ADR 0096): only the Play build talks to Play; `direct` stays without it.
     "playImplementation"(libs.play.app.update.ktx)
 }

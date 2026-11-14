@@ -164,7 +164,7 @@ class RadioProfileTest {
 
     @Test
     fun formerNameIsAnUpdateThatKeepsTheOwnPart() {
-        // ADR 0061, decision 6: `PYRSA …` becomes `anynear.app | …` during setup.
+        // ADR 0061, decision 6: a name with an older prefix becomes `anynear.app | …` during setup.
         val old = compliant().copy(owner = user("PYRSA Fuchs 27"))
         val check = RadioProfile.check(old)
         assertEquals(DeviceSetupCheck.Kind.UPDATE, check.kind)
@@ -212,7 +212,7 @@ class RadioProfileTest {
 
     @Test
     fun fullOldNameIsShortenedToFitTheLongerPrefix() {
-        val ownPart = "ä".repeat(17) // 34 bytes, under „PINA “ exactly 39 bytes
+        val ownPart = "ä".repeat(17) // 34 bytes, under the old 5-byte prefix exactly 39 bytes
         val suffix = DeviceName.suffixOf("PINA $ownPart")!!
         assertTrue(DeviceName.isValidSuffix(suffix))
         assertEquals("ä".repeat(12), suffix)
@@ -265,7 +265,7 @@ class RadioProfileTest {
         assertEquals(second, DeviceName.derived(node, taken = listOf("  " + DeviceName.longName(first).uppercase())))
         assertTrue(DeviceName.isTaken(first, listOf(DeviceName.longName(first))))
         assertFalse(DeviceName.isTaken(second, listOf(DeviceName.longName(first))))
-        // A device still called „PINA …“ occupies the name just the same.
+        // A device still named with an older prefix occupies the name just the same.
         assertTrue(DeviceName.isTaken(first, listOf("PINA $first")))
         assertEquals(second, DeviceName.derived(node, taken = listOf("PINA $first")))
     }

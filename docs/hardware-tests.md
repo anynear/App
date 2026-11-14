@@ -1,9 +1,8 @@
 # Hardware tests
 
-The app was called PINA until October 2026 and PYRSA until the cut-over (ADR 0061). Results from that time use the
-old names and channels; open tests refer to anynear (channel `anynear`, device names `anynear.app | …`).
+Results from before the cut-over (ADR 0061) used the app's earlier names and channels; open tests refer to anynear (channel `anynear`, device names `anynear.app | …`).
 
-As of 05.11.2026: **mostly pending.** Tested with real radios (Android emulator, radio via Wi-Fi):
+As of 05.11.2026 (status per test in the tables below). Tested with real radios (Android emulator, radio via Wi-Fi):
 W1–W6, E3, E4, E10 (TCP), E11–E14, F1, F3, F4, F6, F8, Ö1, Ö3, Ö3a, Ö4, Ö6, Ö8; partly Ö2 and Ö5. Failed:
 U3. T1 and T2 only in the emulator. Nothing has been tested yet on a real phone via Bluetooth or on a real iPhone.
 No result here counts as passed before it has been carried out on real hardware.
@@ -24,8 +23,8 @@ Note per device: board revision, firmware version, bootloader.
 |---|---|---|---|
 | W1 | Heltec V3 with Wi-Fi is found automatically (mDNS) | appears as “Found on Wi-Fi” | passed (Android emulator API 36) |
 | W2 | Assign and connect via TCP | “Connected”, device name and power supply read | passed |
-| W3 | Missing channel `PINA` | setup assistant appears | passed |
-| W4 | “Start a new family” | channel `PINA` on a free slot (here 2), confirmed by reading back; primary channel and radio profile unchanged | passed, only on the 3rd attempt (see finding) |
+| W3 | Missing app channel | setup assistant appears | passed |
+| W4 | “Start a new family” | app channel on a free slot (here 2), confirmed by reading back; primary channel and radio profile unchanged | passed, only on the 3rd attempt (see finding) |
 | W5 | Test message into the family chat | status “Sent” | passed (reception on a second device not yet tested) |
 | W6 | “Invite family” visible | invitation code is offered | passed |
 | W7 | Meshtastic app connects to the same Wi-Fi radio while anynear is connected | after three quick drops anynear steps back (“Radio is in use elsewhere”), asks in the app or by notification in the background, and no longer kicks the Meshtastic app out | pending |
@@ -55,10 +54,10 @@ via Bluetooth.
 | E12 | Radio connected over Wi-Fi, “Switch to Bluetooth” | radio restarts, app finds it over Bluetooth, PIN window, connected | pending |
 | E13 | As E11 with a wrong password | after 90 s “doesn't show up on your Wi-Fi … USB cable”; plug in, “Switch to Bluetooth” brings it back | pending |
 | E10 | Setup via TCP and via Bluetooth | all deviations fixed, notice disappears | TCP passed (emulator, 19.10.2026, see finding E10); Bluetooth pending |
-| E11 | Set up a device with different settings | deviations in frequency, hops, telemetry, location, name fixed; name “PINA Reiher 80” | passed (emulator, 19.10.2026); values not yet cross-checked in the Meshtastic app |
+| E11 | Set up a device with different settings | deviations in frequency, hops, telemetry, location, name fixed; name “… Reiher 80” | passed (emulator, 19.10.2026); values not yet cross-checked in the Meshtastic app |
 | E12 | Device with fixed transmit power | dialog, afterwards transmit power 0 or the limit of the region | passed (emulator, 19.10.2026): firmware stores the limit 27 dBm instead of 0; only since the check “0 or 27” no more dialog in a loop |
-| E13 | “Advanced” → suggestion → save name | name “PINA Reh 1998”, no restart needed | passed (emulator, 19.10.2026); first command unconfirmed, confirmed after reconnection |
-| E14 | “Advanced” → apply PINA settings again | all areas written, one restart, no deviation afterwards | passed (emulator, 19.10.2026) |
+| E13 | “Advanced” → suggestion → save name | name “… Reh 1998”, no restart needed | passed (emulator, 19.10.2026); first command unconfirmed, confirmed after reconnection |
+| E14 | “Advanced” → apply the app's settings again | all areas written, one restart, no deviation afterwards | passed (emulator, 19.10.2026) |
 | E15 | Device with buzzer, vibration or notification LED (e.g. T-Echo, RAK with buzzer) | dialog because of signals; afterwards no sound, vibration or LED signal on the radio, neither for messages nor for bell characters; Meshtastic app: “Alert when receiving a message/bell” off | pending |
 | E16 | “Advanced” → save a new name (24.10.2026) | field shows the new name immediately, locked, “Being applied …”; header “Applying changes…”; device restarts exactly once; afterwards “New name is set.” and everything is free again; no second save possible, no setup dialog in between | pending |
 
@@ -71,7 +70,7 @@ app now waits for the restart and locks until then (E16).
 twice: after the start nothing came from the device for 60 s, the SDK disconnected (`NodeUnreachable`).
 Switched to individual write commands: the first command after connecting again remained
 unconfirmed and the connection dropped (as in W4). After the reconnection the device confirmed
-all commands, restarted after approx. 23 s, and afterwards the app reported no deviation any more.
+all commands, restarted after approx. 23 s, and afterwards the app reported no deviation anymore.
 
 **Finding connection (TCP, 19.10.2026):** Without radio traffic the SDK disconnects after 60 s
 (“Liveness timeout”) and reconnects after approx. 3 s, i.e. about every minute. The firmware apparently does not
@@ -109,7 +108,7 @@ Radio → Advanced → “Rescue via USB cable”, Android only (USB OTG).
 
 ## Radio slots (ADR 0038) – dropped
 
-ADR 0038 is replaced by ADR 0051: there are no channels per circle any more, but one shared channel `anynear`.
+ADR 0038 is replaced by ADR 0051: there are no channels per circle anymore, but one shared channel `anynear`.
 The tests K1–K5 are dropped; the numbers are not reassigned.
 
 ## Bluetooth permission with a stored radio (23.10.2026)
@@ -132,7 +131,7 @@ not tested with a real Bluetooth radio (the emulator has no Bluetooth).
 | Nr | Test | Expected | Result |
 |---|---|---|---|
 | H1 | Search for and assign a device | device appears, pairing (PIN) works, status “Connected” | pending |
-| H2 | Channel `anynear` recognised | no notice “not set up” | pending |
+| H2 | Channel `anynear` recognized | no notice “not set up” | pending |
 | H3 | Circle chat A → B | arrives at B, A shows “Sent” | pending |
 | H4 | Circle chat B → A | arrives at A | pending |
 | H5 | Public Hessenmesh traffic | does **not** appear in the app | pending |
@@ -150,17 +149,17 @@ not tested with a real Bluetooth radio (the emulator has no Bluetooth).
 - Two devices with the same name in range.
 - Message history after restart and app update (is stored, not yet tested on a real device).
 - Notifications (ADR 0008) on real phones: does a message arrive reliably with the screen locked
-  over hours? After a restart of the phone? With manufacturers with strict battery optimisation
+  over hours? After a restart of the phone? With manufacturers with strict battery optimization
   (Xiaomi, Samsung)? Measure battery consumption over a day. Tested in the emulator (Android 16): notification in
   the background, tapping opens the conversation, battery notice and system dialog “Allow”; restart and
   battery not tested. Check on real devices whether “Open setting” hits the right page on Samsung/Xiaomi.
 
-## PMP over radio and shared radios (ADR 0021) – none of it tested
+## ANMP over radio and shared radios (ADR 0021) – none of it tested
 
 Unit tests and the end-to-end test against the local mailboxes run (19.10.2026); the format has not been
 tested over a real radio link. Whether the firmware delivers `PRIVATE_APP` packets in the channel `anynear` unchanged
 is open; directly (with PKI) a direct message arrived on 02.11.2026 (see findings radio check). Since
-ADR 0051 there are no channels per circle any more; P5 and P9 are therefore dropped.
+ADR 0051 there are no channels per circle anymore; P5 and P9 are therefore dropped.
 
 | Nr | Test | Expected | Result |
 |---|---|---|---|
@@ -168,13 +167,13 @@ ADR 0051 there are no channels per circle any more; P5 and P9 are therefore drop
 | P2 | As P1, text with 94 characters; then signature off and 160 characters | both arrive; the count while writing matches | pending |
 | P3 | Without internet: direct message A → B | arrives; C in the same circle sees nothing | pending |
 | P4 | Tom and Anna use one radio (connected alternately), B writes to both | messages appear with the right sender; “last reachable” separate | pending |
-| P5 | Ben (another circle) is on the shared radio, B writes into Tom's circle; Ben reads out the channels with the official Meshtastic app | Ben's app shows nothing; the channel key read out is not the circle secret (ADR 0022) | dropped (ADR 0051, no circle channels any more) |
+| P5 | Ben (another circle) is on the shared radio, B writes into Tom's circle; Ben reads out the channels with the official Meshtastic app | Ben's app shows nothing; the channel key read out is not the circle secret (ADR 0022) | dropped (ADR 0051, no circle channels anymore) |
 | P6 | With internet and radio | every message once, path shows both | pending |
 | P7 | Official Meshtastic app in the channel `anynear` | does not see anynear messages; anynear shows its own texts and reactions under the name of the radio | pending |
 | P8 | Anna's phone on the shared radio, Bob writes to Tom directly over radio, Anna gets internet later | Tom gets the message over the internet, Bob sees “delivered”; Anna sees nothing (ADR 0022) | pending |
-| P9 | Update from a version before ADR 0022, radio connected | app renews the circle channels with the new key, radio then works between updated apps | dropped (ADR 0051, no circle channels any more) |
+| P9 | Update from a version before ADR 0022, radio connected | app renews the circle channels with the new key, radio then works between updated apps | dropped (ADR 0051, no circle channels anymore) |
 
-## Reactions over radio (ADR 0018, as PMP per ADR 0021) – none of it tested
+## Reactions over radio (ADR 0018, as ANMP per ADR 0021) – none of it tested
 
 | Nr | Test | Expected | Result |
 |---|---|---|---|
@@ -186,27 +185,27 @@ ADR 0051 there are no channels per circle any more; P5 and P9 are therefore drop
 | R6 | Replace a reaction without internet by another emoji | recipient sees only the new one | pending |
 | R7 | Tap your own reaction again, without internet, then with | reaction disappears at the recipient and does not come back | pending |
 
-## Read receipt over radio (ADR 0019, as PMP per ADR 0021) – none of it tested
+## Read receipt over radio (ADR 0019, as ANMP per ADR 0021) – none of it tested
 
 | Nr | Test | Expected | Result |
 |---|---|---|---|
-| L1 | Without internet: B opens the circle chat with a message from A | yellow ticks at A as soon as everyone has read; before that “Read by 1 of 2” | pending |
-| L2 | Without internet: direct message A → B, B opens the conversation | two yellow ticks at A, “Read: … over radio” | pending |
+| L1 | Without internet: B opens the circle chat with a message from A | yellow check marks at A as soon as everyone has read; before that “Read by 1 of 2” | pending |
+| L2 | Without internet: direct message A → B, B opens the conversation | two yellow check marks at A, “Read: … over radio” | pending |
 | L3 | Official Meshtastic app in the channel `anynear`, B reads in anynear | Meshtastic app shows no new message | pending |
 | L4 | B reads ten unread messages from A at once | exactly one radio packet to A, all ten read at A | pending |
 | L5 | With internet and radio | “read” once, details name both paths | pending |
 
 ## iOS notifications via APNs (ADR 0009) – none of it tested
 
-The app is now built, signed and uploaded to TestFlight on a dedicated Mac runner with every release tag
+The app is now built, signed and uploaded to TestFlight on a dedicated Mac runner with every release build
 (`beta-release.yml`, job `ios`). The wake-up calls themselves have been tested **on no real iPhone**. Originally only
-the mailbox (`go test ./...` in `Relay`, with a mock APNs server over HTTP/2), the
+the relay side (with a mock APNs server over HTTP/2), the
 shared Kotlin code (`PushTest`) and that the iOS Kotlin code compiles were tested. Swift parts
 (`iosApp/iosApp/iOSApp.swift`, `iosApp/NotificationService/`) and the Xcode project are unbuilt.
 
 Requirements (Apple account of the project): team ID in `Config.xcconfig`; app ID with “Push Notifications”,
 “App Groups” (`group.app.anynear`) and Keychain Sharing, likewise for the extension
-(`….notifications`); APNs key (`.p8`, key ID) on the mailbox (`Relay/deploy/README.md`).
+(`….notifications`); APNs key (`.p8`, key ID) on the relays.
 
 | Nr. | Test | Expected | Status |
 |---|---|---|---|
@@ -243,7 +242,7 @@ Docker mailboxes, microphone of the computer): microphone question, recording wi
 draft, draft survives a restart, play and pause with progress, sending with and without
 text, delivery confirmation. Speech recognition available on the device, recording is decoded to PCM,
 recognition runs (silent recording: “no match”). E2E tests with mock radio and real
-mailboxes: preview shortened over radio, recording over the internet, one message, labelling,
+mailboxes: preview shortened over radio, recording over the internet, one message, labeling,
 recipient at first only with radio. Not tested: recognition with real speech, playback on a
 second device with a new app, 5-minute limit, everything on iOS, real radio link.
 
@@ -261,8 +260,8 @@ second device with a new app, 5-minute limit, everything on iOS, real radio link
 
 Tested in the emulator (24.10.2026, Pixel 9, Android 16, test PIN): notice without screen lock, afterwards
 “Set up” by itself; setting up and unlocking via the system PIN prompt; create and show a login; lock after
-switching to the background; provider in the Android settings, display “PYRSA fills in logins”;
-Chrome 133 (“Autofill using another service”): “Fill in with PYRSA”, PIN, selection,
+switching to the background; provider in the Android settings, display “… fills in logins”;
+Chrome 133 (“Autofill using another service”): “Fill in with …”, PIN, selection,
 fields filled in; PDF in My files with preview; backup with PIN prompt, restore after deleted
 app data: login and file are back. iOS: app and extension build, app starts in the simulator; nothing else tested.
 
@@ -286,18 +285,18 @@ deleted. Opening a .txt shows the system chooser.
 | AB1 | iPhone: send and open a Word, Excel and image file as an attachment | preview of iOS (QuickLook) | pending |
 | AB2 | Android ↔ iPhone: file in My files, restore the backup on the other phone | file comes from the relays, even if it was added after the backup | pending |
 | AB3 | Add a file without internet, internet later | “Not saved online yet”, afterwards “Saved online” by itself | pending |
-| AB4 | Recognising (ADR 0067): photo of a letter, PDF with text layer, scanned PDF in My files | kind and details in the list, searching for a word from the text finds the file | Android emulator (API 36) passed 07.11.2026 (invoice, contract, insurance; chips filter); search by typing not tested there (input via adb did not arrive); iPhone pending |
+| AB4 | Recognizing (ADR 0067): photo of a letter, PDF with text layer, scanned PDF in My files | kind and details in the list, searching for a word from the text finds the file | Android emulator (API 36) passed 07.11.2026 (invoice, contract, insurance; chips filter); search by typing not tested there (input via adb did not arrive); iPhone pending |
 | AB5 | Change the kind by hand, second device or circle member | new kind appears there after the sync without the file being uploaded again | pending |
 | AB6 | Search with many files (over 200, long PDFs) on an older phone | typing stays smooth, battery and heat unremarkable, reading proceeds bit by bit | pending |
 | AB7 | Photos in the storage (ADR 0067 §7): photo with capture location (4000 × 3000) via “Add file”, then “Save on phone”; afterwards send into a chat | saved with 3200 × 2400, without image metadata and capture location; in the chat 1600 pixels | Android emulator (API 36) 07.11.2026: storage passed (3200 × 2400, no EXIF data); sending into a chat untested; iPhone pending |
 | AB8 | Gallery (ADR 0070): photos and a PDF in My files | switch “Documents/Photos”, photos as a grid, topic chips, “dog” finds animal photos, full-text search finds the PDF | Android emulator (API 36) passed 07.11.2026 with macOS sample photos (zebra, parrot → Animals, sunflower → Nature, basketball → Sport); People (faces) and iPhone pending |
-| AB9 | Search the phone (ADR 0071): empty My files, card “Search”, access “Allow all”, made-up invoice, shopping list and landscape picture in the photos | invoice ticked with kind, list under “More photos with text”, landscape not suggested; adopting stores the invoice with kind; second run suggests nothing again; after quitting the app the access is returned | Android emulator (API 36) passed 07.11.2026; iPhone pending |
+| AB9 | Search the phone (ADR 0071): empty My files, card “Search”, access “Allow all”, made-up invoice, shopping list and landscape picture in the photos | invoice checked with kind, list under “More photos with text”, landscape not suggested; adopting stores the invoice with kind; second run suggests nothing again; after quitting the app the access is returned | Android emulator (API 36) passed 07.11.2026; iPhone pending |
 | AB10 | Search the phone without access: “Don't allow”, then “Choose photos myself” | picker with multiple selection, search in the chosen photos | Android emulator (API 36): picker opens, search in it untested; iPhone pending |
-| AB11 | Search folders: folder “Pictures” of the phone, then folders in Dropbox and Synology Drive (Android and iPhone), with and without Wi-Fi | pictures and PDFs from the folder as suggestions; without Wi-Fi the question “Search anyway?”; pictures already adopted do not come again | Android emulator (API 36): folder “Pictures” passed 07.11.2026; Dropbox, Synology Drive, mobile data and iPhone pending |
+| AB11 | Search folders: folder “Pictures” of the phone, then folders in Dropbox and Synology Drive (Android and iPhone), with and without Wi-Fi | pictures and PDFs from the folder as suggestions; without Wi-Fi the question “Search anyway?”; pictures already adopted do not come again | Android emulator (API 36): folder “Pictures” passed 07.11.2026; Dropbox, Synology Drive, cellular data and iPhone pending |
 | AB12 | Search the phone with many thousands of photos on an older Android phone | progress runs, pauses in the background and below 20 % battery, resuming on the next run; note duration and battery | pending |
 | AB13 | Search the phone in the background (ADR 0071 item 9): start a search run, leave the app | notification with progress and “Stop” (Android) or system progress (iOS 26), run finishes, message “X important documents found” | Android emulator (API 36) 07.11.2026 passed: 124 pictures, left the app, notification counted up, after 3.5 min “124 important documents found”; “Stop” only in the unit test; iPhone pending |
 | AB14 | Only important documents (ADR 0074): store a photo with some text (sign), birth certificate, invoice and animal photos | sign and animal photos in the gallery with topic chips, certificate under “Certificate”, invoice under “Other”; phone search suggests only important ones | Android emulator (API 36) 07.11.2026 passed with made-up pictures (gallery 3 photos, chips “Animals”, “Nature”); phone search only in the unit test; iPhone and real everyday photos pending |
-| AB15 | Better text recognition and search (ADR 0078): store an ID photographed at an angle, vaccination record, medical letter, sick note, a photo rotated by 90°; search for “Krankmeldung” (sick note); open “Text read” | all recognised as important documents, search finds the certificate of incapacity for work, text read is complete; after the update Android re-reads old files | Android emulator (Pixel 9, API 36) 08.11.2026 passed with made-up pictures (ID with pattern and reflection, 8–22° at an angle, rotated 90°: 1× ID, 4× health; “Krankmeldung” finds the certificate of incapacity for work; text complete); re-reading only in the unit test; real photos, handwriting, iPhone pending |
+| AB15 | Better text recognition and search (ADR 0078): store an ID photographed at an angle, vaccination record, medical letter, sick note, a photo rotated by 90°; search for “Krankmeldung” (sick note); open “Text read” | all recognized as important documents, search finds the certificate of incapacity for work, text read is complete; after the update Android re-reads old files | Android emulator (Pixel 9, API 36) 08.11.2026 passed with made-up pictures (ID with pattern and reflection, 8–22° at an angle, rotated 90°: 1× ID, 4× health; “Krankmeldung” finds the certificate of incapacity for work; text complete); re-reading only in the unit test; real photos, handwriting, iPhone pending |
 | AB16 | Finding new documents automatically (ADR 0081): first run, “Yes, check regularly”, then a new important document in the photos, phone on the charging cable overnight | question after the first run; the next morning “1 new document found”, tapping shows only the new one; without charging cable nothing; switching off removes the task | Android emulator (API 36) 08.11.2026: question, scheduled task with condition “charging”, message after simulated charging, only the new vaccination record suggested, switching off removes the task; a real night on the charging cable, manufacturers with strict battery management and iPhone (`BGProcessingTask`) pending |
 
 ## Bridge and MQTT (ADR 0010, replaced by ADR 0051 and ADR 0054)
@@ -314,7 +313,7 @@ a radio and internet, C only with internet, out of radio range (or without a rad
 | B1 | A writes into the circle | C receives the message via B after the waiting time, detail line names B | pending |
 | B2 | A and B both online, A writes | no bridge copy in the mailbox, C shows the message once | pending |
 | B3 | Two bridges (B and D) hear A | one deposit in the mailbox, C shows the message once | pending |
-| B4 | A online again, original is delivered later | C still shows one message, now confirms; A sees two ticks only afterwards | pending |
+| B4 | A online again, original is delivered later | C still shows one message, now confirms; A sees two check marks only afterwards | pending |
 | B5 | Direct message A → C over radio | is not passed on | pending |
 
 Stage 2, MQTT. Separate test device on Wi-Fi and a local broker. Do not mix with the radio tests
@@ -342,7 +341,7 @@ above (MQTT stays off there).
 
 ## Manufacturers stop the app in the background (01.11.2026)
 
-Reason: for one tester no notifications arrived any more. The app checked only Android's battery optimisation,
+Reason: for one tester no notifications arrived anymore. The app checked only Android's battery optimization,
 not the manufacturers' own power-saving features. New: from Android 11 it evaluates on opening the reasons of the
 last process exits (`BackgroundStops`) and shows the notice “Your phone closed anynear in the background”.
 
@@ -353,13 +352,13 @@ last process exits (`BackgroundStops`) and shows the notice “Your phone closed
 | H3 | After “Open setting” and release wait a day | no new notice, messages arrive | pending |
 | H4 | Stock Android: app update, “Force stop”, crash | no notice | pending |
 | H5 | Which reasons (`reason`, `description`) do Samsung and Xiaomi really report? | `REASON_OTHER` or `REASON_SIGNALED`, otherwise adjust the filter | pending |
-| H6 | Phone locked overnight, switch Wi-Fi/mobile data, send a message in the morning | notification after about 15 minutes at the latest, without opening the app | pending |
+| H6 | Phone locked overnight, switch Wi-Fi/cellular data, send a message in the morning | notification after about 15 minutes at the latest, without opening the app | pending |
 | H7 | Log after opening | line “Start: Letztes Ende …” (last exit) with reason; “wake: fetching again” about every 15 minutes | pending |
 
 ## Radio check (ADR 0053, 02.11.2026)
 
 New: “Check over radio” on the person, “Who answers over radio?” in the circle and on the Radio page. One byte on
-`PRIVATE_APP` with `want_ack` directly to the radio, on the channel `anynear` (until the cut-over `PYRSA`) with the hop limit
+`PRIVATE_APP` with `want_ack` directly to the radio, on the channel `anynear` (before the cut-over the app's earlier channel) with the hop limit
 of the radio profile; only the answer of the target radio counts (`isCheckReplyFrom`), also an error from there. Tested on 02.11.2026
 with real radios (Android emulator, radio via Wi-Fi); F2, F5 and F7 are pending.
 
@@ -379,30 +378,30 @@ with real radios (Android emulator, radio via Wi-Fi); F2, F5 and F7 are pending.
 - **iOS: no radio connection usable.** In the iOS simulator with a radio on Wi-Fi the channel list stays empty (`rc.channels`
   always `null`); on every connect meshtastic-sdk 0.2.0 throws, when creating its device storage
   (`SqlDelightStorageProvider` → `applyStoragePragmas`), `SQLiteException: Queries can be performed using SQLiteDatabase query
-  or rawQuery methods only`. Consequence: channel `PYRSA` invisible, no radio check, no radio messages. Whether a real iPhone
+  or rawQuery methods only`. Consequence: the app's channel invisible, no radio check, no radio messages. Whether a real iPhone
   via Bluetooth is affected in the same way is **untested** (same storage code, therefore likely). Bug in the SDK,
   not in the app; report to meshtastic-sdk open.
 - **Wi-Fi: a second client displaces anynear.** On Wi-Fi the firmware serves only one connection. If another app connects
   (here the Meshtastic app on the phone, automatically), the radio closes the connection of anynear. meshtastic-sdk
   0.2.0 notices this only after 60 s (liveness), reconnects and displaces the other app; so both alternate every minute,
   and packets in that time are lost. Without the other app the connection remained stable. The same happens with a
-  second phone with anynear on the same radio. Since 02.11.2026 the app recognises the pattern (at least 3 drops in
+  second phone with anynear on the same radio. Since 02.11.2026 the app recognizes the pattern (at least 3 drops in
   5 minutes, each after less than 2 minutes of connection, only on Wi-Fi) and shows “The connection
   keeps dropping” on the Radio page; tested in the emulator with a second connection from the development computer, the notice appeared. Open: the late
   detection belongs in the SDK as a bug.
-- **Radio of the contact forgotten** (fixed in PMP PR 25): packets without a radio number set it to 0.
-- **Contacts, circles and people gone after every restart** (fixed in PMP PR 25): `setSettings` on start ran before the
+- **Radio of the contact forgotten** (fixed in the ANMP core): packets without a radio number set it to 0.
+- **Contacts, circles and people gone after every restart** (fixed in the ANMP core): `setSettings` on start ran before the
   core state was loaded and wrote the empty initial state over it. After the fix the contact survived a restart.
 - **Direct messages over radio never arrived**: direct message and reaction over radio were addressed to the person ID (ADR 0042)
   instead of to a device; the recipient discarded them (“route tag unbekannt”, route tag unknown). Fixed: to the device on the
   person's radio, otherwise the one last seen. Tested 02.11.2026: message from the emulator arrived at the phone “over radio and
   internet”.
 - **Sender never saw “over radio”**: the confirmation over radio only went out if the radio copy came before the internet copy;
-  fixed. In addition the radio rule blocked the confirmation over radio entirely (App PR 72). Confirmation over radio back to the
+  fixed. In addition the radio rule blocked the confirmation over radio entirely (fixed). Confirmation over radio back to the
   sender still **untested** on hardware (the other side had neither fix).
 - **Texts**: “Connect your radio first” despite a connection (channel was missing), error when setting up the channel without a circle
   invisible, “added by you” also for contacts who added you themselves, “set up again” after
-  reinstallation on iOS (keychain survives deletion) – fixed on `fix/funk-hardwaretest`.
+  reinstallation on iOS (keychain survives deletion) – fixed.
 - **iOS simulator**: app quit once without a crash report; cause unknown.
 
 ## Public radio (ADR 0055, 02.11.2026)
@@ -415,9 +414,9 @@ chats can meanwhile also be sent by anynear (ADR 0055 §3).
 
 | Nr | Test | Expected | Result |
 |---|---|---|---|
-| Ö1 | Message from the official Meshtastic app on the primary channel | appears in “Everyone nearby” with the name of the radio | passed (emulator, Heltec V3 via Wi-Fi, 02.11.2026): messages from other radios in “Everyone nearby”, name “CCL-P920”; see finding Ö1 |
+| Ö1 | Message from the official Meshtastic app on the primary channel | appears in “Everyone nearby” with the name of the radio | passed (emulator, Heltec V3 via Wi-Fi, 02.11.2026): messages from other radios in “Everyone nearby” with the radio's name; see finding Ö1 |
 | Ö2 | Message from anynear in “Everyone nearby” | appears in the official app on the primary channel | partly (emulator, Heltec V3 via Wi-Fi, 02.11.2026): “Kurzer Funktest” from “Everyone nearby” arrives on the tester's second radio, seen there in anynear; display in the official Meshtastic app pending |
-| Ö3 | Connect a radio without the channel “Mesh Hessen”, answer the message with “Yes” | message names the free slots correctly; channel on a free slot, position precision 0, no restart | passed (emulator, Heltec V3 via Wi-Fi, 02.11.2026): message “one of 5 free channels” (7 minus `PYRSA` and a foreign channel), channel on slot 2, reading back confirmed, position precision 0 (checked with the Meshtastic command line), no restart; uplink and downlink off, see finding Ö3 |
+| Ö3 | Connect a radio without the channel “Mesh Hessen”, answer the message with “Yes” | message names the free slots correctly; channel on a free slot, position precision 0, no restart | passed (emulator, Heltec V3 via Wi-Fi, 02.11.2026): message “one of 5 free channels” (7 minus the app's channel and a foreign channel), channel on slot 2, reading back confirmed, position precision 0 (checked with the Meshtastic command line), no restart; uplink and downlink off, see finding Ö3 |
 | Ö3a | Answer the message with “No thanks”, later switch on and off again on the Radio page | no channel, no new question; on creates it, off removes it | passed (emulator, Heltec V3 via Wi-Fi, 02.11.2026): after “No thanks” no channel, no more question, also after restarting the app; switch on creates it, off removes it (checked on the device) |
 | Ö4 | Channel “Mesh Hessen” already there (from the Meshtastic app, location 16) | no second channel; dialog “Set up radio” because of location | passed (emulator, Heltec V3 via Wi-Fi, 02.11.2026): location set to 16 from outside; dialog “Update radio” with deviation [POSITION], afterwards location 0, no second channel; after pairing again with the channel present no question, chat appears directly |
 | Ö5 | Send and receive a message in “Mesh Hessen”, also via the MQTT bridge of Meshhessen | visible in both directions | partly (emulator, Heltec V3 via Wi-Fi, 02.11.2026): sending “Kurzer Funktest” in “Mesh Hessen” passed, state “Passed on”, without a second confirmation question, seen in anynear on the tester's second radio; reception from others in “Mesh Hessen” and path via the MQTT bridge pending |
@@ -431,7 +430,7 @@ computer; “Passed on” only shows that a radio repeated the packet, not that 
 and the reception part of Ö5.
 
 **Finding emulator:** `adb shell input text` with `%s` for the space confuses Gboard's input; afterwards
-no key arrived in the field any more until the emulator was restarted. Typing word by word with `keyevent 62` in between works. Screenshots
+no key arrived in the field anymore until the emulator was restarted. Typing word by word with `keyevent 62` in between works. Screenshots
 with `screencap` are white in this emulator; the UI can be read out with `uiautomator dump`.
 
 **Finding Ö1:** For messages from radios whose name the own radio does not yet know at reception, the app shows
@@ -454,7 +453,7 @@ the unit tests (`RegionTableTest`, `AlertsTest`) with fixed coordinates have bee
 | R2 | Switch on “Official warnings” (Android, iOS) | system question “approximate location” or “While Using the App”; after allowing, district name under “Official warnings” | pending |
 | R3 | Decline location, button “Allow location” (also after “Don't ask again”) | first the system question, afterwards the settings of the app; without a district no official warning in the list, no notification | pending |
 | R4 | Location services off on the phone | sentence “Your location isn't available right now …” with “Try again” | pending |
-| R5 | Android without Google services (e.g. GrapheneOS), only Wi-Fi/mobile data | district is found | pending |
+| R5 | Android without Google services (e.g. GrapheneOS), only Wi-Fi/cellular data | district is found | pending |
 | R6 | Travel somewhere else, open the app | district changes on opening, not in the background | pending |
 | R7 | iOS: warning for your own district with the app closed (wake-up call) | notification arrives; none for another district | pending |
 
@@ -487,7 +486,7 @@ the channel the last message came on (not on `anynear`, which the other side doe
 
 ## Page “Radios” and first pairing (12.11.2026) – none of it tested
 
-The page “Radios” now shows “My radios” at the top (the assigned one first, greyed out with “Not connected” while it
+The page “Radios” now shows “My radios” at the top (the assigned one first, grayed out with “Not connected” while it
 is not connected) and “Pair a new radio” below with the radios found and a “Search” button. “Set up another radio” is
 gone: pairing a new one replaces the assigned one, which stays under “My radios”. The first pairing still asks for the
 PIN from the radio's display (Meshtastic random PIN). On Android the app runs a one-second Bluetooth search right before
@@ -497,8 +496,8 @@ shows “Enter the number” with a direct way to the Bluetooth settings. So far
 | Nr. | Step | Expected | Result |
 |---|---|---|---|
 | R1 | Fresh Heltec V3, open “Radios”, tap “Pair” | phone asks for the number, it is on the display; afterwards connected and at the top of “My radios” | pending |
-| R2 | Switch the assigned radio off | its row turns grey with its name and “Not connected”, no endless “Connecting …” | pending |
-| R3 | “Disconnect” on its page, back to “Radios” | row grey, “Disconnected”, “Connect” button reconnects | pending |
+| R2 | Switch the assigned radio off | its row turns gray with its name and “Not connected”, no endless “Connecting …” | pending |
+| R3 | “Disconnect” on its page, back to “Radios” | row gray, “Disconnected”, “Connect” button reconnects | pending |
 | R4 | Second radio nearby, “Search”, “Pair” it | switches to it, the first one stays under “My radios” as “Nearby”/“Not connected” | pending |
 | R5 | Android, fresh Heltec V3, guided setup, “Connect” | PIN window comes up in front (not only in the notifications); meanwhile “Enter the number” with “Open Bluetooth settings” | pending |
 | R6 | As R5, dismiss the PIN window, tap “Open Bluetooth settings” | Bluetooth settings open, tapping the radio there asks for the number again, afterwards connected | pending |
@@ -511,13 +510,13 @@ shows “Enter the number” with a direct way to the Bluetooth settings. So far
 ## Set up over USB: install Meshtastic, way of use, use over the cable (ADR 0094, 12.11.2026) – none of it tested
 
 Android only. The ROM loader protocol is tested against a simulated ROM (`Esp32LoaderTest`), the flow with fakes
-(`UsbRescueFlowTest`); nothing of it has run on a real radio. Needs the list with `usb_installs` (Relay PR, then a
-new release of the list from Network).
+(`UsbRescueFlowTest`); nothing of it has run on a real radio. Needs a signed radio software list with
+`usb_installs` from the relays.
 
 | Nr. | Step | Expected | Result |
 |---|---|---|---|
-| E1 | Heltec V3 with factory software, plug in, anynear, choice | “Set up a new radio” is the main button, “Use with a USB cable” greyed out with its reason | pending |
-| E2 | E1, “Set up”, pick “Heltec V3” | chip recognised as ESP32-S3, download, progress up to 100 %, radio restarts with Meshtastic (display) | pending |
+| E1 | Heltec V3 with factory software, plug in, anynear, choice | “Set up a new radio” is the main button, “Use with a USB cable” grayed out with its reason | pending |
+| E2 | E1, “Set up”, pick “Heltec V3” | chip recognized as ESP32-S3, download, progress up to 100 %, radio restarts with Meshtastic (display) | pending |
 | E3 | after E2, “On the move” | found over Bluetooth by its name, PIN window, connected | pending |
 | E4 | after E2, “Stationary on Wi-Fi”, enter Wi-Fi | radio joins the Wi-Fi, app finds it there and connects; row says “on Wi-Fi” | pending |
 | E5 | radio from E4, unplug router power, plug radio into the phone | choice offers “Use with a USB cable” and “Switch to Bluetooth” | pending |
@@ -530,7 +529,7 @@ new release of the list from Network).
 
 ## Radio without Meshtastic on the USB cable (fix 12.11.2026) – none of it tested
 
-A new radio, an empty one or one with other software was not recognised when plugged in. Changes: the USB filter
+A new radio, an empty one or one with other software was not recognized when plugged in. Changes: the USB filter
 lists Espressif and Nordic entirely and more CH34x chips; the check whether Meshtastic answers gives up after 12 s
 without a frame (before 30 s); an ESP32 on Espressif's own USB is reset into the ROM loader in esptool's order, and a
 chip already waiting in the loader (BOOT held) is used without a reset; a silent ESP32 leads to “hold BOOT, plug in”;
@@ -541,13 +540,13 @@ only (`UsbRescueFlowTest`, `Esp32LoaderTest`).
 | Nr. | Step | Expected | Result |
 |---|---|---|---|
 | L1 | Empty or factory ESP32-S3 with native USB (Heltec V4, T-Beam Supreme), plug in | Android offers anynear; within about 15 s the dialog says Meshtastic is still missing, “Set up” leads to the model choice | pending |
-| L2 | L1, “Set up” | chip recognised as ESP32-S3 over USB-Serial/JTAG (debug log `ROM-Lader: esp32s3`); the USB connection survives the reset into the loader; writing works | pending |
+| L2 | L1, “Set up” | chip recognized as ESP32-S3 over USB-Serial/JTAG (debug log `ROM-Lader: esp32s3`); the USB connection survives the reset into the loader; writing works | pending |
 | L3 | ESP32 board whose loader does not answer, “Set up” | hint “hold BOOT, plug in again, Search”; done that way, the models are offered | pending |
-| L4 | Board with CH340K (0x1A86:0x7522) or CH343, factory software, plug in | Android offers anynear; recognised as without Meshtastic | pending |
+| L4 | Board with CH340K (0x1A86:0x7522) or CH343, factory software, plug in | Android offers anynear; recognized as without Meshtastic | pending |
 | L5 | T1000-E / RAK4631 / T-Echo with factory software, plug in, “Set up” | asked into the bootloader, drive appears; pick model and drive, `.uf2` written, Meshtastic starts | pending |
 | L6 | nRF52 whose software ignores the touch | hint to press reset twice is shown; after the double tap the drive appears and writing works | pending |
 | L7 | nRF52 already in the bootloader (drive visible), plug in | goes straight to model/drive, no wait for Meshtastic | pending |
-| L8 | Radio with Meshtastic, plug in (regression) | still recognised with name and software within a few seconds, no early “no Meshtastic” | pending |
+| L8 | Radio with Meshtastic, plug in (regression) | still recognized with name and software within a few seconds, no early “no Meshtastic” | pending |
 | L9 | Heltec V3 with a charging-only cable (or OTG off), “Connect with a USB cable” | “Searching …” with progress bar visible for about a second, then “Your phone doesn't see any device on the USB cable …” with the hints on cable, power and OTG; with a data cable, “Search” finds it | pending |
 | L10 | Heltec V3 with factory software, data cable, “Set up” | since ADR 0095 the choice of radio (A1); debug log `ROM-Lader: esp32s3, Flash im Chip 8 MB, PSRAM 0 MB` and `Modell erkannt: HELTEC_V3 (USB 10c4:ea60, esp32s3)`; “Other Meshtastic-compatible radio” shows the full list | pending |
 | L11 | Other empty ESP32 boards (Heltec V4, T-Deck, T-Beam Supreme, Station G2 …) | no wrong suggestion; note the `ROM-Lader` and `USB` values from the debug log so the board can be added to `UsbModelHints` | pending |
@@ -555,9 +554,9 @@ only (`UsbRescueFlowTest`, `Esp32LoaderTest`).
 ## Choice of radio when setting up over USB (ADR 0095, 13.11.2026) – none of it tested
 
 After plugging in a radio without Meshtastic (and with “Set up a new radio”) the dialog shows the recommended radios
-from `https://anynear.app/v1/radios.json` with picture, name and what they are good for; the recognised one is
+from `https://anynear.app/v1/radios.json` with picture, name and what they are good for; the recognized one is
 preselected, the main button is “Install Meshtastic”, every other model sits behind the small “Other
-Meshtastic-compatible radio”. Recommended radios on another chip are greyed out with “Doesn't match the plugged-in
+Meshtastic-compatible radio”. Recommended radios on another chip are grayed out with “Doesn't match the plugged-in
 device”. ESP32 (Meshnology N35) is written over the ROM loader, nRF52 (T1000-E, Solar Node) is asked into its bootloader
 only after the choice and gets the `.uf2` onto its drive. Until the list is live the app uses the last good list, else
 its own copy. On the iPhone, where Android offers the cable, a note leads to the webapp on a computer. Tested with fakes
@@ -565,22 +564,22 @@ only (`UsbRescueFlowTest`).
 
 | Nr. | Step | Expected | Result |
 |---|---|---|---|
-| A1 | Meshnology N35 (Heltec V3) with factory software, plug in, “Set up” | N35 with picture and “On the go or at home” preselected; T1000-E and Solar Node greyed out with the reason; “Install Meshtastic” writes it, then the way of use | pending |
-| A2 | SenseCAP T1000-E with factory software, plug in, “Set up” | T1000-E preselected (if its USB IDs are among those in `radios.json`), N35 greyed out; only after “Install Meshtastic” the drive appears; pick the drive, `.uf2` written, Meshtastic starts | pending |
+| A1 | Meshnology N35 (Heltec V3) with factory software, plug in, “Set up” | N35 with picture and “On the go or at home” preselected; T1000-E and Solar Node grayed out with the reason; “Install Meshtastic” writes it, then the way of use | pending |
+| A2 | SenseCAP T1000-E with factory software, plug in, “Set up” | T1000-E preselected (if its USB IDs are among those in `radios.json`), N35 grayed out; only after “Install Meshtastic” the drive appears; pick the drive, `.uf2` written, Meshtastic starts | pending |
 | A3 | SenseCAP Solar Node with factory software, plug in | Solar Node offered and preselected once the software list has a `.uf2` for `SEEED_SOLAR_NODE`; otherwise not offered (no file); note its USB IDs from the debug log | pending |
 | A4 | A1 in flight mode (no internet) | pictures show the radio icon instead, nothing breaks; the list comes from the last good one or the app's copy | pending |
-| A5 | Board not in `radios.json` (e.g. RAK4631), plug in | nothing preselected, “Install Meshtastic” greyed until a radio is chosen; “Other Meshtastic-compatible radio” shows the full list | pending |
+| A5 | Board not in `radios.json` (e.g. RAK4631), plug in | nothing preselected, “Install Meshtastic” grayed until a radio is chosen; “Other Meshtastic-compatible radio” shows the full list | pending |
 | A6 | Rescue “Stuck in the bootloader” without a known last model | same choice, only radios that go onto a drive | pending |
 | A7 | iPhone: “Radios” page and first setup | note “Set up with a USB cable on a computer”, “Open web app” opens the webapp setup page | pending |
 
-## New versions and required update (Docs ADR 0096, 13.11.2026) – none of it tested
+## New versions and required update (ADR 0096, 13.11.2026) – none of it tested
 
 Notices about a new version come from the store or the own updater, without any list: `direct` from the GitHub
 releases, `play` from Google Play (In-App Updates), iPhone from the App Store (Apple's public lookup, `X.Y.Z`),
 TestFlight reports by itself. The signed radio list only enforces (`app`: `min`, `from`): before `from` a band
 “From <date> …” with “Update” and “Later”, after `from` a full screen over the app if there is a way to the new
 version. Tested with unit tests only (`UpdateNoticeTest`). The rule needs a signed radio list with `app` from the
-Network repo (or a test network).
+anynear network (or a test network).
 
 | Nr. | Step | Expected | Result |
 |---|---|---|---|

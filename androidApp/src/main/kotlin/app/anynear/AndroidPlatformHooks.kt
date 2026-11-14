@@ -75,7 +75,7 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
             ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
             ?.takeIf { it in 0..100 }
 
-    /** Google Play In-App Updates in the flavor `play`, `null` in `direct` (Docs ADR 0096 §6, §7). */
+    /** Google Play In-App Updates in the flavor `play`, `null` in `direct` (ADR 0096 §6, §7). */
     val store: StoreUpdates? = storeUpdates(context)
 
     override val appUpdate: StateFlow<AppUpdateState> get() = store?.state ?: updater.state

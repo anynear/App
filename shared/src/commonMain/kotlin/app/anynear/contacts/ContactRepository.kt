@@ -66,7 +66,7 @@ class ContactRepository(private val store: KeyValueStore) {
             .toList()
 
     companion object {
-        // v2: per line Base64url of the Meshtastic SharedContact, without the former prefix `PINA1:` (ADR 0034).
+        // v2: per line Base64url of the Meshtastic SharedContact, without the former prefix (ADR 0034).
         private const val KEY = "contacts.v2"
 
         /** Radio contact as bytes, as it goes along in the contact and invitation link (field "radio" in the ANMP link). */

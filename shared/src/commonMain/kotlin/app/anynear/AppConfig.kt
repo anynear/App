@@ -23,11 +23,11 @@ object AppConfig {
      *  ADR 0089). The website forwards to the page in the language of the browser. */
     const val APP_PAGE_URL = "https://anynear.app/app-laden/"
 
-    /** Page „App laden“ by language, the way to the App Store on iOS (Docs ADR 0096 §6) until there is a store address. */
+    /** Page „App laden“ by language, the way to the App Store on iOS (ADR 0096 §6) until there is a store address. */
     const val APP_PAGE_URL_DE = "https://anynear.app/de/app-laden/"
     const val APP_PAGE_URL_EN = "https://anynear.app/en/get-the-app/"
 
-    /** Opens the app TestFlight on iOS (Docs ADR 0096 §6). */
+    /** Opens the app TestFlight on iOS (ADR 0096 §6). */
     const val TESTFLIGHT_URL = "itms-beta://"
 
     /** Subscription plans with expected prices (ADR 0076), from the website; prices are never in the app. */
@@ -71,7 +71,7 @@ object AppConfig {
      */
     const val CRITICAL_ALERTS = false
 
-    /** Former app ID (PYRSA, until the cut-over to anynear). As long as it is installed, the app offers to delete it (ADR 0061). */
+    /** Former app ID (until the cut-over, ADR 0061). As long as it is installed, the app offers to delete it (ADR 0061). */
     const val OLD_APP_ID = "com.pyrsa.pyrsa"
 
     /**
@@ -84,9 +84,9 @@ object AppConfig {
     const val RADIO_CHANNEL0 = true
 
     /**
-     * Channels of earlier apps that the app clears away when connecting: the radio channel `PYRSA` (ADR 0051, replaced
-     * by `anynear`, ADR 0061 decision 6), circle channels `PYRSA-xxxxx` (before ADR 0051) and the channels of PINA
-     * before ANMP 1 (`PINA`, `PINA-xxxxxx`, ADR 0034 §4). The primary channel is never among them.
+     * Channels of earlier versions that the app clears away when connecting: the former radio channel (ADR 0051,
+     * replaced by `anynear`, ADR 0061 decision 6), the former circle channels (before ADR 0051) and the channels from
+     * before ANMP 1 (ADR 0034 §4). The primary channel is never among them.
      */
     fun isOldChannelName(name: String?): Boolean =
         name == app.anynear.anmp.AnmpInfo.LEGACY_RADIO_CHANNEL_NAME || app.anynear.anmp.AnmpKeys.isLegacyChannelName(name) ||

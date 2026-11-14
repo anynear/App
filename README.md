@@ -1,7 +1,7 @@
 # App (anynear)
 
-**anynear** ([anynear.app](https://anynear.app); formerly PINA and PYRSA; app ID and Kotlin package `app.anynear`) is
-a messenger for families, friends, neighbours and close acquaintances who want to stay in touch in an emergency. It
+**anynear** ([anynear.app](https://anynear.app); app ID and Kotlin package `app.anynear`) is
+a messenger for families, friends, neighbors and close acquaintances who want to stay in touch in an emergency. It
 keeps a circle of people connected: messages in the shared chat (“My circle”, German “Mein Kreis”) and directly,
 storage, passwords and alerts, end-to-end encrypted, without an account and without a phone number. Messages travel
 over the internet and, with a suitable radio, additionally as short texts without internet. A radio is not required
@@ -12,10 +12,9 @@ This README describes the structure, the build and the state of the app. ADR num
 comments (“ADR 0061”) are internal decision numbers; the decisions themselves are not in this repository. Methods
 and known limits are described at <https://anynear.app/de/technik/> (German).
 
-Status: **beta, not independently audited.** The app is distributed as a closed beta to invited testers (Android as
-an APK, iOS via TestFlight). There has been no audit by independent third parties. With real radios only a part has
-been tested so far, mainly in the Android emulator with a radio on Wi-Fi; most hardware tests are pending. What has
-been tested and what has not is listed in [docs/hardware-tests.md](docs/hardware-tests.md).
+How to get the app (Android as an APK, iOS via TestFlight) is described at <https://anynear.app/en/get-the-app/>.
+What has been tested on real radios and phones and what has not is listed in
+[docs/hardware-tests.md](docs/hardware-tests.md).
 
 Please report vulnerabilities as described in [SECURITY.md](SECURITY.md); for contributing see
 [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -28,21 +27,26 @@ shared/      Kotlin Multiplatform: logic + Compose UI (Android & iOS)
   contacts/  Radio contacts (Meshtastic SharedContact) with key check
   data/      Device assignment, message history and settings (encrypted on the device), protected storage,
              My files (PersonalFiles)
-  passwords/ Passwords: file `vault` under its own key, screen lock per platform, mapping to the website
+  passwords/ Passwords: file `vault` under its own key, screen lock per platform, matching to websites
   circles/   Circles as a mirror of the ANMP core, own name and picture
   images/    Pictures of circles and people: generated pattern, reference to uploads, storage
   attachments/ Attachments: model, encrypted storage on the phone, shrinking photos
   core/      Connection to the ANMP core (ADR 0036): storage for the core, network (network list, development
              network), ANMP over radio, fresh start, key of the data on the device, text of the wake-up call (iOS)
   people/    Members and contacts (mirror of the core) and radio contacts as one person
+  alerts/    Alerts and official warnings (district from the approximate location)
+  lifesigns/ Check-ins (“Lebenszeichen”)
   app/       AppController (UI-independent app logic)
   chats/     Overview “Messages”: all conversations with the number of new messages
+  i18n/      Text catalogs in German and English
   ui/        Messages, chat, contacts, settings, setup, theme and brand (Brand.kt)
 androidApp/  Android shell: permissions, foreground service (receiving messages, BLE), notifications,
              autofill (autofill/)
 iosApp/      Xcode project (SwiftUI shell around the Compose UI, push token, Notification Service Extension,
              password extension CredentialProvider/, keychain for passwords Passwords/)
 docs/        Hardware test plan
+scripts/     Generating the municipality table (regions.py) and release notes
+tools/       Reproducing the text recognition models (ocr-models/)
 ```
 
 Technology: Kotlin 2.4.10, Compose Multiplatform 1.12.1, [meshtastic-sdk](https://github.com/meshtastic/meshtastic-sdk) 0.2.0,
@@ -53,10 +57,10 @@ Kable 0.45.0.
 Requirements:
 
 - JDK 21 and Android SDK (platform 37); for iOS also Xcode.
-- The neighbouring repositories [`anynear/ANMP`](https://github.com/anynear/ANMP) and
+- The neighboring repositories [`anynear/ANMP`](https://github.com/anynear/ANMP) and
   [`anynear/ANDP`](https://github.com/anynear/ANDP), checked out as `../ANMP` and `../ANDP` next to this folder. The
   app includes them via composite build (`settings.gradle.kts`); without them the Gradle configuration already fails
-  with “ANMP nicht gefunden” (ANMP not found). Without access to either of the two, the app cannot be built.
+  with “ANMP nicht gefunden” (ANMP not found). Without both, the app cannot be built.
 
 ```bash
 git clone https://github.com/anynear/App.git
@@ -79,9 +83,9 @@ permissions Play does not allow there (installing packages). Flavor-only entries
 **Internet path: ANMP core on ANDP (ADR 0034–0036, 0061).** Protocol and logic without UI live in the repos
 `ANMP` (format and core, specification under `spec/`) and `ANDP` (relay network, `spec/`), both next to this one. The
 app includes `ANMP/kotlin` via composite build (`settings.gradle.kts`), ANMP includes `ANDP/kotlin` itself. The build
-looks for `../ANMP` (main checkout) or `../../ANMP` (worktree under `_worktrees/`); otherwise use
+looks for `../ANMP` or `../../ANMP` (for a git worktree one level deeper); otherwise use
 `ANMP_DIR=<path to ANMP/kotlin>` or `-Panmp.dir=…`. ANMP finds ANDP next to itself or via `ANDP_DIR`. In CI
-the workflows check out ANMP and ANDP as neighbouring folders (`main` each; token of the GitHub App anynear CI, secrets `CI_APP_ID`, `CI_APP_KEY`).
+the workflows check out ANMP and ANDP (`main` each) as neighboring folders.
 
 The core holds circles, contacts, the personal mailbox with grants, sending and fetching via the relays,
 confirmations, history, key rotation, `want`/`have`, watch (iOS) and passing on at a shared
@@ -139,10 +143,10 @@ the device with the uniform device profile (`mesh/RadioProfile.kt`):
 3. Device telemetry hourly on; environment, air quality, power and health sensors off.
 4. Location off: GPS off, no fixed or smart position, position precision 0 on the
    primary channel and the radio channel `anynear`.
-5. Device name `anynear <word> <last 4 digits of the node ID>`, e.g. “anynear Reh 1998”. Short name `A` +
-   three characters, unique from the last four digits of the node ID (“A472”). The word comes from the
-   node number; names already taken within radio range are skipped. The part after `anynear` can be changed.
-   The app rewrites old names `PYRSA …` and `PINA …` during setup (ADR 0061).
+5. Device name `anynear.app | <word> <last 4 digits of the node ID>`, e.g. “anynear.app | Reh 1998”. Short name
+   `A` + three characters, unique from the last four digits of the node ID (“A472”). The word comes from the
+   node number; names already taken within radio range are skipped. The part after `anynear.app | ` can be changed.
+   The app rewrites names from earlier versions (e.g. `anynear …`) during setup (ADR 0061).
 
 Under “Settings → Radio → Advanced” the name can be changed (with a suggestion) and the
 device profile can be applied again, even if the device already matches.
@@ -151,8 +155,8 @@ If something differs, “Set up radio” appears (new device: notice, otherwise 
 router devices with a warning). The app writes only what differs, checks against the freshly read state
 and repeats until everything matches. Wi-Fi, Bluetooth, display
 and foreign channels remain untouched. No managed mode. For all circles and contacts there is one
-radio channel `anynear` with a public key from ANMP (ADR 0051, 0061); the app removes old channels (`PYRSA`, `PYRSA-xxxxx`, `PINA`,
-`PINA-…`).
+radio channel `anynear` with a public key from ANMP (ADR 0051, 0061); the app removes the channels of earlier
+versions.
 
 Over radio, circle and direct messages go as ANMP packets on `PRIVATE_APP` to everyone on channel 0 when it is open
 (default key, no own name), otherwise in the channel `anynear`; only the ANMP content is confidential (ADR 0051, 0054,
@@ -194,13 +198,13 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
 - Set up “My circle” directly in the app: “Start a new circle” (new random key) or
   join via invitation link. A radio paired later gets the circle channel
   automatically; if the device differs from the device profile, the app offers “Set up radio”.
-- Overview “Messages” as in WhatsApp: all circles and direct messages one below the other, newest on top,
+- Overview “Messages” like in WhatsApp: all circles and direct messages one below the other, newest on top,
   new items bold with a yellow number (also on the tab at the bottom).
 - Notifications without Google (Android): the app receives by itself in the foreground service, also after
   a restart of the phone; the notification is created on the phone, one per conversation, tapping opens the
-  conversation. No FCM, no UnifiedPush needed. If battery optimisation is on, a notice appears with a button
+  conversation. No FCM, no UnifiedPush needed. If battery optimization is on, a notice appears with a button
   leading straight to the setting. Android does not report the manufacturers' own power-saving features (Samsung
-  “Sleeping apps”, Xiaomi “Autostart”); from Android 11 the app recognises on opening, from the reasons of the last
+  “Sleeping apps”, Xiaomi “Autostart”); from Android 11 the app recognizes on opening, from the reasons of the last
   process exits, that it was stopped despite the foreground service, and shows the same notice with a way to the app info. Because Android pauses timers while the phone sleeps,
   an alarm (`WakeAlarm`, also in deep sleep, there at most about every 9 minutes) wakes the phone briefly every 15 minutes and
   restarts stalled fetches (`AnmpCore.wakeUp`); on start the log states how the previous process ended.
@@ -208,7 +212,7 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   app then fetches the affected mailbox once; on connecting and on the alarm it catches up on everything. Without a
   stream (relays with `stream.clients` off) it asks only one relay per mailbox and, after an empty answer, only again
   after 60 seconds. Under “Advanced → Log” the line `Stream: …` at the top shows home relay, disconnects by
-  reason, switches and catch-up finds. What can only be seen in the app rests in the background: the search for radios
+  reason, switches and catch-up finds. Some things pause in the background: the search for radios
   on Wi-Fi runs only while the app is open, and a paired radio out of range is, after five
   failed attempts, searched for only every 5 minutes until the app is open again. iOS: the relays wake the iPhone via Apple's push service (watch, ANDP §10) with
   a fixed text and the identifier of the object; the Notification Service Extension fetches the message itself via the
@@ -223,8 +227,9 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   only with the send button. iOS: the Share Extension (`iosApp/Share`, `app.anynear.share`) puts the
   shared item into the app group and opens anynear via `anynear://share`. For TestFlight the identifier
   `app.anynear.share` with app group `group.app.anynear` must exist in Apple Developer.
-- Voice messages (ADR 0030): tap the microphone, speak, “Done”, send; up to 5 minutes,
-  AAC mono, as an encrypted attachment like photos. The phone recognises the beginning locally (Android from 13,
+- Voice messages (ADR 0030, 0099): tap the microphone, speak, “Done”, send; up to 5 minutes (longer if the plan
+  allows, at most 30 minutes),
+  AAC mono, as an encrypted attachment like photos. The phone recognizes the beginning locally (Android from 13,
   iOS; never via a service on the internet) and sends it along as “Text preview”, over radio as
   “🎤 Text…”, shortened with the same limit as the input field. Your own text replaces the preview;
   without recognition “🎤 Voice message 0:42”. The recording arrives as soon as there is internet. Playback only
@@ -234,7 +239,8 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   (read receipt, radio connection), without message texts, in memory only, pass on via “Share”.
 - Support as a chat (ADR 0065): “Report a problem” (under “Troubleshooting”, optionally with the log) and “Ask us”
   (under “Help”) create a separate circle “Support: …” with the support identity for each request and invite it
-  directly; the answer arrives in this circle. As long as `AppConfig.SUPPORT_CONTACT_LINK` is missing, sending is off.
+  directly; the answer arrives in this circle. The support identity's contact link is loaded from
+  `AppConfig.SUPPORT_LINK_URL`, with `AppConfig.SUPPORT_CONTACT_LINK` as fallback; without a link, sending is off.
   If the person owns a channel `anynear-support` (`AppConfig.SUPPORT_ALERT_CHANNEL`, in practice only the
   support identity), the app joins every new request itself right away and additionally sends it as an alert
   there, so that the support team notices it on their own phones.
@@ -254,7 +260,7 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
 - Reactions with emojis: long-press a message, choose 👍 ❤️ 😂 😮 😢 🙏; one per
   person, another emoji replaces it, tapping your own again takes it back. Over the internet
   and over radio as ANMP; reactions from radios without anynear are shown (ADR 0018, 0021).
-- Read receipt, always on: whoever looks at a conversation confirms reading. Two yellow ticks mean
+- Read receipt, always on: whoever looks at a conversation confirms reading. Two yellow check marks mean
   “read”, in a circle only once everyone has read (before that “Read by 1 of 3” in the details).
   On both paths as ANMP to the sender's installation, with the message IDs; over radio
   one per sender and conversation (ADR 0019, 0021).
@@ -264,7 +270,7 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   key is not adopted silently. Whoever has the link may write to the personal mailbox
   (grant); the core no longer lets a removed contact write (ADR 0035 §2).
 - Stored data carries a version (`data/StorageVersion.kt`); changes come as a migration with a test, never as a
-  fresh start (ADR 0061, decision 13). The app ID `app.anynear` starts empty; nothing moves over from `com.pyrsa.pyrsa`.
+  fresh start (ADR 0061, decision 13). The app ID `app.anynear` starts empty; nothing moves over from an earlier app ID.
 - Honest message states: “delivery confirmed” only on a confirmation from the recipient's device.
 - Only what the radio has not yet accepted is repeated automatically.
 - Manual backup (ADR 0027): “Settings → Backup” saves the whole state as a file,
@@ -298,15 +304,15 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
 - Storage per circle (ADR 0049): the same pages and the same sync as My files (`app/CircleFiles.kt`), online
   in a separate space derived from the circle secret (ANMP core `circleStorePut`/`circleStoreList`). Everyone in the
   circle sees, changes and deletes the same files; after a key rotation the core moves them to the new space. Whoever
-  leaves the circle loses the storage from the phone. Still without “Important”, bin and line in the chat.
-- Recognising and searching in both storages (ADR 0067): search field and stack chips instead of folders (`ui/PersonalFilesUi.kt`,
+  leaves the circle loses the storage from the phone. Still without “Important” and without a line in the chat.
+- Recognizing and searching in both storages (ADR 0067): search field and stack chips instead of folders (`ui/PersonalFilesUi.kt`,
   search `DocIndex` in the ANMP core). Text is read only by the device (`attachments/DocumentText.kt`): Android via PP-OCRv5 with
   LiteRT (`attachments/TextOcr.android.kt`, models under `androidApp/src/main/assets/ocr/`, reproducible from
   `tools/ocr-models/convert.sh`, ADR 0078) and `PdfRenderer` from Android 15, iOS via Vision and PDFKit; a better
   reader re-reads existing files (`readerVersion`); the text read is shown on the file's page under “Text read”; stored encrypted in `file-texts`, not in the
-  backup (`data/DocTexts.kt`). Kind and details are recognised by `DocRecognizer` in the core (`app/DocReading.kt`); they go to the relays as
+  backup (`data/DocTexts.kt`). Kind and details are recognized by `DocRecognizer` in the core (`app/DocReading.kt`); they go to the relays as
   field `doc` with the entry, changes without a new upload; the kind can be chosen by hand.
-- Gallery and photo topics (ADR 0070): switch “Documents/Photos”, photos as a grid with topic chips. Topics are recognised
+- Gallery and photo topics (ADR 0070): switch “Documents/Photos”, photos as a grid with topic chips. Topics are recognized
   only by the device: Android MobileNet v1 with LiteRT (`:androidApp:visionModel` downloads the model at build time with a fixed
   SHA-256) and `FaceDetector` only for “People”, iOS Vision; mapping `PhotoTopics` in the core, as `topics` in the field
   `doc`.
@@ -317,7 +323,7 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   pre-check on a small image (`PhotoTopics`, text recognition), then `DocRecognizer`; from 20 % battery; a run once started
   finishes in the background (ADR 0071 item 9: Android `DocFinderService` as foreground service `dataSync` with
   progress and “Stop”, iOS from 26 `BGContinuedProcessingTask`, otherwise pause);
-  suggestions with ticks, adopting like “Add photo” or “Add file” with `doc`. What has been seen is remembered only by the
+  suggestions with check marks, adopting like “Add photo” or “Add file” with `doc`. What has been seen is remembered only by the
   phone (`doc-finder`, not in the backup).
 - Finding new documents automatically (ADR 0081): off until you say “Yes” after the first search run; switch on
   “Find documents”. Then once a day on the charging cable `DocFinder.checkNew()` over the remembered sources (photos, whole
@@ -338,18 +344,38 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   (`app/UsbRescueFlow.kt`, `mesh/UsbRescue*.kt`, Android only): reset the radio via USB OTG through meshtastic-sdk (serial)
   (also deletes pairings) or send an nRF52 into the bootloader and write the `.uf2` from the list to its
   drive (Android file picker); also for a device that is already stuck in the bootloader (R1–R3).
+- Check-ins (German “Lebenszeichen”, ADR 0083; `lifesigns/`): for times alone (working alone, out and about, alone at
+  home, daily, custom), started in a circle of your choice. The phone asks “All good?” at intervals; if nobody
+  answers, the people in that circle first get a hint and then an alarm. It does not replace the emergency number.
+- Trash (ADR 0086): files deleted from My files or a circle's storage stay in the trash for 7 days and can be brought
+  back (in a circle by everyone in it); until then they still count toward the storage quota.
+- Replies (ADR 0092): “Reply” on a message quotes it above your own; tapping the quote jumps to the original.
+- Titles and sorting (ADR 0091): after reading a file, the device gives it a title (one set by hand stays); the
+  storages can be sorted by newest, title or file name, chosen per device.
+- “Keep on this phone” (ADR 0080): on by default for every file in the storages; switched off, the file stays only
+  in the network with a preview on the phone, and opening it needs internet.
+- Adding your own devices (ADR 0093): the new device shows a QR code and a comparison code; an existing device
+  scans it, compares the code and, after the device lock, hands over identity, name and logins.
+- Setting up a radio over USB (ADR 0094, Android only): plugging in a radio without Meshtastic installs it (ESP32 via
+  the ROM loader, nRF52 via its bootloader drive); afterwards you choose how to use it: on the move (Bluetooth),
+  stationary on Wi-Fi or over the USB cable. On the iPhone a note leads to the setup in the web app on a computer.
+- Recommended radios (ADR 0095): the list of recommended models with picture and use comes from
+  `https://anynear.app/v1/radios.json` (last good list or built-in copy as fallback); when setting up over USB the
+  recognized model is preselected, others are behind “Other Meshtastic-compatible radio”.
+- New versions and required updates (ADR 0096): notices about a new version come from the own updater (`direct`),
+  Google Play or the App Store; TestFlight reports by itself. A rule in the signed radio list (`app`: `min`, `from`)
+  announces a required update with a band and the date, and after that date covers the app with a full screen
+  as long as a newer version can be reached. Debug builds are never blocked.
 
 ## Deliberately not included yet
 
-- Maintenance/“Update now” (phase 3); installing new software on the radio on iOS (ADR 0056).
-- Number on the app icon on iOS (badge).
-- QR codes (the contact code is text to copy for now).
+- The maintenance service (a separate product, see below); installing new software on the radio on iOS (ADR 0056).
 - Automatic switching between Wi-Fi and Bluetooth on the same device (ESP32: Wi-Fi switches BLE off).
 
 ## License
 
-The code is licensed under GPL-3.0-or-later because meshtastic-sdk is under this licence. See [LICENSE](LICENSE).
-Origin and licences of sounds, models, font and data in the repository: [NOTICE](NOTICE). Name and logos are
+The code is licensed under GPL-3.0-or-later because meshtastic-sdk is under this license. See [LICENSE](LICENSE).
+Origin and licenses of sounds, models, font and data in the repository: [NOTICE](NOTICE). Name and logos are
 excluded: [TRADEMARKS.md](TRADEMARKS.md).
 
 anynear is an independent project and is not affiliated with Meshtastic LLC; it is neither
@@ -359,14 +385,14 @@ The procedures for installing radio software and for the serial connection follo
 (GPL-3.0).
 
 For official warnings the app determines the district from the approximate location on the phone, with a table of
-municipality centre points under `shared/src/commonMain/composeResources/files/regions/` (generated with `scripts/regions.py`).
+municipality center points under `shared/src/commonMain/composeResources/files/regions/` (generated with `scripts/regions.py`).
 Source: Gemeindeverzeichnis-Informationssystem GV-ISys, “Alle politisch selbständigen Gemeinden mit ausgewählten
 Merkmalen am 31.12.2025 (4. Quartal)” (file `AuszugGV4QAktuell.xlsx`, published January 2026, downloaded on 04.11.2026 from
 [destatis.de](https://www.destatis.de/DE/Themen/Laender-Regionen/Regionales/Gemeindeverzeichnis/Administrativ/Archiv/GVAuszugQ/AuszugGV4QAktuell.html)).
 © Statistisches Bundesamt (Destatis), 2026, on behalf of the Herausgebergemeinschaft Statistische Ämter des Bundes und der
-Länder; geographic centre coordinates: Bundesamt für Kartographie und Geodäsie (BKG). Reproduction and
+Länder; geographic center coordinates: Bundesamt für Kartographie und Geodäsie (BKG). Reproduction and
 distribution, also in part, permitted with attribution. The attribution is also shown in the app under “License”.
 
-The name “anynear” and the logos are excluded from this. Forks must rename
-themselves, see [TRADEMARKS.md](TRADEMARKS.md). The maintenance service is a separate product
+The name “anynear” and the logos are excluded from this. Forks must use a different
+name, see [TRADEMARKS.md](TRADEMARKS.md). The maintenance service is a separate product
 and not part of this repository.

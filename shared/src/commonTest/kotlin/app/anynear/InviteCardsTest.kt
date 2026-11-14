@@ -42,7 +42,7 @@ class InviteCardsTest {
         assertTrue(findInviteLinks("Schau auf https://anynear.app oder www.anynear.app").isEmpty())
         // On anynear.net links stay valid (ADR 0061, decision 4), old hosts do not.
         assertEquals(listOf(InviteKind.Contact), findInviteLinks("https://anynear.net/c#Q09O").map { it.kind })
-        assertTrue(findInviteLinks("https://pyrsa.net/c#Q09O").isEmpty())
+        assertTrue(findInviteLinks("https://old-host.example/c#Q09O").isEmpty())
     }
 
     @Test

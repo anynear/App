@@ -36,7 +36,7 @@ interface SystemTexts {
     val updateFailed: String
     val allowInstall: String
 
-    // Update requested by the network (Docs ADR 0096)
+    // Update requested by the network (ADR 0096)
     /** Band: „Es gibt eine neue Version von anynear.“ */
     /** Band with the day from which the old version no longer works, e.g. „20. November“. */
     fun updateSoon(date: String): String

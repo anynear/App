@@ -445,7 +445,7 @@ class SdkMeshLink(
         val data = decoded ?: return null.also { if (from != rc.ownNode.value?.num) noteUndecrypted(from, channel) }
         if (data.portnum != PortNum.PRIVATE_APP || from == rc.ownNode.value?.num) return null
         val payload = data.payload.toByteArray()
-        if (!Anmp.isPmp(payload)) return null
+        if (!Anmp.isAnmp(payload)) return null
         val direct = directOrNull(rc)
             ?: (if (isChannel0Broadcast(to, channel, _openChannel0.value)) false else null)
             ?: return null.also {

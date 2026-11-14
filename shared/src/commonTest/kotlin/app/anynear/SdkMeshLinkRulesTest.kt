@@ -43,11 +43,11 @@ class SdkMeshLinkRulesTest {
     fun onlyTheOneRadioChannelCounts() {
         val channels = listOf(
             channel(0, "anynear", Channel.Role.PRIMARY), // The primary channel never belongs to it
-            channel(1, "PINA", Channel.Role.SECONDARY), // before ANMP 1 (ADR 0034)
+            channel(1, "PINA", Channel.Role.SECONDARY), // channel of an earlier version, before ANMP 1 (ADR 0034)
             channel(2, "PYRSA-K3V9Q", Channel.Role.SECONDARY), // channel per circle, before ADR 0051
             channel(3, "Mesh Hessen", Channel.Role.SECONDARY),
             channel(4, "anynear", Channel.Role.SECONDARY),
-            channel(5, "PYRSA", Channel.Role.SECONDARY), // radio channel before anynear (ADR 0061)
+            channel(5, "PYRSA", Channel.Role.SECONDARY), // former radio channel (ADR 0061)
             channel(6, "anynear", Channel.Role.DISABLED),
         )
         assertEquals(listOf(4), SdkMeshLink.circleChannelsOf(channels).map { it.index })

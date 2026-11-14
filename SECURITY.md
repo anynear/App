@@ -1,6 +1,6 @@
 # Reporting security issues
 
-anynear is a beta and has not been independently audited. Reports of vulnerabilities are welcome.
+Reports of vulnerabilities are welcome.
 
 - **Report:** by email to <security@anynear.app>. Please **do not open a public issue** for vulnerabilities.
 - **Include:** what you observed and how to reproduce it (app version under “About anynear”, device, steps).
