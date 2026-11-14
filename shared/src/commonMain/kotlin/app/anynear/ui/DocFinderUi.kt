@@ -194,29 +194,6 @@ internal fun FinderHeaderTask(controller: AppController) {
 }
 
 /**
- * „Handy nach Dokumenten durchsuchen“ (ADR 0071 item 1) as a row under „Foto/Datei hinzufügen“ of „Meine Ablage“;
- * during a run with progress, afterwards with the number of finds.
- */
-@Composable
-internal fun FindDocsRow(finder: DocFinder, onFind: () -> Unit) {
-    val state by finder.state.collectAsState()
-    AppSection {
-        AppRow(
-            title = when {
-                state.running && state.total > 0 -> texts.find.menuRunning(state.checked, state.total)
-                state.running -> texts.find.preparing
-                state.found.isNotEmpty() -> texts.find.found(state.found.size)
-                else -> texts.find.menuEntry
-            },
-            subtitle = texts.find.entryHint,
-            icon = AppIcons.Suche,
-            chevron = true,
-            onClick = onFind,
-        )
-    }
-}
-
-/**
  * Search run and suggestions. [askNow] asks for the photos right on opening (coming from the card). Closing ends the
  * run and gives the access back.
  */
