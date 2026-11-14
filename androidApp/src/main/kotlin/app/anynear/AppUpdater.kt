@@ -69,7 +69,7 @@ class AppUpdater(private val context: Context) {
 
     /**
      * versionCode of the newer version found last, kept while it is downloaded and installed; `null` if none
-     * (Docs ADR 0096 §6: the block only comes if this is at least `min`).
+     * (ADR 0096 §6: the block only comes if this is at least `min`).
      */
     val availableBuild: StateFlow<Long?> = _availableBuild.asStateFlow()
 

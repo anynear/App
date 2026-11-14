@@ -36,7 +36,7 @@ import app.anynear.app.UpdateNotice
 import app.anynear.i18n.texts
 
 /**
- * One band for every reason to update (Docs ADR 0096 §4, together with `clients.min` from ADR 0061 decision 13):
+ * One band for every reason to update (ADR 0096 §4, together with `clients.min` from ADR 0061 decision 13):
  * the day from which only the new version works, or „Bitte aktualisiere …“. Buttons „Aktualisieren“
  * (only where the app can do something) and „Später“.
  */

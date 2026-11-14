@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Docs ADR 0096: rule of the network × way to the new version × debug build → nothing, band or block. */
+/** ADR 0096: rule of the network × way to the new version × debug build → nothing, band or block. */
 class UpdateNoticeTest {
     private val required = UpdateDemand.Required(min = 1200, from = 1_000)
     private val soon = UpdateDemand.Soon(min = 1200, from = 1_000)

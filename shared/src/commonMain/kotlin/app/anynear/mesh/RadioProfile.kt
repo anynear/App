@@ -64,7 +64,7 @@ object RadioProfile {
         return DeviceSetupCheck(kind, deviations, snapshot.owner?.long_name.orEmpty())
     }
 
-    /** Already carries a name of the app (also an old `PYRSA …` or `PINA …`), so it has been set up once before. */
+    /** Already carries a name of the app (also with an older prefix), so it has been set up once before. */
     fun wasSetUpForApp(snapshot: DeviceConfigSnapshot): Boolean = DeviceName.isOwnName(snapshot.owner?.long_name)
 
     /** Factory-new: without a region the device does not transmit at all. */
@@ -100,7 +100,7 @@ object RadioProfile {
             position.fixed_position || position.position_broadcast_smart_enabled)
         if (positionOn || channelsSharingPosition(snapshot.channels).isNotEmpty()) add(ProfileDeviation.POSITION)
 
-        // An old name `anynear.app …` (without separator), `anynear …`, `PYRSA …` or `PINA …` counts as a deviation: at the next setup it becomes `anynear.app | …`.
+        // A name with an older prefix (e.g. `anynear.app …` without separator or `anynear …`) counts as a deviation: at the next setup it becomes `anynear.app | …`.
         if (!DeviceName.isCurrentName(snapshot.owner?.long_name)) add(ProfileDeviation.NAME)
     }
 
@@ -220,8 +220,8 @@ object RadioProfile {
  * the public network where the app is), only the part after it is free. The long name goes to everyone in
  * the public network, hence deliberately no personal name as default.
  *
- * Older devices are still called `anynear.app <own part>` (without separator) or `anynear <own part>`, or from the time before anynear `PYRSA <own part>`
- * or `PINA <own part>` (ADR 0025). Such names continue to count as own names (the part after it stays),
+ * Older devices are still called `anynear.app <own part>` (without separator), `anynear <own part>` or carry a prefix
+ * of an earlier version ([LEGACY_PREFIXES], ADR 0025). Such names continue to count as own names (the part after it stays),
  * but are rewritten at the next setup (ADR 0061, decision 6).
  */
 object DeviceName {
@@ -262,7 +262,7 @@ object DeviceName {
         longName?.let { name -> ALL_PREFIXES.firstOrNull { name.startsWith(it) && name.length > it.length } }
 
     /**
-     * Own part of an existing name (also of an old `anynear …`, `PYRSA …` or `PINA …`), otherwise `null`.
+     * Own part of an existing name (also with an older prefix), otherwise `null`.
      * `anynear.app | ` is longer than the old prefixes; an old, fully used part is therefore shortened to
      * [SUFFIX_MAX_BYTES].
      */
@@ -335,7 +335,7 @@ object DeviceName {
         return SHORT_PREFIX + idCode(id.toInt() and 0xFFFF)
     }
 
-    /** First letter of the short name (anynear; previously `P` for PYRSA). */
+    /** First letter of the short name. */
     private const val SHORT_PREFIX = "A"
 
     /** Without easily confused characters (0/O/o, 1/l/I). 56³ ≥ 65,536, hence unique. */

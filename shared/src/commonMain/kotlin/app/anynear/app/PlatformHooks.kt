@@ -154,7 +154,7 @@ interface PlatformHooks {
     fun installAppUpdate() = Unit
 
     /**
-     * Build number of the newest version this installation can install itself (Docs ADR 0096 §6): Android `direct`
+     * Build number of the newest version this installation can install itself (ADR 0096 §6): Android `direct`
      * from the own updater, `play` from Google Play; `null` if none is known.
      */
     val installableBuild: StateFlow<Long?> get() = NoBuild

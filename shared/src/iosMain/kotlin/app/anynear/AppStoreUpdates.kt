@@ -27,7 +27,7 @@ import platform.Foundation.timeIntervalSince1970
 import platform.UIKit.UIApplication
 
 /**
- * Notice about a new version for an iPhone that installed anynear from the App Store (Docs ADR 0096 §7), without the
+ * Notice about a new version for an iPhone that installed anynear from the App Store (ADR 0096 §7), without the
  * signed list: on start and at most every 6 hours the app asks Apple's public lookup for the version in the store and
  * compares it with its own `X.Y.Z`. The request names only the app ID. „Jetzt aktualisieren“ opens the App Store page.
  *

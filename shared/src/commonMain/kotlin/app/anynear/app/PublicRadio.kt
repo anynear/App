@@ -152,7 +152,7 @@ class PublicRadio(
         ) { (state, public, circle), other, old, answer, dismissed ->
             val ready = communityKnown && state == LinkState.Connected && circle != null && answer == null
             if (!ready || public.any { it.channel == PublicChannel.MESH_HESSEN }) return@combine null
-            // Slots 1–7 minus `anynear` and channels of other apps; the app clears old channels (`PYRSA`, PINA) anyway.
+            // Slots 1–7 minus `anynear` and channels of other apps; the app clears channels of earlier versions anyway.
             val free = (MeshLink.CIRCLE_SLOTS - circle.orEmpty().size - other).coerceAtLeast(0)
             if (free == 0 && dismissed) null else CommunityOffer(AppConfig.MeshHessen.NAME, free)
         }.stateIn(scope, SharingStarted.Eagerly, null)

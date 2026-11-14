@@ -8,7 +8,7 @@ import kotlin.test.assertEquals
 /** ADR 0025, app ID change: a new app ID is not an update but a move. */
 class UpdateKindTest {
     private val old = "app.anynear"
-    private val new = "com.pyrsa.pyrsa"
+    private val new = "org.example.other"
 
     @Test
     fun olderVersionDataWithoutPackageStayOrdinaryUpdates() {

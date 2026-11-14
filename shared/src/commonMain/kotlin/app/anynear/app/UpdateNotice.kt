@@ -2,7 +2,7 @@ package app.anynear.app
 
 import app.anynear.anmp.core.UpdateDemand
 
-/** How this installation gets to a newer version (Docs ADR 0096 §6). */
+/** How this installation gets to a newer version (ADR 0096 §6). */
 sealed interface UpdateWay {
     /** None known: debug build, an app store the app cannot ask, or nothing newer found yet. */
     data object None : UpdateWay
@@ -21,7 +21,7 @@ sealed interface UpdateWay {
 }
 
 /**
- * What the app shows because the network asks for a newer build (Docs ADR 0096 §4, §5) or the relays no longer fully
+ * What the app shows because the network asks for a newer build (ADR 0096 §4, §5) or the relays no longer fully
  * serve it (`clients.min`); one band for both, or the block. The notice about a new version without any rule comes from
  * the store or updater itself ([AppUpdateState.Available], ADR 0096 §7).
  */

@@ -59,7 +59,7 @@ androidx-credentials          = { module = "androidx.credentials:credentials",  
 androidx-fragment             = { module = "androidx.fragment:fragment",           version.ref = "androidxFragment" }
 # Find new documents automatically (ADR 0080): WorkManager, AndroidX, without Google services.
 androidx-work                 = { module = "androidx.work:work-runtime-ktx",       version.ref = "androidxWork" }
-# Google Play In-App Updates (Docs ADR 0096 §6, §7), only in the flavor `play`, never in `direct`.
+# Google Play In-App Updates (ADR 0096 §6, §7), only in the flavor `play`, never in `direct`.
 play-app-update-ktx           = { module = "com.google.android.play:app-update-ktx", version.ref = "playAppUpdate" }
 compose-components-resources  = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
 
