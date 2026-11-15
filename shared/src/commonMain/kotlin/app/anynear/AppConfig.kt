@@ -1,5 +1,7 @@
 package app.anynear
 
+import app.anynear.anmp.core.radio.RadioProfile
+
 /**
  * Fixed product defaults of anynear.
  *
@@ -98,10 +100,11 @@ object AppConfig {
      * devices or after consent in the dialog “Funkgerät einrichten”.
      */
     object Hessenmesh {
-        const val FREQUENCY_MHZ = 869.525f
+        /** From ANMP, the same for app and web app (ADR 0095 §5). */
+        const val FREQUENCY_MHZ = app.anynear.anmp.core.radio.Hessenmesh.FREQUENCY_MHZ
 
         /** Deliberately 5 instead of 3: with 3 hops messages did not arrive in the field test (ADR 0006). */
-        const val HOP_LIMIT = 5
+        const val HOP_LIMIT = app.anynear.anmp.core.radio.Hessenmesh.HOP_LIMIT
     }
 
     /**
@@ -110,7 +113,7 @@ object AppConfig {
      * key are adopted, all radio values come from the app's radio profile.
      */
     object MeshHessen {
-        const val NAME = "Mesh Hessen"
+        const val NAME = app.anynear.anmp.core.radio.Hessenmesh.MESH_HESSEN_CHANNEL
 
         /**
          * Key (32 bytes) from the channel link on meshhessen.de. The app offers the

@@ -1,10 +1,11 @@
 package app.anynear
 
-import app.anynear.mesh.DeviceName
+import app.anynear.anmp.core.radio.DeviceName
+import app.anynear.anmp.core.radio.ProfileDeviation
+import app.anynear.anmp.core.radio.RadioProfile
+import app.anynear.anmp.core.radio.RadioProfile.DeviceConfigSnapshot
 import app.anynear.mesh.DeviceSetupCheck
-import app.anynear.mesh.RadioProfile
-import app.anynear.mesh.RadioProfile.DeviceConfigSnapshot
-import app.anynear.mesh.ProfileDeviation
+import app.anynear.mesh.check
 import okio.ByteString.Companion.encodeUtf8
 import org.meshtastic.proto.Channel
 import org.meshtastic.proto.ChannelSettings

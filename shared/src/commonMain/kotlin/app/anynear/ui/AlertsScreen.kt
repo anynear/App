@@ -619,34 +619,6 @@ private fun problemText(problem: AlarmProblem): String = when (problem) {
     AlarmProblem.SilentSwitch -> texts.alerts.problemSilentSwitch
 }
 
-/** Choice among a few options; tapping applies it and closes. */
-@Composable
-private fun <T> ChoiceDialog(title: String, options: List<Pair<T, String>>, selected: T, onDismiss: () -> Unit, onPick: (T) -> Unit) {
-    AppDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                options.forEach { (value, label) ->
-                    Row(
-                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
-                            onPick(value)
-                            onDismiss()
-                        },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        RadioButton(selected = value == selected, onClick = null)
-                        Text(label, style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
-    )
-}
-
 /** Enter a name, done (ADR 0062 §9); afterwards the new channel opens. */
 @Composable
 private fun CreateChannelDialog(alerts: Alerts, onDismiss: () -> Unit, onCreated: (String) -> Unit) {

@@ -1,10 +1,12 @@
 package app.anynear.mesh
 
+import app.anynear.anmp.core.radio.RadioTarget
 import app.anynear.anmp.core.firmware.FirmwarePath
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import app.anynear.anmp.core.radio.GatewaySetup
 import app.anynear.contacts.Contact
 import kotlin.time.Duration
 
@@ -172,6 +174,19 @@ interface MeshLink {
      * answer during the restart counts as sent.
      */
     suspend fun setWayOfUse(ssid: String?, password: String?): Boolean = false
+
+    /**
+     * Where radios on Wi-Fi upload as gateways (ADR 0054 §5b), from the signed radio list; `null`: none. The link keeps
+     * the radio in line with it on every connection ([GatewaySetup]).
+     */
+    fun useGateway(gateway: app.anynear.anmp.core.RadioGateway?) {}
+
+    /**
+     * Radio settings of the region the radio is in (ADR 0054 §1b, from the radio list); the profile check and every
+     * write of the radio profile use them. Until set: [RadioTarget.DEFAULT]. [known]: settings of all areas of the
+     * list, so that a radio still on another area counts as [DeviceSetupCheck.areaChange].
+     */
+    fun useRadioTarget(target: RadioTarget, known: List<RadioTarget> = emptyList()) {}
 
     /** Software and model of the connected radio (ADR 0056); `null` as long as not read. */
     val firmware: StateFlow<RadioFirmware?> get() = NoFirmware
