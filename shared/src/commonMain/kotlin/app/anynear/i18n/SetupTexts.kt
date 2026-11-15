@@ -302,7 +302,7 @@ internal object SetupTextsDe : SetupTexts {
     override val welcomeText = "Schreibe mit deinen Menschen. Über Internet und mit passendem Funkgerät auch über Funk."
     override val letsGo = "Los geht's"
     override val tagline: String? = "Verbunden bleiben. Wenn es zählt."
-    override val usageStatsNote = "$APP schickt einmal am Tag ein paar Zahlen, ohne Namen und ohne Inhalte. Du kannst das in den Einstellungen abschalten."
+    override val usageStatsNote = "$APP schickt einmal am Tag ein paar Zahlen an einen Server von $APP, ohne Namen und ohne Inhalte. Der Server zählt sie nur zusammen. Du kannst das in den Einstellungen abschalten."
     override val howOthersSeeYou = "Wie sollen dich andere sehen?"
     override val photoOptional = "Das Bild ist freiwillig. Beides kannst du später in den Einstellungen ändern."
     override val howToStart = "Womit möchtest du anfangen?"
@@ -469,7 +469,7 @@ internal object SetupTextsEn : SetupTexts {
     override val letsGo = "Let's go"
     // No approved English brand wording yet, therefore hidden.
     override val tagline: String? = "Stay connected. When it matters."
-    override val usageStatsNote = "$APP sends a few numbers once a day, without names or content. You can switch this off in the settings."
+    override val usageStatsNote = "$APP sends a few numbers once a day to an $APP server, without names or content. The server only adds them up. You can switch this off in the settings."
     override val howOthersSeeYou = "How should others see you?"
     override val photoOptional = "The picture is optional. You can change both later in Settings."
     override val howToStart = "How would you like to start?"

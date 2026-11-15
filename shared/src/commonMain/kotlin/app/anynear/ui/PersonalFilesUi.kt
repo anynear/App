@@ -21,7 +21,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -1021,7 +1020,7 @@ internal fun PersonalFileOnlineScreen(controller: AppController, fileId: String,
 @Composable
 private fun TitleDialog(current: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var text by remember { mutableStateOf(current) }
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.files.titleDialog) },
         text = {
@@ -1038,7 +1037,7 @@ private fun TitleDialog(current: String, onDismiss: () -> Unit, onSave: (String)
 @Composable
 private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (String) -> Unit) {
     var name by remember { mutableStateOf(current) }
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.files.renameTitle) },
         text = { OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, modifier = Modifier.fillMaxWidth()) },

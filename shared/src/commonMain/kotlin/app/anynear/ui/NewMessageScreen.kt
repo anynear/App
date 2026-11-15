@@ -39,6 +39,8 @@ internal fun NewMessageScreen(
     title: String = texts.chat.newMessage,
     question: String = texts.chat.whoToMessage,
     preview: String? = null,
+    /** Own circle whose invitation is passed on: left out, and whoever is already in it comes last and dimmed. */
+    invitedCircle: String? = null,
 ) {
     val circles by controller.circles.collectAsState()
     val people by controller.people.collectAsState()
@@ -49,10 +51,12 @@ internal fun NewMessageScreen(
     var creating by remember { mutableStateOf(false) }
     val circleNames = circles.associate { it.id to it.name }
     // You can no longer write into a circle you were removed from.
-    val shownCircles = circles.filter { !it.removed && matchesSearch(query, it.name) }
+    val shownCircles = circles.filter { !it.removed && it.id != invitedCircle && matchesSearch(query, it.name) }
     val supportPeer by controller.supportPeer.collectAsState()
     // The support identity is not a contact to write to; questions go through the form (ADR 0065).
     val shownPeople = people.filter { person -> person.peer != supportPeer && matchesSearch(query, person.name, *person.circleIds.map(circleNames::get).toTypedArray()) }
+        .sortedBy { invitedCircle in it.circleIds }
+    val invitedName = invitedCircle?.let(circleNames::get)
 
     Column(Modifier.fillMaxSize()) {
         AppHeader(title, leading = { HeaderBackButton(onBack) })
@@ -97,9 +101,15 @@ internal fun NewMessageScreen(
                 AppSection(texts.chat.contacts) {
                     shownPeople.forEach { person ->
                         val names = person.circleIds.mapNotNull(circleNames::get)
+                        val alreadyIn = invitedName != null && invitedCircle in person.circleIds
                         AppRow(
                             title = person.name,
-                            subtitle = if (names.isEmpty()) texts.chat.addedByYou else names.joinToString(" · "),
+                            subtitle = when {
+                                alreadyIn -> texts.chat.alreadyInCircle(invitedName.orEmpty())
+                                names.isEmpty() -> texts.chat.addedByYou
+                                else -> names.joinToString(" · ")
+                            },
+                            muted = alreadyIn,
                             leading = { PersonAvatar(controller, person.peer, person.image, 44.dp) },
                             onClickLabel = texts.chat.writeMessage,
                             onClick = { onPick(Conversation.Direct(person.peer)) },

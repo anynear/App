@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -344,7 +343,7 @@ private fun EndAlertDialog(alerts: Alerts, alert: Alert, onDismiss: () -> Unit) 
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val name = alert.title?.ifBlank { null } ?: alert.text.lineSequence().first().take(60)
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.alerts.endAlertTitle(name)) },
         text = { Text(texts.alerts.endAlertText) },
@@ -590,7 +589,7 @@ private fun ChannelSettingsSection(alerts: Alerts, channel: AlertChannel) {
 /** Test alarm has run: everything ready, or what is missing, each with a button to the matching setting. */
 @Composable
 private fun TestAlarmDialog(alerts: Alerts, problems: List<AlarmProblem>, onDismiss: () -> Unit) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.alerts.testTitle) },
         text = {
@@ -623,7 +622,7 @@ private fun problemText(problem: AlarmProblem): String = when (problem) {
 /** Choice among a few options; tapping applies it and closes. */
 @Composable
 private fun <T> ChoiceDialog(title: String, options: List<Pair<T, String>>, selected: T, onDismiss: () -> Unit, onPick: (T) -> Unit) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -654,7 +653,7 @@ private fun CreateChannelDialog(alerts: Alerts, onDismiss: () -> Unit, onCreated
     var name by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.alerts.createTitle) },
         text = {
@@ -689,7 +688,7 @@ private fun ComposeDialog(alerts: Alerts, channel: AlertChannel, onDismiss: () -
     var url by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.alerts.composeTitle) },
         text = {
@@ -741,7 +740,7 @@ private fun SubscribersSection(alerts: Alerts, channel: AlertChannel) {
     }
     removing?.let { s ->
         val name = s.name.ifBlank { texts.alerts.someone }
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { removing = null },
             title = { Text(texts.alerts.removeSubscriberTitle(name)) },
             text = { Text(texts.alerts.removeSubscriberText(name)) },
@@ -780,7 +779,7 @@ private fun AddressesSection(alerts: Alerts, channel: AlertChannel) {
     }
     if (adding) AddAddressDialog(alerts, channel, onDismiss = { adding = false })
     if (resetting) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { resetting = false },
             title = { Text(texts.alerts.resetLink) },
             text = { Text(texts.alerts.resetLinkText) },
@@ -810,7 +809,7 @@ private fun AddressView(alerts: Alerts, channel: AlertChannel, ingress: AlertIng
         AppButton(texts.alerts.revoke, { revoking = true }, kind = ButtonKind.Danger)
     }
     if (revoking) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { revoking = false },
             title = { Text(texts.alerts.revokeTitle(ingress.label)) },
             text = { Text(texts.alerts.revokeText) },
@@ -854,7 +853,7 @@ private fun AddAddressDialog(alerts: Alerts, channel: AlertChannel, onDismiss: (
     var label by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.alerts.addAddress) },
         text = {
@@ -884,7 +883,7 @@ private fun LeaveSection(alerts: Alerts, channel: AlertChannel) {
         AppRow(title = label, icon = AppIcons.Verlassen, danger = true, onClick = { asking = true })
     }
     if (asking) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { asking = false },
             title = { Text(texts.alerts.leaveTitle(channel.name)) },
             text = { Text(if (channel.owner) texts.alerts.removeText else texts.alerts.leaveText) },
@@ -902,7 +901,7 @@ private fun LeaveSection(alerts: Alerts, channel: AlertChannel) {
 /** Opened channel link: only after „Abonnieren“ does anything happen. */
 @Composable
 internal fun PendingChannelDialog(alerts: Alerts, pending: Alerts.PendingChannel) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = alerts::dismissPending,
         title = { Text(texts.alerts.joinTitle(pending.name)) },
         text = {
@@ -921,7 +920,7 @@ internal fun PendingChannelDialog(alerts: Alerts, pending: Alerts.PendingChannel
 /** Android: without access to „Nicht stören“ alarms do not get through there; one sentence, one button (like the battery hint). */
 @Composable
 internal fun AlarmAccessDialog(alerts: Alerts) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = alerts::postponeAccessHint,
         title = { Text(texts.alerts.accessTitle) },
         text = { Text(texts.alerts.accessText) },

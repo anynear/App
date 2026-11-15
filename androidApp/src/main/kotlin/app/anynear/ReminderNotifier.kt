@@ -11,7 +11,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.anynear.app.Reminder
 import app.anynear.i18n.texts
@@ -80,9 +79,11 @@ class ReminderNotifier(private val context: Context) {
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setContentIntent(open)
                 .setAutoCancel(true)
+                // Own group with a summary, apart from the background notification ([NotificationGroups]).
+                .setGroup(NotificationGroups.REMINDERS)
                 .build()
             try {
-                NotificationManagerCompat.from(context).notify(id, NOTIFICATION_ID, built)
+                NotificationGroups.notify(context, id, NOTIFICATION_ID, built)
             } catch (e: SecurityException) {
                 // Permission revoked in the meantime.
             }

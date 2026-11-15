@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -56,8 +55,8 @@ internal enum class ConnectionsPage { Main, Internet, Radio, RadioDetail }
 internal fun updateHint(state: AppUpdateState): String? = when (state) {
     is AppUpdateState.Available -> texts.settings.newVersionAvailable(state.version.ifBlank { null })
     is AppUpdateState.NeedsPermission -> texts.settings.newVersionAvailable(state.version.ifBlank { null })
-    is AppUpdateState.MovedToNewApp -> texts.backup.movedRow
-    is AppUpdateState.ReinstallNeeded -> texts.backup.reinstallRow
+    is AppUpdateState.MovedToNewApp -> texts.appMove.movedRow
+    is AppUpdateState.ReinstallNeeded -> texts.appMove.reinstallRow
     else -> null
 }
 
@@ -159,7 +158,7 @@ internal fun ConnectionsScreen(controller: AppController, onBack: () -> Unit, st
     }
 }
 
-/** Settings: appearance, language (follows the phone), notifications, restore a backup, advanced with troubleshooting. */
+/** Settings: appearance, language (follows the phone), notifications, emergency card, advanced with troubleshooting. */
 @Composable
 internal fun SettingsPageScreen(controller: AppController, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
@@ -174,7 +173,7 @@ internal fun SettingsPageScreen(controller: AppController, onBack: () -> Unit) {
                 AppRow(title = texts.settings.language, subtitle = texts.settings.languageCurrent, icon = AppIcons.Internet)
             }
             NotificationSection(controller)
-            BackupSection(controller)
+            AppSection { EmergencyCardRow(controller) }
             PrivacySection(controller)
             // Rarely needed and cannot be undone: at the very bottom, each with a confirmation (ADR 0046).
             if (controller.resetAvailable) StartOverSection(controller)
@@ -210,7 +209,7 @@ private fun PrivacySection(controller: AppController) {
         )
     }
     if (confirmOff) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { confirmOff = false },
             title = { Text(texts.settings.usageStatsOffTitle) },
             text = { Text(texts.settings.usageStatsOffText) },
@@ -264,7 +263,7 @@ private fun StartOverDialog(controller: AppController, kind: StartOver, onDismis
             busy = false
         }
     }
-    AlertDialog(
+    AppDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(if (erase) texts.settings.eraseTitle else texts.settings.resetTitle) },
         text = {
@@ -307,6 +306,8 @@ internal fun HelpScreen(controller: AppController, onBack: () -> Unit, onOpenCha
                     texts.settings.helpWhatIsCircle to texts.people.circleExplained,
                     texts.settings.helpWhatIsContactCode to texts.people.ownContactText,
                     texts.settings.helpNeedRadio to texts.settings.connectRadioHint,
+                    texts.settings.helpHowMessages to texts.settings.helpHowMessagesAnswer,
+                    texts.settings.helpInternetDown to texts.settings.helpInternetDownAnswer,
                 ).forEachIndexed { i, (question, answer) ->
                     ExpandRow(question, expanded = open == i) { open = if (open == i) -1 else i }
                     if (open == i) {
@@ -392,7 +393,7 @@ private fun EditProfileDialog(controller: AppController, onDismiss: () -> Unit) 
         }
     }
 
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.settings.editProfileTitle) },
         text = {

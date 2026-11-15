@@ -39,7 +39,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import app.anynear.i18n.texts
 import app.anynear.passwords.Otp
 import kotlinx.coroutines.delay
@@ -99,7 +98,7 @@ internal fun OtpAddDialog(onAdded: (Otp) -> Unit, onDismiss: () -> Unit) {
     var typing by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf<String?>(null) }
     var done by remember { mutableStateOf(false) }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = onDismiss, properties = AppFullScreenDialogProperties) {
         if (typing) {
             OtpKeyEntry(onAdded, onBack = { typing = false }, onDismiss)
             return@Dialog

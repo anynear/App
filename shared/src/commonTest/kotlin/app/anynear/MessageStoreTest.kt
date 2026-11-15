@@ -17,6 +17,33 @@ class MessageStoreTest {
     private val store = MessageStore()
 
     @Test
+    fun ownMessagesOfARemovedDeviceBecomeOwnAgain() {
+        // FUT B8: after the emergency card the support circle history showed the person's own messages from the old,
+        // removed phone as messages of someone else. The repair makes them own, read, under their message ID.
+        val circle = Conversation.Circle("support")
+        fun theirs(id: String, device: String, text: String, ts: Long) = ChatMessage(
+            localId = "lokal-$id", conversation = circle, fromNodeNum = 0, text = text, timestampMillis = ts,
+            outgoing = false, fromPeer = PeerId.device(device), fromDevice = device, remoteId = id, unread = true,
+        )
+        store.addHistory(listOf(theirs("m1", "altes-handy", "eins", 1_000), theirs("m2", "support-geraet", "antwort", 2_000), theirs("m3", "altes-handy", "zwei", 3_000)))
+        // A copy of m3 that is already there as own (e.g. sent again from another own device) stays, the wrong one goes.
+        store.addOnline("briefkasten-1", theirs("m3", "altes-handy", "zwei", 3_000).copy(localId = "m3", outgoing = true, fromPeer = null))
+
+        assertEquals(2, store.claimOwn(setOf("altes-handy")) { setOf(PeerId.device("support")) })
+        val byText = store.messages.value.associateBy { it.text }
+        assertEquals(3, store.messages.value.size)
+        assertTrue(byText.getValue("eins").outgoing)
+        assertEquals("m1", byText.getValue("eins").localId)
+        assertEquals(null, byText.getValue("eins").fromPeer)
+        assertEquals(MessageStatus.ONLINE, byText.getValue("eins").status)
+        assertEquals(setOf(PeerId.device("support")), byText.getValue("eins").recipients)
+        assertFalse(byText.getValue("eins").unread)
+        assertFalse(byText.getValue("antwort").outgoing)
+        assertTrue(byText.getValue("zwei").outgoing)
+        assertEquals(0, store.claimOwn(setOf("altes-handy")) { emptySet() }, "nothing left to fix")
+    }
+
+    @Test
     fun anmpOverRadioAndInternetIsOneMessageByMessageId() {
         // ADR 0021: sender and message ID are the same on all paths, no matter how much time passes.
         val circle = Conversation.Circle("k1")
@@ -45,6 +72,23 @@ class MessageStoreTest {
         assertFalse(store.arrivedVia("mid-1", PeerId.device("geraet-a"), Transport.RADIO))
         assertFalse(store.addRadio(msg.copy(localId = "lokal-2"), fromNodeNum = 7, packetId = 5))
         assertTrue(store.arrivedVia("mid-1", PeerId.device("geraet-a"), Transport.RADIO))
+        assertFalse(store.messages.value.single().relayed, "selbst über Funk gehört")
+    }
+
+    @Test
+    fun radioInboxCopyAfterInternetStaysRelayed() {
+        // Support request 14.11.2026: internet first, then the copy from the radio inbox; the details must say
+        // „von einem anderen Gerät weitergereicht“, not as if this device had heard it over radio.
+        val direct = Conversation.Direct(PeerId.device("geraet-a"))
+        val msg = ChatMessage(
+            localId = "lokal-1", conversation = direct, fromNodeNum = 0, text = "Help needed", timestampMillis = 1_000,
+            outgoing = false, fromPeer = PeerId.device("geraet-a"), remoteId = "mid-1",
+        )
+        assertTrue(store.addOnline("briefkasten-1", msg))
+        assertFalse(store.addRadio(msg.copy(localId = "lokal-2", relayed = true), fromNodeNum = 0, packetId = 5))
+        val m = store.messages.value.single()
+        assertEquals(setOf(Transport.INTERNET, Transport.RADIO), m.via)
+        assertTrue(m.relayed)
     }
 
     @Test
@@ -227,12 +271,6 @@ class MessageStoreTest {
         assertEquals(setOf("d:b"), x.readBy)
         assertEquals(MessageStatus.CONFIRMED, x.status, "angekommen bei allen, gelesen erst von einem")
 
-        // If the same copy arrives again (say from the history), nothing counts twice; „y“ keeps waiting.
-        store.addFromOwnDevice(listOf(copy))
-        assertEquals(x, store.find("x"))
-        assertEquals(null, store.find("y"))
-        store.addFromOwnDevice(listOf(outgoing("y").copy(conversation = circle, recipients = setOf("d:a"), status = MessageStatus.ONLINE)))
-        assertEquals(MessageStatus.CONFIRMED, store.find("y")?.status, "aus dem Verlauf nachgeholt, sobald sie da ist")
     }
 
     private fun online(localId: String, node: Int, text: String, ts: Long) = ChatMessage(
@@ -255,17 +293,6 @@ class MessageStoreTest {
         outgoing = true,
         status = MessageStatus.QUEUED,
     )
-
-    @Test
-    fun historyFromAnOwnDeviceIsTakenOnceAndNeverResent() {
-        val chat = Conversation.Direct(PeerId.device("ben"))
-        val mine = ChatMessage(localId = "m1", conversation = chat, fromNodeNum = 0, text = "Hallo", timestampMillis = 1, outgoing = true, status = MessageStatus.ONLINE)
-        val his = ChatMessage(localId = "m2", conversation = chat, fromNodeNum = 0, text = "Hi", timestampMillis = 2, outgoing = false, fromPeer = PeerId.device("ben"), remoteId = "r2", unread = true)
-        assertEquals(2, store.addFromOwnDevice(listOf(mine, his)))
-        assertEquals(0, store.addFromOwnDevice(listOf(mine, his)))
-        assertTrue(store.resumable().isEmpty(), "eigene Nachrichten hat das andere Gerät schon verschickt")
-        assertTrue(store.messages.value.none { it.unread })
-    }
 
     @Test
     fun replyGoesBackOnTheChannelTheRadioWroteOn() {

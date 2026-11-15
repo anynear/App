@@ -113,6 +113,9 @@ interface StatusTexts {
     val historyWaiting: String
     val historyLoading: String
 
+    /** Over the list of chats while a new device or one back from the emergency card still loads (ADR 0107 §8). */
+    val messagesLoading: String
+
     // --- Invitation and contact links ---
     val notAnInviteLink: String
     val inviteLinkBroken: String
@@ -211,6 +214,7 @@ internal object StatusTextsDe : StatusTexts {
 
     override val historyWaiting = "Frühere Nachrichten kommen, sobald jemand aus dem Kreis online ist."
     override val historyLoading = "Frühere Nachrichten werden geladen …"
+    override val messagesLoading = "Deine Nachrichten werden geladen …"
 
     override val notAnInviteLink = "Das ist kein $APP-Einladungslink."
     override val inviteLinkBroken = "Der Einladungslink ist beschädigt oder unvollständig."
@@ -304,6 +308,7 @@ internal object StatusTextsEn : StatusTexts {
 
     override val historyWaiting = "Earlier messages will arrive as soon as someone from the circle is online."
     override val historyLoading = "Loading earlier messages …"
+    override val messagesLoading = "Loading your messages …"
 
     override val notAnInviteLink = "That's not a $APP invite link."
     override val inviteLinkBroken = "The invite link is damaged or incomplete."

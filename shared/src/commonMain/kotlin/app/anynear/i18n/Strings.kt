@@ -27,8 +27,8 @@ class Strings private constructor(
     val files: FilesTexts,
     /** Passwords, for now only as a preview. */
     val passwords: PasswordTexts,
-    /** Manual backup and restore. */
-    val backup: BackupTexts,
+    /** Moving to a new app or installation (ADR 0025, 0037). */
+    val appMove: AppMoveTexts,
     /** Several devices, emergency card (ADR 0042). */
     val devices: DevicesTexts,
     /** Public radio of the area (ADR 0055). */
@@ -46,10 +46,10 @@ class Strings private constructor(
 ) {
     companion object {
         val german: Strings by lazy {
-            Strings(Language.GERMAN, CommonTextsDe, ChatTextsDe, PeopleTextsDe, SetupTextsDe, SettingsTextsDe, StatusTextsDe, SystemTextsDe, FilesTextsDe, PasswordTextsDe, BackupTextsDe, DevicesTextsDe, PublicRadioTextsDe, RadioSoftwareTextsDe, AlertTextsDe, SupportTextsDe, FindTextsDe, LifeSignTextsDe)
+            Strings(Language.GERMAN, CommonTextsDe, ChatTextsDe, PeopleTextsDe, SetupTextsDe, SettingsTextsDe, StatusTextsDe, SystemTextsDe, FilesTextsDe, PasswordTextsDe, AppMoveTextsDe, DevicesTextsDe, PublicRadioTextsDe, RadioSoftwareTextsDe, AlertTextsDe, SupportTextsDe, FindTextsDe, LifeSignTextsDe)
         }
         val english: Strings by lazy {
-            Strings(Language.ENGLISH, CommonTextsEn, ChatTextsEn, PeopleTextsEn, SetupTextsEn, SettingsTextsEn, StatusTextsEn, SystemTextsEn, FilesTextsEn, PasswordTextsEn, BackupTextsEn, DevicesTextsEn, PublicRadioTextsEn, RadioSoftwareTextsEn, AlertTextsEn, SupportTextsEn, FindTextsEn, LifeSignTextsEn)
+            Strings(Language.ENGLISH, CommonTextsEn, ChatTextsEn, PeopleTextsEn, SetupTextsEn, SettingsTextsEn, StatusTextsEn, SystemTextsEn, FilesTextsEn, PasswordTextsEn, AppMoveTextsEn, DevicesTextsEn, PublicRadioTextsEn, RadioSoftwareTextsEn, AlertTextsEn, SupportTextsEn, FindTextsEn, LifeSignTextsEn)
         }
 
         fun of(language: Language): Strings = when (language) {

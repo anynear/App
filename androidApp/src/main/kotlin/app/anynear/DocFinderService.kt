@@ -34,7 +34,9 @@ class DocFinderService : Service() {
         ensureChannel(this)
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
         try {
-            ServiceCompat.startForeground(this, PROGRESS_ID, Keeper.progressNotification(this), type)
+            val progress = Keeper.progressNotification(this)
+            ServiceCompat.startForeground(this, PROGRESS_ID, progress, type)
+            NotificationGroups.summarize(this, NotificationGroups.DOC_FINDER, posted = NotificationGroups.Shown(null, PROGRESS_ID, progress))
         } catch (e: Exception) {
             // Android does not allow the service (e.g. time limit reached): the run pauses in the background as before.
             Keeper.started = false
@@ -53,6 +55,7 @@ class DocFinderService : Service() {
 
     override fun onDestroy() {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        NotificationGroups.summarize(this, NotificationGroups.DOC_FINDER, removed = NotificationGroups.Shown(null, PROGRESS_ID, null))
         super.onDestroy()
     }
 
@@ -82,8 +85,7 @@ class DocFinderService : Service() {
             Companion.pause = pause
             // Only as long as the service runs; otherwise the display would claim „sucht“ while the run waits.
             if (!started) return
-            val manager = context.getSystemService(NotificationManager::class.java) ?: return
-            manager.notify(PROGRESS_ID, progressNotification(context))
+            NotificationGroups.notify(context, null, PROGRESS_ID, progressNotification(context))
         }
 
         override fun end(found: Int, completed: Boolean, visible: Boolean) {
@@ -94,30 +96,30 @@ class DocFinderService : Service() {
             // Only those who do not see the app right now get the alert; otherwise the result is already in the list.
             if (!completed || visible || found == 0) return
             ensureChannel(context)
-            val manager = context.getSystemService(NotificationManager::class.java) ?: return
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(AppBrand.notificationIcon)
                 .setContentTitle(texts.find.foundTitle(found))
                 .setContentText(texts.find.foundText)
                 .setContentIntent(openApp(context))
                 .setAutoCancel(true)
+                .setGroup(NotificationGroups.DOC_FINDER)
                 .build()
-            manager.notify(FOUND_ID, notification)
+            NotificationGroups.notify(context, null, FOUND_ID, notification)
         }
 
         /** New documents found automatically (ADR 0081): one notification, a tap opens the suggestions. */
         override fun foundNew(found: Int) {
             if (found == 0) return
             ensureChannel(context)
-            val manager = context.getSystemService(NotificationManager::class.java) ?: return
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(AppBrand.notificationIcon)
                 .setContentTitle(texts.find.newFoundTitle(found))
                 .setContentText(texts.find.foundText)
                 .setContentIntent(openApp(context))
                 .setAutoCancel(true)
+                .setGroup(NotificationGroups.DOC_FINDER)
                 .build()
-            manager.notify(FOUND_ID, notification)
+            NotificationGroups.notify(context, null, FOUND_ID, notification)
         }
 
         companion object {
@@ -159,8 +161,8 @@ class DocFinderService : Service() {
                     .setContentIntent(openApp(context))
                     .addAction(0, texts.find.stop, stopIntent)
                     .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-                    // Own group, not bundled with messages (like [MeshConnectionService]).
-                    .setGroup(CHANNEL_ID)
+                    // Own group with a summary, apart from the background notification ([NotificationGroups]).
+                    .setGroup(NotificationGroups.DOC_FINDER)
                     .build()
             }
         }

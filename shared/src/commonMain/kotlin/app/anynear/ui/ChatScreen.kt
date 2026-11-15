@@ -88,7 +88,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -349,13 +348,14 @@ internal fun ChatScreen(
                 return@Column
             }
 
-            // New in the circle: as long as the history is missing, a calm sentence at the top (ADR 0014).
-            val circleId = (conversation as? Conversation.Circle)?.circleId
+            // As long as messages of this chat are still coming (new in the circle, new device, back from the emergency
+            // card), a calm sentence at the top (ADR 0014, 0107 §8).
             val circleList by controller.circles.collectAsState()
+            val loading by controller.historyLoading.collectAsState()
             var historyHint by remember(conversation) { mutableStateOf<String?>(null) }
-            LaunchedEffect(conversation, circleList) {
+            LaunchedEffect(conversation, circleList, loading) {
                 while (true) {
-                    historyHint = circleId?.let(controller::historyHint)
+                    historyHint = controller.historyHint(conversation)
                     if (historyHint == null) break
                     delay(30_000)
                 }
@@ -635,9 +635,9 @@ internal fun ChatScreen(
     }
 }
 
-/** Strip „Frühere Nachrichten werden geladen …“ as long as the history is missing (ADR 0014). */
+/** Strip „Frühere Nachrichten werden geladen …“ as long as the history is missing (ADR 0014, 0107 §8). */
 @Composable
-private fun HistoryStrip(text: String) {
+internal fun HistoryStrip(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.labelLarge,
@@ -841,7 +841,7 @@ private fun MessageBubble(
     }
     if (deleting) {
         val forEveryone = controller.canDeleteForEveryone(message)
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { deleting = false },
             title = { Text(texts.chat.delete) },
             text = { Text(texts.chat.deleteHint) },

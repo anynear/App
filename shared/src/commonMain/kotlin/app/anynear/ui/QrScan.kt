@@ -24,7 +24,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import app.anynear.app.AppController
 import app.anynear.chats.findAppLink
 import app.anynear.i18n.texts
@@ -38,14 +37,14 @@ import kotlinx.coroutines.delay
 internal expect fun QrCameraView(onCode: (String) -> Unit, modifier: Modifier = Modifier)
 
 /**
- * Full screen for scanning the QR code of an invitation or a contact. An anynear code is taken over
- * immediately like a tapped link, other codes only result in a short hint.
+ * Full screen for scanning an anynear QR code (invitation, contact, new own device). An anynear code is taken over
+ * immediately like a tapped link, other codes only result in a short hint. [help] is the sentence at the bottom.
  */
 @Composable
-internal fun QrScanDialog(controller: AppController, onDismiss: () -> Unit) {
+internal fun QrScanDialog(controller: AppController, help: String = texts.people.scanHelp, onDismiss: () -> Unit) {
     var hint by remember { mutableStateOf<String?>(null) }
     var done by remember { mutableStateOf(false) }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = onDismiss, properties = AppFullScreenDialogProperties) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             QrCameraView(
                 onCode = { text ->
@@ -68,7 +67,7 @@ internal fun QrScanDialog(controller: AppController, onDismiss: () -> Unit) {
             }
             Column(Modifier.align(Alignment.BottomCenter).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    hint ?: texts.people.scanHelp,
+                    hint ?: help,
                     color = Color.White,
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,

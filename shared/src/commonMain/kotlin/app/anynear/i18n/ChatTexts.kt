@@ -12,6 +12,7 @@ interface ChatTexts {
     val circle: String
     val noLongerInCircle: String
     val noMessagesYet: String
+    val loadingMessages: String
 
     // New message
     val whoToMessage: String
@@ -211,6 +212,8 @@ interface ChatTexts {
     fun readAt(time: String): String
     val notReadYet: String
     val viewProfile: String
+    val chatActions: String
+    fun alreadyInCircle(circle: String): String
     val showDetailsAndReactions: String
     val react: String
     val emptyChatList: String
@@ -282,6 +285,7 @@ internal object ChatTextsDe : ChatTexts {
     override val circle = "Kreis"
     override val noLongerInCircle = "Du bist nicht mehr in diesem Kreis"
     override val noMessagesYet = "Noch keine Nachrichten"
+    override val loadingMessages = "Wird geladen …"
 
     override val whoToMessage = "Wem möchtest du schreiben?"
     override val shareTitle = "Teilen"
@@ -442,6 +446,8 @@ internal object ChatTextsDe : ChatTexts {
     override fun readAt(time: String) = "Gelesen: $time"
     override val notReadYet = "Noch nicht gelesen"
     override val viewProfile = "Profil ansehen"
+    override val chatActions = "Mehr Aktionen"
+    override fun alreadyInCircle(circle: String) = "Schon in „$circle“"
     override val showDetailsAndReactions = "Einzelheiten und Reaktionen zeigen"
     override val react = "Reagieren"
     override val emptyChatList = "Noch keine Nachrichten. Tippe auf „Neue Nachricht“, um jemandem zu schreiben."
@@ -450,7 +456,7 @@ internal object ChatTextsDe : ChatTexts {
     override val allowBluetoothTitle = "Bluetooth erlauben?"
     override val allowBluetoothText = "Dein Funkgerät ist hinterlegt. Damit $APP es erreicht, braucht die App Zugriff auf Bluetooth."
     override val allow = "Erlauben"
-    override val emptyNobodyYet = "Hier erscheinen deine Gespräche. Füge zuerst einen Menschen hinzu oder gründe einen Kreis."
+    override val emptyNobodyYet = "Hier erscheinen deine Gespräche. Füge zuerst einen Kontakt hinzu oder gründe einen Kreis."
     override val emptyInviteHint = "Du hast eine Einladung bekommen? Tippe einfach auf den Link."
     override fun firstMessageTo(name: String) = "Schreib $name die erste Nachricht."
     override fun circleReadsAlong(circle: String) = "Alle im Kreis „$circle“ lesen mit."
@@ -505,6 +511,7 @@ internal object ChatTextsEn : ChatTexts {
     override val circle = "circle"
     override val noLongerInCircle = "You're no longer in this circle"
     override val noMessagesYet = "No messages yet"
+    override val loadingMessages = "Loading …"
 
     override val whoToMessage = "Who do you want to message?"
     override val shareTitle = "Share"
@@ -665,6 +672,8 @@ internal object ChatTextsEn : ChatTexts {
     override fun readAt(time: String) = "Read: $time"
     override val notReadYet = "Not read yet"
     override val viewProfile = "View profile"
+    override val chatActions = "More actions"
+    override fun alreadyInCircle(circle: String) = "Already in “$circle”"
     override val showDetailsAndReactions = "Show details and reactions"
     override val react = "React"
     override val emptyChatList = "No messages yet. Tap “New message” to write to someone."
@@ -673,7 +682,7 @@ internal object ChatTextsEn : ChatTexts {
     override val allowBluetoothTitle = "Allow Bluetooth?"
     override val allowBluetoothText = "Your radio is set up. To reach it, $APP needs access to Bluetooth."
     override val allow = "Allow"
-    override val emptyNobodyYet = "Your conversations will appear here. First add a person or start a circle."
+    override val emptyNobodyYet = "Your conversations will appear here. First add a contact or start a circle."
     override val emptyInviteHint = "Got an invite? Just tap the link."
     override fun firstMessageTo(name: String) = "Write the first message to $name."
     override fun circleReadsAlong(circle: String) = "Everyone in the circle “$circle” reads along."

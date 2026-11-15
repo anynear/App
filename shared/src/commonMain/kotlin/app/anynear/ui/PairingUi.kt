@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -65,7 +64,7 @@ internal fun PairingTroubleDialog(controller: AppController) {
         controller.openUsbRescue()
     }
     val stillFails = level >= 2 && rescue
-    AlertDialog(
+    AppDialog(
         onDismissRequest = dismiss,
         title = { Text(if (stillFails) texts.settings.pairingStillFails else texts.settings.pairingFails) },
         // Second way in the content, not in the button bar: three stacked buttons do not fit there (hardware test 03.11.2026).
@@ -95,7 +94,7 @@ internal fun PairingTroubleDialog(controller: AppController) {
  */
 @Composable
 internal fun RadioInUseDialog(controller: AppController) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = controller::leaveRadioElsewhere,
         title = { Text(texts.settings.radioInUseTitle) },
         text = { Text(texts.settings.radioInUseText, Modifier.verticalScroll(rememberScrollState())) },

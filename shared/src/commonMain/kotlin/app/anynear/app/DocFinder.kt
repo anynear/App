@@ -151,7 +151,7 @@ object NoFinderSchedule : FinderSchedule {
 
 /**
  * Remembers only on this phone (item 7): whether the card is gone (key-value store), which photos have already been
- * looked at without a hit and which ones were accepted or deselected (encrypted, not in the backup).
+ * looked at without a hit and which ones were accepted or deselected (encrypted, only on this device).
  */
 class FinderMemory(
     private val values: KeyValueStore,
@@ -252,7 +252,7 @@ class FinderMemory(
     }
 
     companion object {
-        /** Not in `APP_BINARY_DIRS`: not in the backup, but deleted on reset. */
+        /** Not in `APP_BINARY_DIRS`, but deleted on reset. */
         const val DIR_NAME = "doc-finder"
         private const val BLOB = "seen"
         private const val RUN = "run"

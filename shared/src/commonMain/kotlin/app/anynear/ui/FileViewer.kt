@@ -49,7 +49,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import app.anynear.i18n.texts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -251,7 +250,7 @@ private fun ViewerFrame(
     barActions: Boolean = true,
     content: @Composable androidx.compose.foundation.layout.BoxScope.(ViewerActions) -> Unit,
 ) {
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = onClose, properties = AppFullScreenDialogProperties) {
         val scope = rememberCoroutineScope()
         var hint by remember { mutableStateOf<String?>(null) }
         val save: () -> Unit = {

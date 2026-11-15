@@ -52,7 +52,7 @@ interface RadioSoftwareTexts {
     val usbNoDeviceHint: String
     val usbTitle: String
     val usbChooseUse: String
-    val usbSetupNotPossible: String
+    val usbSetupAlready: String
     val usbUseNotPossible: String
     val usbSwitchToBluetooth: String
     val usbSwitchToWifi: String
@@ -98,9 +98,19 @@ interface RadioSoftwareTexts {
     val usbNotSeenWifi: String
     val usbNotSeenUsb: String
     fun usbPairedWifi(name: String): String
+
+    /** Wi-Fi name and password are on the radio; it restarts and joins [ssid] (FUT 14.11.2026). */
+    fun usbWifiJoining(ssid: String): String
+
+    /** The radio took name and password but did not get into the Wi-Fi. */
+    val usbWifiNotJoined: String
+
+    /** Joined and connected: the confirmation the user test missed. */
+    fun usbPairedWifiIn(ssid: String): String
     fun usbPairedUsb(name: String): String
     val usbChooseText: String
     val usbChooseSetup: String
+    val usbChooseSetupAgain: String
     val usbChooseRescue: String
     val usbChooseRescueHint: String
     val usbPairing: String
@@ -200,7 +210,7 @@ internal object RadioSoftwareTextsDe : RadioSoftwareTexts {
         "Viele Kabel können nur laden. Nimm eins, mit dem du auch Fotos auf einen Computer überträgst. Leuchtet das Funkgerät nicht, bekommt es keinen Strom. Bei manchen Handys musst du in den Einstellungen außerdem „OTG“ einschalten. Steck es dann neu ein und tippe auf „Suchen“."
     override val usbTitle = "Funkgerät am USB-Kabel"
     override val usbChooseUse = "Funkgerät per USB-Kabel benutzen"
-    override val usbSetupNotPossible = "Geht nicht: Es ist schon für $APP eingerichtet."
+    override val usbSetupAlready = "Es ist schon für $APP eingerichtet. Du wählst nur neu, wie du es nutzt."
     override val usbUseNotPossible = "Geht erst, wenn es für $APP eingerichtet ist."
     override val usbSwitchToBluetooth = "Auf Bluetooth umstellen"
     override val usbSwitchToWifi = "Auf WLAN umstellen"
@@ -215,35 +225,39 @@ internal object RadioSoftwareTextsDe : RadioSoftwareTexts {
     override val usbPickInstallHint = "Das Modell steht meist auf dem Gerät oder der Verpackung. Ein falsch gewähltes lässt sich durch erneutes Aufspielen beheben."
     override val usbInstallDownloading = "Software wird geladen …"
     override val usbInstalling = "Meshtastic wird aufgespielt …"
-    override val usbInstallKeepPlugged = "Lass das Kabel stecken, bis es fertig ist. Das dauert etwa eine Minute."
+    override val usbInstallKeepPlugged = "Zieh das Kabel nicht ab, bis es fertig ist. Das dauert etwa eine Minute."
     override val usbInstallFailed = "Das Aufspielen hat nicht geklappt. Steck das Funkgerät noch einmal ein und versuch es erneut. Kaputtgehen kann dabei nichts."
     override val usbReinstallEsp = "Meshtastic neu aufspielen"
     override val usbChangeMode = "Unterwegs oder stationär umstellen"
     override val usbModeTitle = "Wie nutzt du das Funkgerät?"
     override val usbModeMobile = "Unterwegs"
-    override val usbModeMobileHint = "Es verbindet sich per Bluetooth mit deinem Handy. Gut, wenn du es mitnimmst."
+    override val usbModeMobileHint = "Es verbindet sich per Bluetooth mit deinem Handy. Gut, wenn du es unterwegs dabeihaben möchtest. Wichtig: Bluetooth reicht nur etwa 10 Meter, lass das Funkgerät in der Nähe deines Handys."
     override val usbModeStationary = "Stationär im WLAN"
     override val usbModeStationaryHint = "Es bleibt zu Hause am Strom und hängt im WLAN."
-    override val usbModePowerNote = "Ehrlich gesagt: Im WLAN hängt das Funkgerät am Router. Fällt der Strom aus, ist auch das WLAN weg und du kannst es nicht nutzen. Dann steck es per USB-Kabel ans Handy: Du kannst es direkt so benutzen oder mit einem Tipp auf Bluetooth umstellen."
+    override val usbModePowerNote = "Wichtig: Im WLAN hängt das Funkgerät am Router. Fällt der Strom aus, ist auch das WLAN weg und du kannst es nicht nutzen. Dann steck es per USB-Kabel ans Handy: Du kannst es direkt so benutzen oder unter „Verbindungen und Funkgerät“ mit einem Tipp auf Bluetooth umstellen."
     override val usbWifiText = "Mit welchem WLAN soll sich das Funkgerät verbinden? Dein Handy muss im selben WLAN sein. Das Passwort geht nur aufs Funkgerät, $APP speichert es nicht."
     override val usbWifiName = "WLAN-Name"
     override val usbWifiPassword = "Passwort"
     override val usbWifiConnect = "Verbinden"
     override val usbWifiFailed = "Das hat nicht geklappt. Versuch es noch einmal."
     override val usbWifiAgain = "WLAN neu eingeben"
-    override val usbPairingWifi = "Dein Funkgerät startet neu und meldet sich gleich im WLAN …"
+    override val usbPairingWifi = "$APP verbindet sich mit deinem Funkgerät im WLAN …"
     override val usbPairingUsb = "Wird über das Kabel verbunden …"
     override val usbNotSeenWifi = "Das Funkgerät meldet sich nicht im WLAN. Stimmen Name und Passwort, und ist dein Handy im selben WLAN?"
     override val usbNotSeenUsb = "Über das Kabel klappt die Verbindung nicht. Steck es noch einmal ein und versuch es erneut."
     override fun usbPairedWifi(name: String) = "„$name“ ist über das WLAN verbunden. Du kannst das Kabel abziehen."
+    override fun usbWifiJoining(ssid: String) = "Dein Funkgerät startet neu und verbindet sich mit „$ssid“. Das dauert bis zu einer Minute. Lass das Kabel bis dahin stecken."
+    override val usbWifiNotJoined = "Dein Funkgerät kommt nicht ins WLAN. Prüf den WLAN-Namen und das Passwort (auf Groß- und Kleinschreibung achten) und ob das Funkgerät nah genug am Router steht."
+    override fun usbPairedWifiIn(ssid: String) = "Dein Funkgerät ist jetzt im WLAN „$ssid“ und mit $APP verbunden. Du kannst das Kabel abziehen."
     override fun usbPairedUsb(name: String) = "„$name“ ist per USB-Kabel verbunden. Lass das Kabel stecken, solange du es so nutzt."
     override val usbChooseText = "Was möchtest du mit dem Funkgerät machen?"
     override val usbChooseSetup = "Neues Funkgerät einrichten"
+    override val usbChooseSetupAgain = "Funkgerät erneut einrichten"
     override val usbChooseRescue = "Funkgerät retten"
     override val usbChooseRescueHint = "Retten hilft, wenn dein Funkgerät nicht mehr richtig läuft oder sich nicht mehr koppeln lässt."
     override val usbPairing = "Dein Funkgerät wird über Bluetooth gesucht und gekoppelt …"
-    override val usbPairingHint = "Gleich fragt dein Handy nach einer Zahl. Sie steht auf dem Display des Funkgeräts, ohne Display ist es 123456."
-    override fun usbPaired(name: String) = "„$name“ wird gekoppelt. Gib die Zahl vom Display ein, die dein Handy abfragt. Danach kannst du das Kabel abziehen."
+    override val usbPairingHint = "Gleich wirst du nach einer Zahl gefragt. Sie steht auf dem Display des Funkgeräts, ohne Display ist es 123456."
+    override fun usbPaired(name: String) = "„$name“ wird gekoppelt. Gib die Zahl vom Display ein, wenn du danach gefragt wirst. Danach kannst du das Kabel abziehen."
     override fun usbPairedConnected(name: String) = "„$name“ ist verbunden. Du kannst das Kabel abziehen."
     override val usbNotSeen =
         "Das Funkgerät taucht über Bluetooth nicht auf. Ist es gerade mit einem anderen Handy oder der Meshtastic-App verbunden? Trenne es dort und versuch es noch einmal."
@@ -335,7 +349,7 @@ internal object RadioSoftwareTextsEn : RadioSoftwareTexts {
         "Many cables can only charge. Use one you'd also use to copy photos to a computer. If the radio doesn't light up, it gets no power. On some phones you also need to turn on “OTG” in the settings. Then plug it in again and tap “Search”."
     override val usbTitle = "Radio on the USB cable"
     override val usbChooseUse = "Use the radio with a USB cable"
-    override val usbSetupNotPossible = "Not possible: it's already set up for $APP."
+    override val usbSetupAlready = "It's already set up for $APP. You only choose again how you use it."
     override val usbUseNotPossible = "Only possible once it's set up for $APP."
     override val usbSwitchToBluetooth = "Switch to Bluetooth"
     override val usbSwitchToWifi = "Switch to Wi-Fi"
@@ -350,35 +364,39 @@ internal object RadioSoftwareTextsEn : RadioSoftwareTexts {
     override val usbPickInstallHint = "The model is usually printed on the device or the box. If you pick the wrong one, just install again."
     override val usbInstallDownloading = "Loading the software …"
     override val usbInstalling = "Installing Meshtastic …"
-    override val usbInstallKeepPlugged = "Keep the cable plugged in until it's done. This takes about a minute."
+    override val usbInstallKeepPlugged = "Don't unplug the cable until it's done. This takes about a minute."
     override val usbInstallFailed = "Installing didn't work. Plug the radio in again and try once more. Nothing can break."
     override val usbReinstallEsp = "Install Meshtastic again"
     override val usbChangeMode = "Switch between on the move and stationary"
     override val usbModeTitle = "How will you use the radio?"
     override val usbModeMobile = "On the move"
-    override val usbModeMobileHint = "It connects to your phone over Bluetooth. Good if you take it with you."
+    override val usbModeMobileHint = "It connects to your phone over Bluetooth. Good if you want to take it with you. Important: Bluetooth only reaches about 10 meters (30 feet), so keep the radio near your phone."
     override val usbModeStationary = "Stationary on Wi-Fi"
     override val usbModeStationaryHint = "It stays at home, plugged in, on your Wi-Fi."
-    override val usbModePowerNote = "To be honest: on Wi-Fi the radio depends on your router. If the power goes out, the Wi-Fi is gone too and you can't use it. Then plug it into your phone with a USB cable: you can use it that way right away or switch it to Bluetooth with one tap."
+    override val usbModePowerNote = "Important: on Wi-Fi the radio depends on your router. If the power goes out, the Wi-Fi is gone too and you can't use it. Then plug it into your phone with a USB cable: you can use it that way right away, or switch it to Bluetooth with one tap under “Connections and radio”."
     override val usbWifiText = "Which Wi-Fi should the radio join? Your phone needs to be on the same Wi-Fi. The password only goes to the radio; $APP doesn't store it."
     override val usbWifiName = "Wi-Fi name"
     override val usbWifiPassword = "Password"
     override val usbWifiConnect = "Connect"
     override val usbWifiFailed = "That didn't work. Try again."
     override val usbWifiAgain = "Enter Wi-Fi again"
-    override val usbPairingWifi = "Your radio is restarting and will show up on your Wi-Fi in a moment …"
+    override val usbPairingWifi = "$APP is connecting to your radio on your Wi-Fi …"
     override val usbPairingUsb = "Connecting over the cable …"
     override val usbNotSeenWifi = "The radio doesn't show up on your Wi-Fi. Are the name and password right, and is your phone on the same Wi-Fi?"
     override val usbNotSeenUsb = "Connecting over the cable didn't work. Plug it in again and try once more."
     override fun usbPairedWifi(name: String) = "“$name” is connected over Wi-Fi. You can unplug the cable."
+    override fun usbWifiJoining(ssid: String) = "Your radio is restarting and joining “$ssid”. This takes up to a minute. Keep the cable plugged in until then."
+    override val usbWifiNotJoined = "Your radio can't get onto the Wi-Fi. Check the Wi-Fi name and password (they're case-sensitive) and whether the radio is close enough to the router."
+    override fun usbPairedWifiIn(ssid: String) = "Your radio is now on the Wi-Fi “$ssid” and connected to $APP. You can unplug the cable."
     override fun usbPairedUsb(name: String) = "“$name” is connected with the USB cable. Keep it plugged in while you use it this way."
     override val usbChooseText = "What would you like to do with the radio?"
     override val usbChooseSetup = "Set up a new radio"
+    override val usbChooseSetupAgain = "Set up the radio again"
     override val usbChooseRescue = "Rescue the radio"
     override val usbChooseRescueHint = "Rescuing helps if your radio no longer works properly or won't pair anymore."
     override val usbPairing = "Looking for your radio over Bluetooth and pairing it …"
-    override val usbPairingHint = "Your phone will ask for a number in a moment. It's shown on the radio's display; without a display it's 123456."
-    override fun usbPaired(name: String) = "Pairing “$name”. Enter the number from the display when your phone asks for it. Then you can unplug the cable."
+    override val usbPairingHint = "You'll be asked for a number in a moment. It's shown on the radio's display; without a display it's 123456."
+    override fun usbPaired(name: String) = "Pairing “$name”. Enter the number from the display when you're asked for it. Then you can unplug the cable."
     override fun usbPairedConnected(name: String) = "“$name” is connected. You can unplug the cable."
     override val usbNotSeen =
         "The radio doesn't show up over Bluetooth. Is it connected to another phone or the Meshtastic app right now? Disconnect it there and try again."

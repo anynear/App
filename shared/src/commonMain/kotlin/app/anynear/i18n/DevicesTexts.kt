@@ -10,19 +10,20 @@ interface DevicesTexts {
     fun added(date: String): String
     val add: String
     val addText: String
-    val addPaste: String
-    val addPasteHint: String
+    val scanHint: String
+    val scanHelp: String
     val compareTitle: String
     val compareText: String
     val compareYes: String
     val compareNo: String
     val compareMismatch: String
     val pairingCodeText: String
-    val previousTitle: String
-    fun previousText(name: String): String
-    val previousKept: String
-    val previousLost: String
-    val previousStolen: String
+    val replaceTitle: String
+    val replaceText: String
+    val replaceNone: String
+    val replaceRemoved: String
+    val replaceWorking: String
+    val replaceFailed: String
     val addConfirmTitle: String
     val addConfirmText: String
     val addReason: String
@@ -42,7 +43,6 @@ interface DevicesTexts {
     val lockOutFailedNoCode: String
     val lockOutDone: String
     val lockOutFailed: String
-    fun lineNewDevice(person: String, device: String): String
     fun unknownTitle(name: String): String
     val unknownText: String
     val unknownYes: String
@@ -70,6 +70,11 @@ interface DevicesTexts {
     val cardWrong: String
     val cardFailed: String
     val cardOldCode: String
+    val cardCopied: String
+    val cardPrint: String
+    val cardPrintTitle: String
+    val cardPrintText: String
+    fun cardPrintDate(date: String): String
 
     val returning: String
     val returningTitle: String
@@ -77,7 +82,6 @@ interface DevicesTexts {
     val returningOtherDeviceText: String
     val returningCard: String
     val returningCardText: String
-    val returningBackup: String
     val pairingTitle: String
     val pairingText: String
     val pairingWaiting: String
@@ -89,6 +93,7 @@ interface DevicesTexts {
     val recoverNotFound: String
     val recoverLater: String
     val newDeviceName: String
+    val newDeviceNameHint: String
 }
 
 internal object DevicesTextsDe : DevicesTexts {
@@ -99,20 +104,21 @@ internal object DevicesTextsDe : DevicesTexts {
     override val unnamed = "Gerät ohne Namen"
     override fun added(date: String) = "Dabei seit $date"
     override val add = "Gerät hinzufügen"
-    override val addText = "Öffne $APP auf dem neuen Gerät und tippe auf „Ich hatte $APP schon“. Scanne dann den Code dort mit der Kamera, oder füge den Link hier ein."
-    override val addPaste = "Link vom neuen Gerät"
-    override val addPasteHint = "Nur, wenn das neue Gerät vor dir liegt. Schickt dir jemand einen solchen Link, füge ihn nicht ein."
-    override val compareTitle = "Gleicher Code?"
+    override val addText = "Öffne $APP auf dem neuen Gerät und tippe auf „Ich habe $APP schon“. Scanne dann den Code dort mit der Kamera."
+    override val scanHint = "Code auf dem neuen Gerät"
+    override val scanHelp = "Halte die Kamera auf den QR-Code auf dem neuen Gerät."
+    override val compareTitle = "Stimmt die Zahl überein?"
     override val compareText = "Steht auf dem neuen Gerät auch diese Zahl?"
-    override val compareYes = "Ja, gleich"
+    override val compareYes = "Ja, stimmt überein"
     override val compareNo = "Nein"
     override val compareMismatch = "Nicht hinzugefügt. Füge nur ein Gerät hinzu, das vor dir liegt und dieselbe Zahl zeigt."
     override val pairingCodeText = "Dein anderes Gerät zeigt gleich diese Zahl. Sie muss gleich sein."
-    override val previousTitle = "Hast du dein altes Handy noch?"
-    override fun previousText(name: String) = "Die Sicherung kam von „$name“. Es steht noch in „Meine Geräte“."
-    override val previousKept = "Ja, habe ich noch"
-    override val previousLost = "Nein, verloren oder kaputt"
-    override val previousStolen = "Nein, gestohlen"
+    override val replaceTitle = "Ersetzt dieses Handy eins deiner Geräte?"
+    override val replaceText = "Es übernimmt dann dessen Einstellungen, und das alte Gerät verschwindet aus „Meine Geräte“."
+    override val replaceNone = "Nein, es ist zusätzlich"
+    override val replaceRemoved = "nicht mehr in „Meine Geräte“"
+    override val replaceWorking = "Einstellungen werden geholt …"
+    override val replaceFailed = "Das hat nicht geklappt. Prüf die Internetverbindung und versuch es noch mal."
     override val addConfirmTitle = "Gerät hinzufügen?"
     override val addConfirmText = "Das neue Gerät bekommt deine Kreise, Kontakte und Nachrichten. Füge nur eigene Geräte hinzu."
     override val addReason = "Gerät hinzufügen"
@@ -132,7 +138,6 @@ internal object DevicesTextsDe : DevicesTexts {
     override val lockOutFailedNoCode = "Das hat nicht geklappt. Prüfe die Verbindung."
     override val lockOutDone = "Gerät ausgesperrt."
     override val lockOutFailed = "Das hat nicht geklappt. Prüfe den Code und die Verbindung."
-    override fun lineNewDevice(person: String, device: String) = if (device.isBlank()) "$person nutzt $APP jetzt auch auf einem weiteren Gerät" else "$person nutzt $APP jetzt auch auf „$device“"
     override fun unknownTitle(name: String) = "Neues Gerät: „$name“"
     override val unknownText = "Warst du das?"
     override val unknownYes = "Ja"
@@ -153,21 +158,25 @@ internal object DevicesTextsDe : DevicesTexts {
     override val cardCreate = "Notfallkarte erstellen"
     override val cardRenew = "Neue Notfallkarte"
     override val cardDone = "Du hast eine Notfallkarte."
-    override val cardShowText = "Schreib diesen Code auf oder mach ein Foto und leg es an einen sicheren Ort. Wer ihn hat, kann dein $APP übernehmen."
+    override val cardShowText = "Schreib diesen Code auf, druck ihn aus oder mach ein Foto und leg es an einen sicheren Ort. Wer ihn hat, kann dein $APP übernehmen."
     override val cardNext = "Aufgeschrieben"
     override val cardTypeText = "Tipp den Code zur Kontrolle einmal ab."
     override val cardCode = "Code der Notfallkarte"
     override val cardWrong = "Der Code stimmt nicht. Schau noch einmal genau hin."
     override val cardFailed = "Gerade nicht möglich. Prüfe die Internetverbindung."
     override val cardOldCode = "Code der bisherigen Notfallkarte"
+    override val cardCopied = "Kopiert"
+    override val cardPrint = "Drucken"
+    override val cardPrintTitle = "$APP Notfallkarte"
+    override val cardPrintText = "Mit diesem Code holst du $APP auf ein neues Handy, auch wenn deine Geräte weg sind: Kreise, Kontakte, Nachrichten, Dateien und Passwörter. Bewahre die Karte sicher auf, etwa bei deinen Ausweisen. Wer den Code hat, kann dein $APP übernehmen."
+    override fun cardPrintDate(date: String) = "Erstellt am $date"
 
-    override val returning = "Ich hatte $APP schon"
+    override val returning = "Ich habe $APP schon"
     override val returningTitle = "Wie holst du $APP hierher?"
-    override val returningOtherDevice = "Mein anderes Gerät ist da"
+    override val returningOtherDevice = "Als weiteres Gerät einrichten"
     override val returningOtherDeviceText = "Handy oder Tablet mit $APP in der Nähe"
     override val returningCard = "Mit der Notfallkarte"
-    override val returningCardText = "Wenn das alte Handy weg ist"
-    override val returningBackup = "Aus einer Sicherungsdatei"
+    override val returningCardText = "Wenn kein Gerät mit deinen Daten mehr da ist"
     override val pairingTitle = "Dieses Gerät hinzufügen"
     override val pairingText = "Öffne $APP auf deinem anderen Gerät: „Mehr“ → „Meine Geräte“ → „Gerät hinzufügen“. Scanne dann diesen Code."
     override val pairingWaiting = "Warte auf dein anderes Gerät …"
@@ -178,7 +187,8 @@ internal object DevicesTextsDe : DevicesTexts {
     override val recoverInvalid = "Der Code stimmt nicht. Schau noch einmal genau hin."
     override val recoverNotFound = "Zu diesem Code gibt es nichts."
     override val recoverLater = "Gerade keine Verbindung. Versuch es gleich noch einmal."
-    override val newDeviceName = "Name dieses Geräts, z. B. Tablet"
+    override val newDeviceName = "Name dieses Geräts"
+    override val newDeviceNameHint = "z. B. Tablet"
 }
 
 internal object DevicesTextsEn : DevicesTexts {
@@ -189,20 +199,21 @@ internal object DevicesTextsEn : DevicesTexts {
     override val unnamed = "Unnamed device"
     override fun added(date: String) = "Added $date"
     override val add = "Add a device"
-    override val addText = "Open $APP on the new device and tap “I used $APP before”. Then scan the code there with the camera, or paste the link here."
-    override val addPaste = "Link from the new device"
-    override val addPasteHint = "Only if the new device is in front of you. If someone sends you such a link, do not paste it."
-    override val compareTitle = "Same code?"
+    override val addText = "Open $APP on the new device and tap “I already use $APP”. Then scan the code there with the camera."
+    override val scanHint = "Code on the new device"
+    override val scanHelp = "Point the camera at the QR code on the new device."
+    override val compareTitle = "Do the numbers match?"
     override val compareText = "Does the new device show this number too?"
-    override val compareYes = "Yes, the same"
+    override val compareYes = "Yes, they match"
     override val compareNo = "No"
     override val compareMismatch = "Not added. Only add a device that is in front of you and shows the same number."
     override val pairingCodeText = "Your other device will show this number. It has to be the same."
-    override val previousTitle = "Do you still have your old phone?"
-    override fun previousText(name: String) = "The backup came from “$name”. It is still in “My devices”."
-    override val previousKept = "Yes, I still have it"
-    override val previousLost = "No, lost or broken"
-    override val previousStolen = "No, stolen"
+    override val replaceTitle = "Does this phone replace one of your devices?"
+    override val replaceText = "It then takes over that device's settings, and the old device leaves “My devices”."
+    override val replaceNone = "No, it is an additional one"
+    override val replaceRemoved = "no longer under “My devices”"
+    override val replaceWorking = "Getting the settings …"
+    override val replaceFailed = "That didn't work. Check the internet connection and try again."
     override val addConfirmTitle = "Add this device?"
     override val addConfirmText = "The new device gets your circles, contacts and messages. Only add your own devices."
     override val addReason = "Add a device"
@@ -222,7 +233,6 @@ internal object DevicesTextsEn : DevicesTexts {
     override val lockOutFailedNoCode = "That did not work. Check the connection."
     override val lockOutDone = "Device locked out."
     override val lockOutFailed = "That did not work. Check the code and the connection."
-    override fun lineNewDevice(person: String, device: String) = if (device.isBlank()) "$person now also uses $APP on another device" else "$person now also uses $APP on “$device”"
     override fun unknownTitle(name: String) = "New device: “$name”"
     override val unknownText = "Was that you?"
     override val unknownYes = "Yes"
@@ -243,21 +253,25 @@ internal object DevicesTextsEn : DevicesTexts {
     override val cardCreate = "Create emergency card"
     override val cardRenew = "New emergency card"
     override val cardDone = "You have an emergency card."
-    override val cardShowText = "Write this code down or take a photo and keep it somewhere safe. Whoever has it can take over your $APP."
+    override val cardShowText = "Write this code down, print it or take a photo and keep it somewhere safe. Whoever has it can take over your $APP."
     override val cardNext = "Written down"
     override val cardTypeText = "Type the code once to check it."
     override val cardCode = "Emergency card code"
     override val cardWrong = "The code does not match. Look closely once more."
     override val cardFailed = "Not possible right now. Check the internet connection."
     override val cardOldCode = "Code of the previous emergency card"
+    override val cardCopied = "Copied"
+    override val cardPrint = "Print"
+    override val cardPrintTitle = "$APP emergency card"
+    override val cardPrintText = "This code brings $APP to a new phone, even if your devices are gone: circles, contacts, messages, files and passwords. Keep the card somewhere safe, for example with your ID documents. Whoever has the code can take over your $APP."
+    override fun cardPrintDate(date: String) = "Created on $date"
 
-    override val returning = "I used $APP before"
+    override val returning = "I already use $APP"
     override val returningTitle = "How do you bring $APP here?"
-    override val returningOtherDevice = "My other device is here"
+    override val returningOtherDevice = "Set up as an additional device"
     override val returningOtherDeviceText = "Phone or tablet with $APP nearby"
     override val returningCard = "With the emergency card"
-    override val returningCardText = "If the old phone is gone"
-    override val returningBackup = "From a backup file"
+    override val returningCardText = "If no device with your data is left"
     override val pairingTitle = "Add this device"
     override val pairingText = "Open $APP on your other device: “More” → “My devices” → “Add a device”. Then scan this code."
     override val pairingWaiting = "Waiting for your other device …"
@@ -268,5 +282,6 @@ internal object DevicesTextsEn : DevicesTexts {
     override val recoverInvalid = "The code does not match. Look closely once more."
     override val recoverNotFound = "There is nothing for this code."
     override val recoverLater = "No connection right now. Try again in a moment."
-    override val newDeviceName = "Name of this device, e.g. Tablet"
+    override val newDeviceName = "Name of this device"
+    override val newDeviceNameHint = "e.g. Tablet"
 }

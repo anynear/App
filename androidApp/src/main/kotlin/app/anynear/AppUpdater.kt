@@ -16,7 +16,6 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.content.ContextCompat
 import app.anynear.app.AppUpdateState
@@ -440,8 +439,8 @@ class AppUpdater(private val context: Context) {
             .setSmallIcon(AppBrand.notificationIcon)
             .setContentTitle(
                 when (kind) {
-                    UpdateKind.MOVED -> texts.backup.movedTitle
-                    UpdateKind.REINSTALL -> texts.backup.reinstallTitle
+                    UpdateKind.MOVED -> texts.appMove.movedTitle
+                    UpdateKind.REINSTALL -> texts.appMove.reinstallTitle
                     else -> texts.settings.newVersionTitle(release.version)
                 },
             )
@@ -455,9 +454,11 @@ class AppUpdater(private val context: Context) {
             .setContentIntent(open)
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
+            // Own group with a summary, apart from the background notification ([NotificationGroups]).
+            .setGroup(NotificationGroups.UPDATES)
             .build()
         try {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+            NotificationGroups.notify(context, null, NOTIFICATION_ID, notification)
             prefs.edit().putLong(KEY_NOTIFIED, release.versionCode).apply()
         } catch (e: SecurityException) {
             // Permission revoked in the meantime; the notice then comes when the app is opened.
@@ -474,7 +475,7 @@ class AppUpdater(private val context: Context) {
         )
     }
 
-    private fun cancelNotification() = NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+    private fun cancelNotification() = NotificationGroups.cancel(context, NotificationGroups.UPDATES, null, NOTIFICATION_ID)
 
     private fun inForeground(): Boolean {
         val info = ActivityManager.RunningAppProcessInfo()

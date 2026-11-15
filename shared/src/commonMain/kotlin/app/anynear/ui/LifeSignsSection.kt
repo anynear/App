@@ -15,13 +15,11 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
@@ -98,7 +96,7 @@ internal fun LifeSignsSection(
         })
     }
     if (ending && own != null) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { ending = false },
             title = { Text(lt.done) },
             text = { Text(lt.endConfirm) },
@@ -131,7 +129,7 @@ internal fun RunningLifeSignCard(lifeSigns: LifeSigns) {
         FullScreenCheckIn(lifeSigns, own, now, onConfirm = { scope.launch { lifeSigns.confirm(own.plan.id) } }, onEnd = { ending = true })
     }
     if (ending) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { ending = false },
             title = { Text(lt.done) },
             text = { Text(lt.endConfirm) },
@@ -255,7 +253,7 @@ private fun StartDialog(lifeSigns: LifeSigns, circles: List<Circle>, onDismiss: 
     var minutes by remember { mutableStateOf(30) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(lt.startTitle) },
         text = {
@@ -330,7 +328,7 @@ private fun FullScreenCheckIn(lifeSigns: LifeSigns, s: AliveStatus, now: Long, o
     val lt = texts.lifeSigns
     val asking = s.phase == AliveStatus.ASK
     val (helpers, heard) = lifeSigns.helpers(s)
-    Dialog(onDismissRequest = { lifeSigns.closeFullScreen() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = { lifeSigns.closeFullScreen() }, properties = AppFullScreenDialogProperties) {
         Surface(Modifier.fillMaxSize(), color = if (asking) AppTheme.colors.warningContainer else MaterialTheme.colorScheme.surface) {
             Column(
                 Modifier.fillMaxSize().padding(24.dp),

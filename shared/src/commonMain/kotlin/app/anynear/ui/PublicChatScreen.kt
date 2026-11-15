@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -205,7 +204,7 @@ internal fun PublicChatScreen(controller: AppController, publicRadio: PublicRadi
     }
 
     if (confirm) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { confirm = false },
             title = { Text(texts.publicRadio.confirmTitle) },
             text = { Text(texts.publicRadio.confirmText, Modifier.verticalScroll(rememberScrollState())) },

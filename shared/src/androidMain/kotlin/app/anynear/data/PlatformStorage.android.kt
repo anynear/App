@@ -35,7 +35,7 @@ private class AndroidTextFile(private val file: java.io.File) : TextFile {
 
 actual fun platformTextFile(name: String): TextFile = AndroidTextFile(java.io.File(AndroidPlatform.requireContext().filesDir, name))
 
-/** The same settings as [SharedPreferencesStore], raw for the backup (ADR 0027). */
+/** The same settings as [SharedPreferencesStore], raw for the fresh start and migrations. */
 private class SharedPreferencesRawAccess(context: Context) : RawKeyValueAccess {
     private val prefs = context.getSharedPreferences(VALUES_NAME, Context.MODE_PRIVATE)
 
@@ -50,8 +50,8 @@ private class SharedPreferencesRawAccess(context: Context) : RawKeyValueAccess {
 actual fun platformRawKeyValueAccess(): RawKeyValueAccess = SharedPreferencesRawAccess(AndroidPlatform.requireContext())
 
 /**
- * New task with the start screen, then end the process; the new process restores the backup or
- * starts with the keys passed in (ADR 0042). Before that, everything to disk: `apply()` writes
+ * New task with the start screen, then end the process; the new process starts with the keys
+ * passed in (ADR 0042). Before that, everything to disk: `apply()` writes
  * asynchronously, and `exit(0)` does not wait for it.
  */
 actual fun restartApp() {
@@ -71,4 +71,11 @@ actual fun deleteRadioCache() {
     }
 }
 
-actual fun platformDeviceName(): String = android.os.Build.MODEL.orEmpty()
+/**
+ * The name the phone shows itself (Settings → About phone, e.g. „Galaxy Tab S9“ or a name the person gave it);
+ * the model code (`SM-X710`) only if there is none.
+ */
+actual fun platformDeviceName(): String =
+    AndroidPlatform.context?.let { runCatching { android.provider.Settings.Global.getString(it.contentResolver, android.provider.Settings.Global.DEVICE_NAME) }.getOrNull() }
+        ?.takeIf { it.isNotBlank() }
+        ?: android.os.Build.MODEL.orEmpty()

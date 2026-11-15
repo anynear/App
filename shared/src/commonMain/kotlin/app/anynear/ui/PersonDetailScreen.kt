@@ -10,7 +10,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
@@ -190,7 +189,7 @@ internal fun PersonDetailScreen(
             personCircles.isNotEmpty() -> texts.people.removeDirectContactInCircleText(name, personCircles.joinToString(", ") { it.name })
             else -> texts.people.removeDirectContactText(name)
         }
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { confirmRemove = false },
             title = { Text(texts.people.removeMemberTitle(name)) },
             text = { Text(text, Modifier.verticalScroll(rememberScrollState())) },
@@ -212,22 +211,30 @@ internal fun PersonDetailScreen(
     }
 
     if (confirmDeleteHistory) {
-        AlertDialog(
-            onDismissRequest = { confirmDeleteHistory = false },
-            title = { Text(texts.people.deleteHistoryTitle(name)) },
-            text = { Text(texts.people.deleteHistoryText(name), Modifier.verticalScroll(rememberScrollState())) },
-            confirmButton = {
-                AppButton(texts.files.delete, {
-                    confirmDeleteHistory = false
-                    controller.deleteDirectHistory(peer)
-                    // Whoever is no longer a contact has nothing left here afterwards; back to the list instead of
-                    // into an empty conversation.
-                    if (person == null) onRemoved()
-                }, kind = ButtonKind.Danger)
-            },
-            dismissButton = { AppButton(texts.common.cancel, { confirmDeleteHistory = false }, kind = ButtonKind.Quiet) },
-        )
+        DeleteHistoryDialog(controller, peer, name, onDismiss = { confirmDeleteHistory = false }) {
+            // Whoever is no longer a contact has nothing left here afterwards; back to the list instead of
+            // into an empty conversation.
+            if (person == null) onRemoved()
+        }
     }
+}
+
+/** Delete the conversation with [peer] on this device, from the person page and from „Chats“ (long press). */
+@Composable
+internal fun DeleteHistoryDialog(controller: AppController, peer: String, name: String, onDismiss: () -> Unit, onDeleted: () -> Unit = {}) {
+    AppDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(texts.people.deleteHistoryTitle(name)) },
+        text = { Text(texts.people.deleteHistoryText(name), Modifier.verticalScroll(rememberScrollState())) },
+        confirmButton = {
+            AppButton(texts.files.delete, {
+                onDismiss()
+                controller.deleteDirectHistory(peer)
+                onDeleted()
+            }, kind = ButtonKind.Danger)
+        },
+        dismissButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
+    )
 }
 
 /** „Heute, 14:05“, „Gestern, 14:05“, „Montag, 14:05“, otherwise with the date: when something last arrived. */
