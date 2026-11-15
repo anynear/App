@@ -3,6 +3,7 @@ package app.anynear.mesh
 import app.anynear.anmp.core.radio.RadioTarget
 import app.anynear.anmp.core.firmware.FirmwarePath
 import app.anynear.AppConfig
+import app.anynear.anmp.core.radio.DefaultChannel
 import app.anynear.anmp.core.radio.DeviceName
 import app.anynear.anmp.core.radio.GatewaySetup
 import app.anynear.anmp.core.radio.ProfileDeviation
@@ -138,8 +139,8 @@ class SdkMeshLink(
     /** Slots of all active channels on the radio (primary and secondary), for replies to radios without anynear. */
     private val _activeSlots = MutableStateFlow<Set<Int>>(emptySet())
 
-    private val _openChannel0 = MutableStateFlow(false)
-    override val openChannel0: StateFlow<Boolean> = _openChannel0.asStateFlow()
+    private val _channel0Slot = MutableStateFlow<Int?>(null)
+    override val channel0Slot: StateFlow<Int?> = _channel0Slot.asStateFlow()
 
     private val _oldChannels = MutableStateFlow<List<String>>(emptyList())
     override val oldCircleChannels: StateFlow<List<String>> = _oldChannels.asStateFlow()
@@ -189,7 +190,7 @@ class SdkMeshLink(
         loopJob?.cancel()
         _channels.value = null
         _activeSlots.value = emptySet()
-        _openChannel0.value = false
+        _channel0Slot.value = null
         _ownDevice.value = null
         _firmware.value = null
         _setupCheck.value = null
@@ -403,10 +404,17 @@ class SdkMeshLink(
                         .filter { it.role == Channel.Role.SECONDARY && isOldChannelName(it.settings?.name) }
                         .mapNotNull { it.settings?.name }
                     _otherSlots.value = otherChannelsOf(channels)
-                    _publicChannels.value = PublicChannels.of(channels)
-                    _openChannel0.value = PublicChannels.isOpenChannel0(channels)
                 }
             }
+        }
+        // Channel 0 and „Alle in der Nähe“: the default channel on whatever slot; its name may be the one of the preset.
+        launch {
+            combine(rc.channels, rc.configBundle) { channels, bundle -> channels to bundle?.configs?.firstNotNullOfOrNull { it.lora } }
+                .collect { (channels, lora) ->
+                    if (channels.isNullOrEmpty()) return@collect
+                    _publicChannels.value = PublicChannels.of(channels, lora = lora)
+                    _channel0Slot.value = DefaultChannel.index(channels, lora)
+                }
         }
         launch {
             rc.nodeMap().collect { nodes ->
@@ -482,11 +490,11 @@ class SdkMeshLink(
         val payload = data.payload.toByteArray()
         if (!Anmp.isAnmp(payload)) return null
         val direct = directOrNull(rc)
-            ?: (if (isChannel0Broadcast(to, channel, _openChannel0.value)) false else null)
+            ?: (if (isChannel0Broadcast(to, channel, _channel0Slot.value)) false else null)
             ?: return null.also {
                 log(
                     "Funk: anynear-Paket verworfen (Kanal $channel, an ${if (to == NodeId.BROADCAST.raw) "alle" else nodeName(to)}, " +
-                        "von ${nodeName(from)}, Kanal 0 offen: ${_openChannel0.value}, anynear auf ${_channels.value.orEmpty().map { it.index }})",
+                        "von ${nodeName(from)}, Kanal 0 auf: ${_channel0Slot.value}, anynear auf ${_channels.value.orEmpty().map { it.index }})",
                 )
             }
         return IncomingData(
@@ -598,7 +606,7 @@ class SdkMeshLink(
     override suspend fun sendData(payload: ByteArray, to: Int?, channelIndex: Int): RadioSend {
         val rc = client.value ?: throw NotReadyException("Funkgerät ist nicht verbunden.")
         // ANMP to everyone may also go on an open channel 0 (ADR 0054 §1, AppConfig.RADIO_CHANNEL0).
-        if (!isAnmpChannel(channelIndex, _channels.value, _openChannel0.value && to == null)) {
+        if (!isAnmpChannel(channelIndex, _channels.value, _channel0Slot.value.takeIf { to == null })) {
             log("Funk: Senden abgelehnt, Kanal $channelIndex ist weder `anynear` noch ein offener Kanal 0")
             throw NotReadyException("Dein Kreis ist auf dem Funkgerät noch nicht eingerichtet.")
         }
@@ -616,7 +624,7 @@ class SdkMeshLink(
 
     override suspend fun sendDataWithHops(payload: ByteArray, channelIndex: Int, hopLimit: Int): RadioSend {
         val rc = client.value ?: throw NotReadyException("Funkgerät ist nicht verbunden.")
-        if (!isAnmpChannel(channelIndex, _channels.value, _openChannel0.value)) {
+        if (!isAnmpChannel(channelIndex, _channels.value, _channel0Slot.value)) {
             log("Funk: Senden abgelehnt, Kanal $channelIndex ist weder `anynear` noch ein offener Kanal 0")
             throw NotReadyException("Funkkanal fehlt.")
         }
@@ -1061,20 +1069,20 @@ class SdkMeshLink(
         /** Highest hop limit Meshtastic knows. */
         private const val MAX_HOPS = 7
 
-        /** To everyone on channel 0, as long as it is suitable for ANMP ([PublicChannels.isOpenChannel0]). */
-        internal fun isChannel0Broadcast(to: Int, channel: Int, openChannel0: Boolean): Boolean =
-            openChannel0 && channel == 0 && to == NodeId.BROADCAST.raw
+        /** To everyone on channel 0 ([channel0Slot]: the default channel, on whatever slot). */
+        internal fun isChannel0Broadcast(to: Int, channel: Int, channel0Slot: Int?): Boolean =
+            channel0Slot != null && channel == channel0Slot && to == NodeId.BROADCAST.raw
 
         /** Old channels that the app clears away (see [AppConfig.isOldChannelName]). */
         internal fun isOldChannelName(name: String?): Boolean = AppConfig.isOldChannelName(name)
 
         /** The radio channel `anynear` (ADR 0051, 0061): secondary channel with exactly this name. The primary channel (Hessenmesh) never belongs to it. */
         /**
-         * Slot on which ANMP may go to everyone: the radio channel `anynear` or, when [openChannel0], channel 0
+         * Slot on which ANMP may go to everyone: the radio channel `anynear` or channel 0 on its slot [channel0Slot]
          * (ADR 0054 §1). Before 12.11.2026 only `anynear` was allowed, so with channel 0 nothing went out over radio.
          */
-        internal fun isAnmpChannel(channelIndex: Int, circleChannels: List<RadioChannel>?, openChannel0: Boolean): Boolean =
-            circleChannels.orEmpty().any { it.index == channelIndex } || (openChannel0 && channelIndex == 0)
+        internal fun isAnmpChannel(channelIndex: Int, circleChannels: List<RadioChannel>?, channel0Slot: Int?): Boolean =
+            circleChannels.orEmpty().any { it.index == channelIndex } || channelIndex == channel0Slot
 
         /** Radio node as Meshtastic names it (`!939d1998`). */
         internal fun nodeName(node: Int): String = "!" + node.toUInt().toString(16).padStart(8, '0')

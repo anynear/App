@@ -2,6 +2,9 @@ package app.anynear
 
 import app.anynear.mesh.MessageStatus
 import app.anynear.mesh.PublicChannels
+import app.anynear.mesh.PublicChannel
+import app.anynear.mesh.PublicRadioChannel
+import app.anynear.anmp.core.radio.DefaultChannel
 import app.anynear.mesh.RadioChannel
 import app.anynear.mesh.anynearIndex
 import app.anynear.mesh.sendChannel
@@ -85,23 +88,28 @@ class SdkMeshLinkRulesTest {
     }
 
     @Test
-    fun channel0BroadcastsCountOnlyWhenChannel0IsOpen() {
+    fun channel0BroadcastsCountOnlyOnTheDefaultChannel() {
         val broadcast = NodeId.BROADCAST.raw
-        assertTrue(SdkMeshLink.isChannel0Broadcast(broadcast, 0, openChannel0 = true))
-        assertFalse(SdkMeshLink.isChannel0Broadcast(broadcast, 0, openChannel0 = false))
-        assertFalse(SdkMeshLink.isChannel0Broadcast(broadcast, 3, openChannel0 = true))
-        assertFalse(SdkMeshLink.isChannel0Broadcast(1234, 0, openChannel0 = true))
+        assertTrue(SdkMeshLink.isChannel0Broadcast(broadcast, 0, channel0Slot = 0))
+        assertFalse(SdkMeshLink.isChannel0Broadcast(broadcast, 0, channel0Slot = null))
+        assertFalse(SdkMeshLink.isChannel0Broadcast(broadcast, 3, channel0Slot = 0))
+        assertFalse(SdkMeshLink.isChannel0Broadcast(1234, 0, channel0Slot = 0))
+        // Slot 0 private, the default channel on slot 1 (tablet test 15.11.2026).
+        assertTrue(SdkMeshLink.isChannel0Broadcast(broadcast, 1, channel0Slot = 1))
+        assertFalse(SdkMeshLink.isChannel0Broadcast(broadcast, 0, channel0Slot = 1), "private slot 0")
     }
 
     @Test
     fun anmpMayGoOnAnynearOrOnAnOpenChannel0() {
         // Hardware test 11.11.2026: with channel 0 chosen for sending, the link refused every packet ("Funkkanal fehlt").
         val anynear = listOf(RadioChannel(2, "anynear", okio.ByteString.EMPTY))
-        assertTrue(SdkMeshLink.isAnmpChannel(2, anynear, openChannel0 = false))
-        assertTrue(SdkMeshLink.isAnmpChannel(0, anynear, openChannel0 = true))
-        assertTrue(SdkMeshLink.isAnmpChannel(0, emptyList(), openChannel0 = true))
-        assertFalse(SdkMeshLink.isAnmpChannel(0, anynear, openChannel0 = false))
-        assertFalse(SdkMeshLink.isAnmpChannel(1, anynear, openChannel0 = true))
+        assertTrue(SdkMeshLink.isAnmpChannel(2, anynear, channel0Slot = null))
+        assertTrue(SdkMeshLink.isAnmpChannel(0, anynear, channel0Slot = 0))
+        assertTrue(SdkMeshLink.isAnmpChannel(0, emptyList(), channel0Slot = 0))
+        assertFalse(SdkMeshLink.isAnmpChannel(0, anynear, channel0Slot = null))
+        assertFalse(SdkMeshLink.isAnmpChannel(1, anynear, channel0Slot = 0))
+        assertTrue(SdkMeshLink.isAnmpChannel(1, anynear, channel0Slot = 1))
+        assertFalse(SdkMeshLink.isAnmpChannel(0, anynear, channel0Slot = 1), "private slot 0")
     }
 
     @Test
@@ -111,27 +119,34 @@ class SdkMeshLinkRulesTest {
     }
 
     @Test
-    fun openChannel0NeedsDefaultKeyAndNoName() {
+    fun channel0IsTheDefaultChannelOnAnySlot() {
         val default = byteArrayOf(1).toByteString()
-        fun primary(name: String, psk: okio.ByteString) = Channel.Builder().also { c ->
-            c.index = 0
-            c.role = Channel.Role.PRIMARY
-            c.settings = ChannelSettings.Builder().also { it.name = name; it.psk = psk }.build()
-        }.build()
-        assertTrue(PublicChannels.isOpenChannel0(listOf(primary("", default))))
-        assertFalse(PublicChannels.isOpenChannel0(listOf(primary("Hessenmesh", default))), "eigener Name")
-        assertFalse(PublicChannels.isOpenChannel0(listOf(primary("", ByteArray(32) { 7 }.toByteString()))), "eigener Schlüssel")
-        assertFalse(PublicChannels.isOpenChannel0(listOf(primary("", okio.ByteString.EMPTY))), "unverschlüsselt")
-        assertFalse(PublicChannels.isOpenChannel0(emptyList()))
+        fun ch(index: Int, name: String, psk: okio.ByteString, role: Channel.Role = if (index == 0) Channel.Role.PRIMARY else Channel.Role.SECONDARY) =
+            Channel.Builder().also { c ->
+                c.index = index
+                c.role = role
+                c.settings = ChannelSettings.Builder().also { it.name = name; it.psk = psk }.build()
+            }.build()
+        val private = ByteArray(32) { 7 }.toByteString()
+        assertEquals(0, DefaultChannel.index(listOf(ch(0, "", default)), null))
+        assertEquals(null, DefaultChannel.index(listOf(ch(0, "Hessenmesh", default)), null), "eigener Name")
+        assertEquals(null, DefaultChannel.index(listOf(ch(0, "", private)), null), "eigener Schlüssel")
+        assertEquals(null, DefaultChannel.index(listOf(ch(0, "", okio.ByteString.EMPTY)), null), "unverschlüsselt")
+        assertEquals(null, DefaultChannel.index(emptyList(), null))
+        // ABpi_7840: slot 0 private „k3vin“, default channel on slot 1, `anynear` on slot 3.
+        val tablet = listOf(ch(0, "k3vin", private), ch(1, "", default), ch(3, "anynear", private))
+        assertEquals(1, DefaultChannel.index(tablet, null))
+        assertEquals(listOf(PublicRadioChannel(PublicChannel.NEARBY, 1)), PublicChannels.of(tablet, byteArrayOf()))
     }
 
     @Test
     fun anmpGoesOnChannel0OnlyWhenOpenAndAllowed() {
-        assertEquals(0, sendChannel(anynearIndex = 2, openChannel0 = true, channel0Allowed = true))
-        assertEquals(2, sendChannel(anynearIndex = 2, openChannel0 = true, channel0Allowed = false))
-        assertEquals(2, sendChannel(anynearIndex = 2, openChannel0 = false, channel0Allowed = true))
-        assertEquals(0, sendChannel(anynearIndex = null, openChannel0 = true, channel0Allowed = true))
-        assertEquals(null, sendChannel(anynearIndex = null, openChannel0 = false, channel0Allowed = true))
+        assertEquals(0, sendChannel(anynearIndex = 2, channel0Slot = 0, channel0Allowed = true))
+        assertEquals(2, sendChannel(anynearIndex = 2, channel0Slot = 0, channel0Allowed = false))
+        assertEquals(2, sendChannel(anynearIndex = 2, channel0Slot = null, channel0Allowed = true))
+        assertEquals(0, sendChannel(anynearIndex = null, channel0Slot = 0, channel0Allowed = true))
+        assertEquals(null, sendChannel(anynearIndex = null, channel0Slot = null, channel0Allowed = true))
+        assertEquals(1, sendChannel(anynearIndex = 3, channel0Slot = 1, channel0Allowed = true), "default channel on slot 1")
         assertEquals(3, anynearIndex(listOf(RadioChannel(1, "PYRSA", okio.ByteString.EMPTY), RadioChannel(3, "anynear", okio.ByteString.EMPTY))))
     }
 

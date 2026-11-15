@@ -140,8 +140,36 @@ class RadioAreasTest {
         assertEquals("X", RadioAreas.targetOf(unknownRegion, "X", null).area)
     }
 
-    private fun TestScope.areas(store: InMemoryStore, allowed: Boolean = true, locate: suspend () -> GeoPoint?) =
-        RadioAreas(CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)), store, MutableStateFlow(list), MutableStateFlow(allowed), locate)
+    @Test
+    fun withoutAnAreaNothingIsKnown() = runTest {
+        // Without location and choice the target is only the default for comparing; the app writes nothing (ADR 0054 §1b).
+        val areas = areas(InMemoryStore()) { null }
+        areas.refresh()
+        assertFalse(areas.known.value)
+        areas.choose("Hessen")
+        assertTrue(areas.known.value)
+        areas.choose(null)
+        assertFalse(areas.known.value)
+    }
+
+    @Test
+    fun locationOffIsReportedAndNotAsked() = runTest {
+        var asked = 0
+        var on = false
+        val areas = areas(InMemoryStore(), servicesOn = { on }) { asked++; GeoPoint(50.11, 8.68) }
+        areas.refresh()
+        assertTrue(areas.locationOff.value)
+        assertEquals(0, asked)
+        assertFalse(areas.known.value)
+        on = true
+        areas.refresh()
+        assertFalse(areas.locationOff.value)
+        assertEquals("Hessen", areas.target.value.area)
+        assertTrue(areas.known.value)
+    }
+
+    private fun TestScope.areas(store: InMemoryStore, allowed: Boolean = true, servicesOn: () -> Boolean = { true }, locate: suspend () -> GeoPoint?) =
+        RadioAreas(CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)), store, MutableStateFlow(list), MutableStateFlow(allowed), locate, servicesOn = servicesOn)
 
     private fun snapshot(lora: Config.LoRaConfig, wifi: Boolean = false, name: String = "anynear.app | Fuchs 27") = DeviceConfigSnapshot(
         configs = listOf(

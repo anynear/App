@@ -39,6 +39,7 @@ import platform.UserNotifications.UNMutableNotificationContent
 import platform.UserNotifications.UNNotification
 import platform.UserNotifications.UNNotificationCategory
 import platform.UserNotifications.UNNotificationRequest
+import platform.UserNotifications.UNNotificationSettingEnabled
 import platform.UserNotifications.UNNotificationSound
 import platform.UserNotifications.UNTimeIntervalNotificationTrigger
 import platform.UserNotifications.UNUserNotificationCenter
@@ -110,6 +111,11 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
 
     override suspend fun approximateLocation(): GeoPoint? = location.read()
 
+    override fun locationServicesOn(): Boolean = location.servicesOn()
+
+    // iOS opens no page of the location services itself; the app's page leads there.
+    override fun openLocationSettings() = openNotificationSettings()
+
     init {
         // Locked only „anynear · Neue Nachricht“ (with the iOS default „Vorschauen: wenn entsperrt“).
         val message = UNNotificationCategory.categoryWithIdentifier(
@@ -122,7 +128,15 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
         center.setNotificationCategories(setOf(message))
         // Already allowed (earlier start): fetch the token anew, it can change.
         center.getNotificationSettingsWithCompletionHandler { settings ->
-            if (settings?.authorizationStatus == UNAuthorizationStatusAuthorized) registerForPush()
+            if (settings?.authorizationStatus == UNAuthorizationStatusAuthorized) {
+                registerForPush()
+                // Allowed before critical alerts existed: ask once more for them alone. iOS asks only once per option.
+                if (AppConfig.CRITICAL_ALERTS && settings.criticalAlertSetting != UNNotificationSettingEnabled) {
+                    center.requestAuthorizationWithOptions(
+                        UNAuthorizationOptionAlert or UNAuthorizationOptionSound or UNAuthorizationOptionCriticalAlert,
+                    ) { _, _ -> }
+                }
+            }
             notificationPermissionNeeded.value = settings?.authorizationStatus == UNAuthorizationStatusNotDetermined
         }
     }
@@ -141,7 +155,7 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
     }
 
     override fun requestNotificationPermission() {
-        // „Time Sensitive“ needs no question of its own; critical alerts only with Apple's approval.
+        // „Time Sensitive“ needs no question of its own; critical alerts only with the entitlement.
         val critical = if (AppConfig.CRITICAL_ALERTS) UNAuthorizationOptionCriticalAlert else 0uL
         center.requestAuthorizationWithOptions(UNAuthorizationOptionAlert or UNAuthorizationOptionSound or critical) { granted, _ ->
             notificationPermissionNeeded.value = false

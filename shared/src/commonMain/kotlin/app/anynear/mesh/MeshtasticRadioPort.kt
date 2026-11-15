@@ -29,10 +29,10 @@ class MeshtasticRadioPort(
     private val log: (String) -> Unit = {},
 ) : RadioPort {
     /** Slot that is sent on; `null` while neither channel 0 is suitable nor the radio channel `anynear` is there. */
-    fun channelIndex(): Int? = sendChannel(anynearIndex(link.circleChannels.value), link.openChannel0.value, channel0Allowed.value)
+    fun channelIndex(): Int? = sendChannel(anynearIndex(link.circleChannels.value), link.channel0Slot.value, channel0Allowed.value)
 
-    override val ready: StateFlow<Boolean> = combine(link.state, link.circleChannels, link.openChannel0, channel0Allowed) { state, channels, open0, allowed ->
-        state == LinkState.Connected && sendChannel(anynearIndex(channels), open0, allowed) != null
+    override val ready: StateFlow<Boolean> = combine(link.state, link.circleChannels, link.channel0Slot, channel0Allowed) { state, channels, slot0, allowed ->
+        state == LinkState.Connected && sendChannel(anynearIndex(channels), slot0, allowed) != null
     }.stateIn(scope, SharingStarted.Eagerly, false)
 
     override val incoming: Flow<RadioFrame> = link.incomingData.map {
@@ -67,9 +67,9 @@ private fun MessageStatus.toRadioState(): RadioSendState = when (this) {
 /** Slot of the radio channel `anynear` among the reported channels. */
 internal fun anynearIndex(channels: List<RadioChannel>?): Int? = channels.orEmpty().firstOrNull { it.name == AnmpInfo.RADIO_CHANNEL_NAME }?.index
 
-/** Channel 0 before `anynear` (ADR 0054 §1), but only if it is suitable and allowed. */
-internal fun sendChannel(anynearIndex: Int?, openChannel0: Boolean, channel0Allowed: Boolean): Int? =
-    if (openChannel0 && channel0Allowed) 0 else anynearIndex
+/** Channel 0 ([channel0Slot], on whatever slot) before `anynear` (ADR 0054 §1), but only if the radio has it and it is allowed. */
+internal fun sendChannel(anynearIndex: Int?, channel0Slot: Int?, channel0Allowed: Boolean): Int? =
+    if (channel0Slot != null && channel0Allowed) channel0Slot else anynearIndex
 
 /**
  * Channel for the radio check to [node] (ADR 0053): the path a message to it takes. A radio without anynear does not

@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
  * hint and rescue on top of each other were confusing); if a more important one is needed, the other disappears.
  * Order = priority.
  */
-internal enum class AppHint { RADIO_SOFTWARE_RUN, USB_RESCUE, DEVICE_SETUP, RADIO_IN_USE, PAIRING, RADIO_SOFTWARE_NOTICE }
+internal enum class AppHint { RADIO_SOFTWARE_RUN, USB_RESCUE, RADIO_AREA, DEVICE_SETUP, RADIO_IN_USE, PAIRING, RADIO_SOFTWARE_NOTICE }
 
 /** The hint whose turn it is; `null`: none, then the general ones may show (app update, background …). */
 internal fun pickHint(
@@ -23,9 +23,12 @@ internal fun pickHint(
     softwareNotice: Boolean,
     linkOpen: Boolean,
     radioInUse: Boolean = false,
+    radioArea: Boolean = false,
 ): AppHint? = when {
     softwareRun -> AppHint.RADIO_SOFTWARE_RUN
     rescueOpen -> AppHint.USB_RESCUE
+    // Before setting up: without an area the app writes nothing to the radio (ADR 0054 §1b).
+    radioArea -> AppHint.RADIO_AREA
     deviceSetup -> AppHint.DEVICE_SETUP
     // An opened invitation or contact link takes precedence over these two.
     linkOpen -> null
@@ -44,6 +47,7 @@ internal fun currentHint(controller: AppController, linkOpen: Boolean): AppHint?
     val setup by controller.deviceSetupPrompt.collectAsState()
     val pairing by controller.pairingHint.collectAsState()
     val radioInUse by controller.radioInUsePrompt.collectAsState()
+    val radioArea by controller.radioAreaNeeded.collectAsState()
     return pickHint(
         softwareRun = run is RadioSoftwareState.Installing || run is RadioSoftwareState.Done || run is RadioSoftwareState.Failed,
         rescueOpen = rescueOpen && controller.usbRescue != null,
@@ -52,6 +56,7 @@ internal fun currentHint(controller: AppController, linkOpen: Boolean): AppHint?
         softwareNotice = notice != null,
         linkOpen = linkOpen,
         radioInUse = radioInUse,
+        radioArea = radioArea,
     )
 }
 

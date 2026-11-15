@@ -28,6 +28,7 @@ internal fun <T> ChoiceDialog(
     selected: T,
     onDismiss: () -> Unit,
     footer: (@Composable () -> Unit)? = null,
+    dismissText: String = texts.common.cancel,
     onPick: (T) -> Unit,
 ) {
     AppDialog(
@@ -52,6 +53,6 @@ internal fun <T> ChoiceDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
+        dismissButton = { AppButton(dismissText, onDismiss, kind = ButtonKind.Quiet) },
     )
 }

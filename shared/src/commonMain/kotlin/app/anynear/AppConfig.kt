@@ -68,10 +68,10 @@ object AppConfig {
 
     /**
      * iOS: alarms as “Critical Alert”, which override mute switch and Focus (ADR 0062 §6). Needs the entitlement
-     * `com.apple.developer.usernotifications.critical-alerts`, which may only go into the project after approval by
-     * Apple; until then off, alarms come as “Time Sensitive”.
+     * `com.apple.developer.usernotifications.critical-alerts` (approved by Apple on 15.11.2026). Off, alarms come as
+     * “Time Sensitive”.
      */
-    const val CRITICAL_ALERTS = false
+    const val CRITICAL_ALERTS = true
 
     /** Former app ID (until the cut-over, ADR 0061). As long as it is installed, the app offers to delete it (ADR 0061). */
     const val OLD_APP_ID = "com.pyrsa.pyrsa"

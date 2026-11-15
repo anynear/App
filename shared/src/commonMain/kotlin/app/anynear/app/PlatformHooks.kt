@@ -108,6 +108,12 @@ interface PlatformHooks {
     /** Approximate location, once and only in the foreground; `null` if not allowed or not obtainable right now. */
     suspend fun approximateLocation(): GeoPoint? = null
 
+    /** Is location switched on for the whole device? Off, [approximateLocation] finds nothing despite the permission. */
+    fun locationServicesOn(): Boolean = true
+
+    /** Opens the device's location setting (Android) or the app's settings (iOS), so the user can switch it on. */
+    fun openLocationSettings() = Unit
+
     /** What stands in the way of an alarm on this device (without battery, [backgroundRestriction] checks that). */
     suspend fun alarmProblems(): List<AlarmProblem> = emptyList()
 
