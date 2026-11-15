@@ -151,7 +151,7 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
     }
 }
 
-/** Level of the notification on iOS for an alert: alarm "Time Sensitive" (with approval from Apple "Critical"). */
+/** Level of the notification on iOS for an alert: alarm "Critical" (with [AppConfig.CRITICAL_ALERTS] off "Time Sensitive"). */
 fun wakeLevelOf(loudness: AlertLoudness): String = when (loudness) {
     AlertLoudness.Normal -> WakeLevel.ACTIVE
     AlertLoudness.Loud -> if (AppConfig.CRITICAL_ALERTS) WakeLevel.CRITICAL else WakeLevel.TIME_SENSITIVE

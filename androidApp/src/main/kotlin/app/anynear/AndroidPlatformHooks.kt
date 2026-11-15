@@ -144,6 +144,16 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
 
     override suspend fun approximateLocation(): GeoPoint? = location.read()
 
+    override fun locationServicesOn(): Boolean = location.servicesOn()
+
+    override fun openLocationSettings() {
+        try {
+            context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: ActivityNotFoundException) {
+            openAppSettings()
+        }
+    }
+
     private fun notificationPermissionMissing(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED

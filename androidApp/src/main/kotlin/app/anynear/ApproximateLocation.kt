@@ -24,6 +24,10 @@ internal class ApproximateLocation(private val context: Context) {
     fun allowed(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+    /** Is location switched on for the device (quick settings „Standort“)? */
+    fun servicesOn(): Boolean =
+        context.getSystemService(LocationManager::class.java)?.let(LocationManagerCompat::isLocationEnabled) ?: false
+
     /** First a fresh value from the system, else locate once, else the last known one; `null` if nothing works. */
     @SuppressLint("MissingPermission")
     suspend fun read(): GeoPoint? {

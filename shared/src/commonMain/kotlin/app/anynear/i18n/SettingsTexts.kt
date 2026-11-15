@@ -144,6 +144,14 @@ interface SettingsTexts {
     val radioAreaStandard: String
     val radioAreaHint: String
     val radioAreaNeedsLocation: String
+    /** Location of the whole device is off, so „Automatisch“ finds nothing. */
+    val radioAreaLocationOff: String
+    val radioAreaLocationOn: String
+    /** Subtitle while no area is set: the app writes nothing to the radio. */
+    val radioAreaMissing: String
+    /** Question for the area when a radio connects or is set up without one (ADR 0054 §1b). */
+    val radioAreaQuestion: String
+    val radioAreaQuestionText: String
 
     /** Notification: radio reports low battery. */
     val chargeLowTitle: String
@@ -386,6 +394,11 @@ internal object SettingsTextsDe : SettingsTexts {
     override val radioAreaStandard = "Standard"
     override val radioAreaHint = "Dein Funkgerät funkt so wie die Funkgeräte in der Gegend. Dein Standort bleibt auf dem Handy."
     override val radioAreaNeedsLocation = "Für „Automatisch“ braucht die App deinen ungefähren Standort."
+    override val radioAreaLocationOff = "Der Standort deines Handys ist ausgeschaltet. So findet anynear das Gebiet nicht."
+    override val radioAreaLocationOn = "Standort einschalten"
+    override val radioAreaMissing = "Noch kein Gebiet: anynear stellt am Funkgerät nichts um"
+    override val radioAreaQuestion = "Wo nutzt du dein Funkgerät?"
+    override val radioAreaQuestionText = "Funkgeräte funken je nach Gegend auf anderen Frequenzen. Gib deinen ungefähren Standort frei oder wähl das Gebiet. Vorher stellt anynear am Funkgerät nichts um."
     override val chargeLowTitle = "Funkgerät fast leer"
     override fun chargeLowText(percent: Int) = "Noch $percent %. Lade es bald, damit du im Notfall funken kannst."
     override val chargeAwayTitle = "Funkgerät lange nicht gesehen"
@@ -622,6 +635,11 @@ internal object SettingsTextsEn : SettingsTexts {
     override val radioAreaStandard = "Standard"
     override val radioAreaHint = "Your radio uses the same settings as the radios around you. Your location stays on your phone."
     override val radioAreaNeedsLocation = "For “Automatic” the app needs your approximate location."
+    override val radioAreaLocationOff = "Location is off on your phone, so anynear cannot find the area."
+    override val radioAreaLocationOn = "Turn on location"
+    override val radioAreaMissing = "No area yet: anynear changes nothing on the radio"
+    override val radioAreaQuestion = "Where do you use your radio?"
+    override val radioAreaQuestionText = "Radios use different frequencies depending on the region. Share your approximate location or choose the area. Until then, anynear changes nothing on the radio."
     override val chargeLowTitle = "Radio almost empty"
     override fun chargeLowText(percent: Int) = "$percent% left. Charge it soon so you can use radio in an emergency."
     override val chargeAwayTitle = "Radio not seen for a while"

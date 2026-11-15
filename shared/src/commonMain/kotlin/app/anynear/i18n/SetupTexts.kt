@@ -154,6 +154,10 @@ interface SetupTexts {
     val cardCreate: String
     val cardReminderTitle: String
     val cardReminderText: String
+    val locationTitle: String
+    val locationText: String
+    val locationNote: String
+    val locationAllow: String
     val alertsTitle: String
     val alertsText: String
     val alertsLocationNote: String
@@ -321,6 +325,10 @@ internal object SetupTextsDe : SetupTexts {
     override val cardCreate = "Notfallkarte erstellen"
     override val cardReminderTitle = "Notfallkarte fehlt noch"
     override val cardReminderText = "Ohne sie bekommst du nichts zurück, wenn dein Handy weg ist."
+    override val locationTitle = "Dein ungefährer Standort"
+    override val locationText = "Für Warnungen in deinem Landkreis und damit dein Funkgerät so funkt wie die Funkgeräte in deiner Gegend."
+    override val locationNote = "Nur ungefähr, und er bleibt auf dem Handy. Ohne ihn wählst du das Gebiet später von Hand."
+    override val locationAllow = "Standort freigeben"
     override val alertsTitle = "Warnungen für deine Gegend"
     override val alertsText = "Unwetter, Hochwasser und andere amtliche Warnungen für deinen Landkreis."
     override val alertsLocationNote = "Dafür fragt $APP nach deinem ungefähren Standort. Er bleibt auf dem Handy."
@@ -488,6 +496,10 @@ internal object SetupTextsEn : SetupTexts {
     override val cardCreate = "Create emergency card"
     override val cardReminderTitle = "Emergency card still missing"
     override val cardReminderText = "Without it you get nothing back if your phone is gone."
+    override val locationTitle = "Your approximate location"
+    override val locationText = "For warnings in your district, and so your radio uses the same settings as the radios around you."
+    override val locationNote = "Only approximate, and it stays on your phone. Without it, you choose the area by hand later."
+    override val locationAllow = "Share location"
     override val alertsTitle = "Warnings for your area"
     override val alertsText = "Storms, floods and other official warnings for your district."
     override val alertsLocationNote = "For this, $APP asks for your approximate location. It stays on your phone."

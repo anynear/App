@@ -43,7 +43,7 @@ import app.anynear.i18n.texts
 import kotlinx.coroutines.launch
 
 /** Steps of the guided setup after the name (ADR 0073), in this order. */
-internal enum class GuideStep { EmergencyCard, Notifications, Background, Alerts, DoNotDisturb, Radio }
+internal enum class GuideStep { EmergencyCard, Notifications, Background, Location, Alerts, DoNotDisturb, Radio }
 
 /**
  * Which steps currently have something to do on this device. Determined once on entry, so that the
@@ -62,6 +62,7 @@ internal fun guideSteps(controller: AppController, withRadio: Boolean): List<Gui
         doNotDisturbMissing = alerts?.accessMissing?.value == true,
         withRadio = withRadio,
         radioPaired = controller.pairedDevice.value != null,
+        locationNeeded = !controller.radioAreas.locationAllowed.value,
     )
 }
 
@@ -75,11 +76,14 @@ internal fun planGuide(
     doNotDisturbMissing: Boolean,
     withRadio: Boolean,
     radioPaired: Boolean,
+    locationNeeded: Boolean = false,
 ): List<GuideStep> = buildList {
     // ADR 0093: the emergency card first, so that the root key leaves the phone before anything else happens.
     if (cardMissing) add(GuideStep.EmergencyCard)
     if (notificationsNeeded) add(GuideStep.Notifications)
     if (backgroundRestricted) add(GuideStep.Background)
+    // The approximate location serves warnings and the radio area (ADR 0054 §1b): its own step, before the warnings.
+    if (locationNeeded) add(GuideStep.Location)
     if (officialAlertsAvailable && !officialAlertsOn) add(GuideStep.Alerts)
     // Android: alarms only get through „Nicht stören“ with access; asked here instead of a hint right afterwards.
     if (doNotDisturbMissing) add(GuideStep.DoNotDisturb)
@@ -140,6 +144,7 @@ internal fun GuideStepScreen(
                 onBack = onBack,
             )
         }
+        GuideStep.Location -> LocationStep(controller, stepLabel, onDone, onBack)
         GuideStep.Alerts -> AlertsStep(controller, stepLabel, onDone, onBack)
         GuideStep.DoNotDisturb -> DoNotDisturbStep(controller, stepLabel, onDone, onBack)
         GuideStep.Radio -> RadioStep(controller, stepLabel, onDone, onBack)
@@ -185,7 +190,8 @@ private fun AlertsStep(controller: AppController, stepLabel: String?, onDone: ()
         stepLabel = stepLabel,
         title = texts.setup.alertsTitle,
         text = texts.setup.alertsText,
-        note = texts.setup.alertsLocationNote,
+        // The location has its own step before; only mention it if it is still missing.
+        note = texts.setup.alertsLocationNote.takeIf { !controller.radioAreas.locationAllowed.value },
         action = if (failed) texts.common.next else texts.setup.alertsTurnOn,
         busy = busy,
         error = texts.setup.alertsFailed.takeIf { failed },
@@ -204,6 +210,33 @@ private fun AlertsStep(controller: AppController, stepLabel: String?, onDone: ()
             }
         },
         onLater = onDone.takeIf { !failed },
+        onBack = onBack,
+    )
+}
+
+/**
+ * The approximate location (ADR 0054 §1b): for warnings in the own district and so that the radio uses the settings of
+ * the area. Leads on once allowed; the system asks after the button.
+ */
+@Composable
+private fun LocationStep(controller: AppController, stepLabel: String?, onDone: () -> Unit, onBack: () -> Unit) {
+    val allowed by controller.radioAreas.locationAllowed.collectAsState()
+    var asked by remember { mutableStateOf(false) }
+    LaunchedEffect(allowed) { if (allowed && asked) onDone() }
+    PermissionStep(
+        icon = AppIcons.Funk,
+        stepLabel = stepLabel,
+        title = texts.setup.locationTitle,
+        text = texts.setup.locationText,
+        note = texts.setup.locationNote,
+        action = if (allowed) texts.common.next else texts.setup.locationAllow,
+        onAction = {
+            if (allowed) onDone() else {
+                asked = true
+                controller.allowLocationForRadioArea()
+            }
+        },
+        onLater = onDone,
         onBack = onBack,
     )
 }

@@ -31,7 +31,8 @@ import kotlinx.coroutines.launch
  */
 @Composable
 internal fun CrashCard(controller: AppController, onOpenChat: (Conversation) -> Unit) {
-    val reports by controller.crashReports.collectAsState()
+    // Crashes of older versions (often fixed by the update) only under „Fehlerbehebung“.
+    val reports by controller.crashReportsOfThisVersion.collectAsState()
     if (reports.isEmpty()) return
     var open by rememberSaveable { mutableStateOf(false) }
     AppSection(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {

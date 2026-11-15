@@ -132,21 +132,63 @@ private fun RadioAreaRow(controller: AppController) {
     val located by areas.located.collectAsState()
     val list by areas.areas.collectAsState()
     val target by areas.target.collectAsState()
-    val allowed by areas.locationAllowed.collectAsState()
+    val known by areas.known.collectAsState()
     var choosing by remember { mutableStateOf(false) }
     val settings = texts.settings
-    val current = target.area ?: settings.radioAreaStandard
-    val subtitle = (if (choice == null) settings.radioAreaAutoIs(located?.let { current }) else current) +
-        " · ${target.label}"
+    val subtitle = when {
+        // Without an area the app writes nothing to the radio (ADR 0054 §1b); the radio keeps its settings.
+        !known -> if (choice == null) "${settings.radioAreaAutoIs(null)} · ${settings.radioAreaMissing}" else settings.radioAreaMissing
+        else -> (if (choice == null) settings.radioAreaAutoIs(located?.let { target.area }) else target.area.orEmpty()) + " · ${target.label}"
+    }
     AppRow(title = settings.radioArea, subtitle = subtitle, icon = AppIcons.Funk, chevron = true, onClick = { choosing = true })
     if (choosing) {
         val options = listOf<Pair<String?, String>>(null to settings.radioAreaAuto) + list.map { it.name to it.name }
         ChoiceDialog(settings.radioArea, options, choice, onDismiss = { choosing = false }, footer = {
             Text(settings.radioAreaHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (!allowed) {
-                Text(settings.radioAreaNeedsLocation, style = MaterialTheme.typography.bodySmall)
-                AppButton(texts.alerts.allowLocation, controller::allowLocationForRadioArea, kind = ButtonKind.Quiet)
-            }
+            RadioAreaLocationHelp(controller)
         }) { controller.chooseRadioArea(it) }
+    }
+}
+
+/** Below the choice of the area: what „Automatisch“ still lacks, the permission or location of the device. */
+@Composable
+internal fun RadioAreaLocationHelp(controller: AppController) {
+    val areas = controller.radioAreas
+    val allowed by areas.locationAllowed.collectAsState()
+    val off by areas.locationOff.collectAsState()
+    val settings = texts.settings
+    when {
+        !allowed -> {
+            Text(settings.radioAreaNeedsLocation, style = MaterialTheme.typography.bodySmall)
+            AppButton(texts.alerts.allowLocation, controller::allowLocationForRadioArea, kind = ButtonKind.Quiet)
+        }
+        off -> {
+            Text(settings.radioAreaLocationOff, style = MaterialTheme.typography.bodySmall)
+            AppButton(settings.radioAreaLocationOn, controller::openLocationSettings, kind = ButtonKind.Quiet)
+        }
+    }
+}
+
+/**
+ * „Wo nutzt du dein Funkgerät?“ (ADR 0054 §1b): a radio is connected or about to be set up and no area is known.
+ * Location or an area by hand; „Später“ leaves the radio as it is.
+ */
+@Composable
+internal fun RadioAreaQuestion(controller: AppController) {
+    val areas = controller.radioAreas
+    val choice by areas.choice.collectAsState()
+    val list by areas.areas.collectAsState()
+    val settings = texts.settings
+    val options = listOf<Pair<String?, String>>(null to settings.radioAreaAuto) + list.map { it.name to it.name }
+    var answered by remember { mutableStateOf(false) }
+    ChoiceDialog(settings.radioAreaQuestion, options, choice, onDismiss = {
+        if (answered) controller.answeredRadioArea() else controller.postponeRadioArea()
+    }, dismissText = texts.common.later, footer = {
+        Text(settings.radioAreaQuestionText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        RadioAreaLocationHelp(controller)
+    }) { picked ->
+        answered = true
+        controller.chooseRadioArea(picked)
+        if (picked == null) controller.allowLocationForRadioArea()
     }
 }

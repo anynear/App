@@ -45,10 +45,11 @@ interface MeshLink {
     val heardNodes: Flow<HeardNode> get() = emptyFlow()
 
     /**
-     * Channel 0 is fit for ANMP (ADR 0054 §1, implementation plan phase 1): main channel with the Meshtastic default
-     * key and without a name of its own. `false` as long as the channels are not known.
+     * Slot of channel 0 in the sense of ADR 0054 §1: the Meshtastic default channel ([DefaultChannel]: default key, no
+     * name of its own), on whatever slot it sits. A private slot 0 is not it. `null` while the channels are not known
+     * or the radio has no default channel.
      */
-    val openChannel0: StateFlow<Boolean> get() = NoChannel0
+    val channel0Slot: StateFlow<Int?> get() = NoChannel0
 
     /** Public channels on the connected radio (ADR 0055); empty as long as none are known. */
     val publicChannels: StateFlow<List<PublicRadioChannel>> get() = NoPublicChannels
@@ -229,4 +230,4 @@ private val NoFirmware: StateFlow<RadioFirmware?> = kotlinx.coroutines.flow.Muta
 
 private val NoPublicChannels: StateFlow<List<PublicRadioChannel>> = kotlinx.coroutines.flow.MutableStateFlow(emptyList())
 
-private val NoChannel0: StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(false)
+private val NoChannel0: StateFlow<Int?> = kotlinx.coroutines.flow.MutableStateFlow(null)

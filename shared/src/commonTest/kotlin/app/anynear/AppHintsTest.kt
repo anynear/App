@@ -8,8 +8,8 @@ import kotlin.test.assertNull
 
 /** Always only one hint at a time, the most important one wins. */
 class AppHintsTest {
-    private fun pick(run: Boolean = false, rescue: Boolean = false, setup: Boolean = false, pairing: Boolean = false, notice: Boolean = false, link: Boolean = false, inUse: Boolean = false) =
-        pickHint(run, rescue, setup, pairing, notice, link, inUse)
+    private fun pick(run: Boolean = false, rescue: Boolean = false, setup: Boolean = false, pairing: Boolean = false, notice: Boolean = false, link: Boolean = false, inUse: Boolean = false, area: Boolean = false) =
+        pickHint(run, rescue, setup, pairing, notice, link, inUse, area)
 
     @Test
     fun rescueHidesThePairingHint() {
@@ -43,5 +43,12 @@ class AppHintsTest {
         assertEquals(AppHint.RADIO_IN_USE, pick(inUse = true, pairing = true, notice = true))
         assertEquals(AppHint.DEVICE_SETUP, pick(setup = true, inUse = true))
         assertNull(pick(inUse = true, link = true))
+    }
+
+    @Test
+    fun radioAreaBeforeSetup() {
+        // Without an area nothing is written: first the question for the area, then setting up (ADR 0054 §1b).
+        assertEquals(AppHint.RADIO_AREA, pick(area = true, setup = true, pairing = true, link = true))
+        assertEquals(AppHint.USB_RESCUE, pick(area = true, rescue = true))
     }
 }

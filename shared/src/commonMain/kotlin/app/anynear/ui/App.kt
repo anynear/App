@@ -604,6 +604,7 @@ private fun MainScreen(controller: AppController) {
     when (currentHint(controller, linkOpen)) {
         AppHint.RADIO_SOFTWARE_RUN -> RadioSoftwareProgress(controller)
         AppHint.USB_RESCUE -> UsbRescueHost(controller)
+        AppHint.RADIO_AREA -> RadioAreaQuestion(controller)
         AppHint.DEVICE_SETUP -> DeviceSetupDialog(controller)
         AppHint.RADIO_IN_USE -> RadioInUseDialog(controller)
         AppHint.PAIRING -> PairingTroubleDialog(controller)

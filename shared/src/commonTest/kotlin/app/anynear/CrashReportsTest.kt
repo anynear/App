@@ -111,4 +111,16 @@ class CrashReportsTest {
         val recorder = CrashRecorder(MemoryFile("{kaputt"), "ios", { null }, null, null, now = { 0 })
         assertTrue(recorder.reports.value.isEmpty())
     }
+
+    @Test
+    fun cardShowsOnlyCrashesOfTheRunningVersion() {
+        // Tablet 15.11.2026: three crashes of 10026, fixed in 10030, still on the card after the update.
+        val old = report(1_000).copy(build = "0.9.0-pre.10026", count = 3)
+        assertEquals(emptyList(), CrashReports.forCard(listOf(old), "0.9.0-pre.10030"))
+        // The same crash again in the new version merges and takes its build: on the card again.
+        val again = CrashReports.add(listOf(old), report(2_000).copy(build = "0.9.0-pre.10030"), now = 2_000)
+        assertEquals(4, CrashReports.forCard(again, "0.9.0-pre.10030").single().count)
+        // Version unknown: all of them.
+        assertEquals(listOf(old), CrashReports.forCard(listOf(old), null))
+    }
 }

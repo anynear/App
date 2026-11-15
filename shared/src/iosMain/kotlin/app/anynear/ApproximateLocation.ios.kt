@@ -40,6 +40,9 @@ internal class IosApproximateLocation(private val openSettings: () -> Unit) : NS
         it == kCLAuthorizationStatusAuthorizedWhenInUse || it == kCLAuthorizationStatusAuthorizedAlways
     }
 
+    /** Location services of the whole iPhone (Settings → Privacy → Location Services). */
+    fun servicesOn(): Boolean = CLLocationManager.locationServicesEnabled()
+
     /** Not asked yet: iOS asks. Denied: iOS never asks again, then the app's settings. */
     fun request() {
         when (manager.authorizationStatus) {

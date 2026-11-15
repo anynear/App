@@ -1235,6 +1235,10 @@ class AppController(
      */
     fun applyDeviceSetup(nameSuffix: String) {
         val check = deviceSetupNeeded.value ?: return
+        if (holdForRadioArea { applyDeviceSetup(nameSuffix) }) {
+            _setupRequested.value = false
+            return
+        }
         pairedDevices.skipSetup(check.signature)
         _setupRequested.value = false
         val onlyName = check.deviations == setOf(ProfileDeviation.NAME)
@@ -1285,6 +1289,7 @@ class AppController(
 
     /** Writes all settings of the app again, even if the device already matches. The name stays. */
     fun reapplyRadioProfile() {
+        if (holdForRadioArea(::reapplyRadioProfile)) return
         val suffix = DeviceName.suffixOf(link.ownDevice.value?.longName) ?: deviceNameSuggestion.value ?: randomNameSuffix
         runDeviceTask(texts.status.profileApplying, name = null, { link.applyRadioProfile(suffix, force = true) }) { result ->
             when (result) {
@@ -1312,7 +1317,45 @@ class AppController(
     // --- Radio area (ADR 0054 §1b): radio settings of the region the radio is in ---------------
 
     /** Area of the radio list whose settings the own radio uses; automatic by location or chosen by hand. */
-    val radioAreas = RadioAreas(scope, store, core.radioList, hooks.locationAllowed, hooks::approximateLocation, log)
+    val radioAreas = RadioAreas(scope, store, core.radioList, hooks.locationAllowed, hooks::approximateLocation, log, hooks::locationServicesOn)
+
+    private val _radioAreaNeeded = MutableStateFlow(false)
+
+    /**
+     * Ask „Wo nutzt du dein Funkgerät?“ (ADR 0054 §1b): the area is unknown, and a radio connected for the first time in
+     * this run or the app was about to write radio settings. Without an area the app writes nothing to the radio.
+     */
+    val radioAreaNeeded: StateFlow<Boolean> = _radioAreaNeeded.asStateFlow()
+
+    /** What was held back for want of an area; runs once the area is known. */
+    private var afterRadioArea: (() -> Unit)? = null
+
+    /** Asked once per run when a radio connects without an area; „Später“ holds until the next start. */
+    private var radioAreaAsked = false
+
+    /** Holds [then] back and asks for the area if none is known; `true` if held back. */
+    private fun holdForRadioArea(then: () -> Unit): Boolean {
+        if (radioAreas.known.value) return false
+        afterRadioArea = then
+        radioAreaAsked = true
+        _radioAreaNeeded.value = true
+        refreshRadioArea()
+        return true
+    }
+
+    /** An answer in the question for the area: it closes; what was held back runs as soon as the area is known. */
+    fun answeredRadioArea() {
+        _radioAreaNeeded.value = false
+    }
+
+    /** „Später“ in the question for the area: nothing is written to the radio until an area is set. */
+    fun postponeRadioArea() {
+        afterRadioArea = null
+        _radioAreaNeeded.value = false
+    }
+
+    /** Location of the device is off: open its setting („Standort einschalten“). */
+    fun openLocationSettings() = hooks.openLocationSettings()
 
     /** Choose an area by name, or `null` for automatic; automatic looks up the location at once. */
     fun chooseRadioArea(area: String?) {
@@ -1320,8 +1363,10 @@ class AppController(
         refreshRadioArea()
     }
 
-    /** „Standort erlauben“ in the choice of the radio area. */
-    fun allowLocationForRadioArea() = hooks.requestLocation()
+    /** „Standort erlauben“ in the choice of the radio area; already allowed: look up the area at once. */
+    fun allowLocationForRadioArea() {
+        if (radioAreas.locationAllowed.value) refreshRadioArea() else hooks.requestLocation()
+    }
 
     private fun refreshRadioArea() {
         scope.launch { runCatching { radioAreas.refresh() }.onFailure { if (it is CancellationException) throw it } }
@@ -1336,6 +1381,29 @@ class AppController(
                 .distinctUntilChanged()
                 .collect { (target, known) -> link.useRadioTarget(target, known) }
         }
+        // An area became known: run what was held back, the question goes away.
+        scope.launch {
+            radioAreas.known.collect { known ->
+                if (!known) return@collect
+                _radioAreaNeeded.value = false
+                afterRadioArea?.let { afterRadioArea = null; it() }
+            }
+        }
+        // First radio of this run without an area: ask once (ADR 0054 §1b).
+        scope.launch {
+            combine(linkState, radioAreas.known, setupDone) { state, known, done -> state == LinkState.Connected && !known && done }
+                .distinctUntilChanged()
+                .collectLatest { ask ->
+                    if (!ask || radioAreaAsked) return@collectLatest
+                    // First give the location a moment, so that the question does not flash up for nothing.
+                    refreshRadioArea()
+                    delay(RADIO_AREA_GRACE)
+                    if (!radioAreas.known.value && !radioAreaAsked) {
+                        radioAreaAsked = true
+                        _radioAreaNeeded.value = true
+                    }
+                }
+        }
         // Look up the area again when the list changes, a radio connects or the permission comes.
         scope.launch {
             combine(core.radioList, linkState, radioAreas.locationAllowed) { list, state, allowed ->
@@ -1348,6 +1416,8 @@ class AppController(
                 check?.takeIf { it.areaChange && change == null }?.let { it to target }
             }.collect { pair ->
                 val (check, target) = pair ?: return@collect
+                // Without an area nothing is switched (ADR 0054 §1b): the question for the area comes instead.
+                if (target.area == null) return@collect
                 val key = "${check.signature}|${target.area}"
                 if (key == lastAreaChange) return@collect
                 lastAreaChange = key
@@ -4353,6 +4423,10 @@ class AppController(
     /** Crash reports that are not yet sent or discarded; empty where the platform keeps none. */
     val crashReports: StateFlow<List<CrashReport>> = crashes?.reports ?: MutableStateFlow(emptyList())
 
+    /** For the card in „Nachrichten“: only crashes of the running version ([CrashReports.forCard]). */
+    val crashReportsOfThisVersion: StateFlow<List<CrashReport>> =
+        crashReports.map { CrashReports.forCard(it, appVersion) }.stateIn(scope, SharingStarted.Eagerly, CrashReports.forCard(crashReports.value, appVersion))
+
     /** The reports as text, the way they would be sent. */
     fun crashReportText(): String = CrashReports.text(crashReports.value)
 
@@ -4609,6 +4683,9 @@ class AppController(
 
         /** After this much time without history the notice says that someone has to be online. */
         private val HISTORY_HINT_SWITCH = 10.minutes
+
+        /** A radio connected without an area: this long the location may still find it before the app asks. */
+        private val RADIO_AREA_GRACE = 8.seconds
 
         /** The same picture is asked for at most this often. */
         private val WANT_PAUSE = 1.hours

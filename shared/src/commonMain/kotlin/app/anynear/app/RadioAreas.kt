@@ -20,7 +20,8 @@ import kotlinx.coroutines.sync.Mutex
  * Radio area of the own radio (ADR 0054 §1b): the region of the signed radio list whose radio settings (LoRa region,
  * preset, frequency) the radio uses. Automatic by the approximate location, with hysteresis at borders
  * ([RadioList.regionFor]), or chosen by hand. The location never leaves the phone and is not stored, only the name of
- * the area found. Outside all areas the radio keeps the area it had; without any, [RadioTarget.DEFAULT] applies.
+ * the area found. Outside all areas the radio keeps the area it had. Without any area the target is
+ * [RadioTarget.DEFAULT] for the comparison only: the app writes no radio settings until an area is [known].
  */
 class RadioAreas(
     scope: CoroutineScope,
@@ -30,6 +31,8 @@ class RadioAreas(
     val locationAllowed: StateFlow<Boolean>,
     private val locate: suspend () -> GeoPoint?,
     private val log: (String) -> Unit = {},
+    /** Is location on for the whole device? Off, the permission alone finds nothing. */
+    private val servicesOn: () -> Boolean = { true },
 ) {
     private val _choice = MutableStateFlow(store.getString(CHOICE_KEY)?.takeIf { it.isNotEmpty() })
     private val _located = MutableStateFlow(store.getString(LOCATED_KEY)?.takeIf { it.isNotEmpty() })
@@ -50,6 +53,15 @@ class RadioAreas(
         combine(radioList, _choice, _located) { list, chosen, found -> targetOf(list, chosen, found) }
             .stateIn(scope, SharingStarted.Eagerly, targetOf(radioList.value, _choice.value, _located.value))
 
+    /** Is an area set, chosen or located? Without one the app writes no radio settings (ADR 0054 §1b). */
+    val known: StateFlow<Boolean> =
+        target.map { it.area != null }.stateIn(scope, SharingStarted.Eagerly, target.value.area != null)
+
+    private val _locationOff = MutableStateFlow(false)
+
+    /** Automatic with permission, but location is off for the device: the area cannot be found. */
+    val locationOff: StateFlow<Boolean> = _locationOff.asStateFlow()
+
     /** Choose an area by name, or `null` for automatic. */
     fun choose(area: String?) {
         _choice.value = area
@@ -62,6 +74,8 @@ class RadioAreas(
      */
     suspend fun refresh() {
         if (_choice.value != null || !locationAllowed.value) return
+        _locationOff.value = !servicesOn()
+        if (_locationOff.value) return
         val list = radioList.value ?: return
         if (!locateLock.tryLock()) return
         try {

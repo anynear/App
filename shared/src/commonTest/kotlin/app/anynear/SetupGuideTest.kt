@@ -16,7 +16,8 @@ class SetupGuideTest {
         doNotDisturb: Boolean = true,
         withRadio: Boolean = true,
         paired: Boolean = false,
-    ) = planGuide(card, notifications, background, alertsAvailable, alertsOn, doNotDisturb, withRadio, paired)
+        location: Boolean = false,
+    ) = planGuide(card, notifications, background, alertsAvailable, alertsOn, doNotDisturb, withRadio, paired, location)
 
     @Test
     fun allStepsInOrderOnAFreshAndroidPhone() {
@@ -57,5 +58,12 @@ class SetupGuideTest {
     @Test
     fun nothingToDoMeansNoSteps() {
         assertEquals(emptyList(), plan(notifications = false, background = false, alertsOn = true, doNotDisturb = false, paired = true))
+    }
+
+    @Test
+    fun locationHasItsOwnStepBeforeTheWarnings() {
+        // ADR 0054 §1b: the location also serves the radio area, so not only inside the warnings.
+        assertEquals(listOf(GuideStep.Notifications, GuideStep.Background, GuideStep.Location, GuideStep.Alerts, GuideStep.DoNotDisturb, GuideStep.Radio), plan(location = true))
+        assertEquals(listOf(GuideStep.Location, GuideStep.Radio), plan(notifications = false, background = false, alertsAvailable = false, doNotDisturb = false, location = true))
     }
 }

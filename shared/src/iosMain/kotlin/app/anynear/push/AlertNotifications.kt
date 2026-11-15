@@ -18,7 +18,7 @@ import kotlin.coroutines.resume
 /**
  * Alerts as notifications on iOS (ADR 0062 §5, §6). Every alert comes with the normal sound (`active`, mute switch
  * applies); loud ones come as „Time Sensitive“ with their own sound from the
- * app bundle (`alarm.caf`, `amtlich.caf`, `hinweis.caf`, `frage.caf` for the check-in); as „Critical Alert“ only once Apple approves it
+ * app bundle (`alarm.caf`, `amtlich.caf`, `hinweis.caf`, `frage.caf` for the check-in); as „Critical Alert“ (approved by Apple)
  * ([AppConfig.CRITICAL_ALERTS]). Otherwise the mute switch stays effective, the test alarm says so.
  */
 internal object AlertNotifications {
@@ -66,7 +66,7 @@ internal object AlertNotifications {
                 } else if (settings.timeSensitiveSetting != UNNotificationSettingEnabled) {
                     add(AlarmProblem.TimeSensitiveOff)
                 }
-                // Without Apple's approval an alarm stays quiet with the mute switch on; say so honestly.
+                // Without critical alerts allowed an alarm stays quiet with the mute switch on; say so honestly.
                 if (!AppConfig.CRITICAL_ALERTS || settings?.criticalAlertSetting != UNNotificationSettingEnabled) add(AlarmProblem.SilentSwitch)
             }
             cont.resume(list)

@@ -93,6 +93,14 @@ object CrashReports {
         return (fresh.filterNot { it === same } + merged).sortedBy { it.lastMillis }.takeLast(MAX_REPORTS)
     }
 
+    /**
+     * Reports for the card at the top: only crashes of the running [build]. Older builds' crashes stay under
+     * „Fehlerbehebung“; the same crash again in this build merges with them ([add]) and so shows again. Unknown build:
+     * all.
+     */
+    fun forCard(reports: List<CrashReport>, build: String?): List<CrashReport> =
+        if (build == null) reports else reports.filter { it.build == build }
+
     /** Shortens log and call stack until the report as text is at most [MAX_BYTES] in size. */
     fun clip(r: CrashReport): CrashReport {
         var c = r.copy(log = r.log.takeLast(LOG_LINES))
