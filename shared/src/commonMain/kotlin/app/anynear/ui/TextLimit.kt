@@ -6,10 +6,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import app.anynear.anmp.core.radio.DeviceName
 import app.anynear.chats.safePrefix
 import app.anynear.circles.ProfileRepository
 import app.anynear.i18n.texts
-import app.anynear.mesh.DeviceName
 
 /**
  * Limit of an input field, everywhere by the same principle: more than allowed cannot be

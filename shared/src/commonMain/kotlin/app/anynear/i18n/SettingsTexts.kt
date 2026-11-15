@@ -137,6 +137,14 @@ interface SettingsTexts {
     val chargeReminderOn: String
     val chargeReminderOff: String
 
+    /** Row and choice on the radio page under „Erweitert“ (ADR 0054 §1b). */
+    val radioArea: String
+    val radioAreaAuto: String
+    fun radioAreaAutoIs(area: String?): String
+    val radioAreaStandard: String
+    val radioAreaHint: String
+    val radioAreaNeedsLocation: String
+
     /** Notification: radio reports low battery. */
     val chargeLowTitle: String
     fun chargeLowText(percent: Int): String
@@ -372,6 +380,12 @@ internal object SettingsTextsDe : SettingsTexts {
     override val chargeReminder = "Ans Laden erinnern"
     override val chargeReminderOn = "Bei wenig Akku und wenn das Funkgerät lange nicht verbunden war."
     override val chargeReminderOff = "Aus: Du bekommst keine Erinnerung zum Laden."
+    override val radioArea = "Funkgebiet"
+    override val radioAreaAuto = "Automatisch nach Standort"
+    override fun radioAreaAutoIs(area: String?) = if (area == null) "Automatisch, Gebiet noch nicht bestimmt" else "Automatisch: $area"
+    override val radioAreaStandard = "Standard"
+    override val radioAreaHint = "Dein Funkgerät funkt so wie die Funkgeräte in der Gegend. Dein Standort bleibt auf dem Handy."
+    override val radioAreaNeedsLocation = "Für „Automatisch“ braucht die App deinen ungefähren Standort."
     override val chargeLowTitle = "Funkgerät fast leer"
     override fun chargeLowText(percent: Int) = "Noch $percent %. Lade es bald, damit du im Notfall funken kannst."
     override val chargeAwayTitle = "Funkgerät lange nicht gesehen"
@@ -602,6 +616,12 @@ internal object SettingsTextsEn : SettingsTexts {
     override val chargeReminder = "Remind me to charge"
     override val chargeReminderOn = "When the battery is low and when the radio has not been connected for a long time."
     override val chargeReminderOff = "Off: you get no reminder to charge."
+    override val radioArea = "Radio area"
+    override val radioAreaAuto = "Automatic by location"
+    override fun radioAreaAutoIs(area: String?) = if (area == null) "Automatic, area not known yet" else "Automatic: $area"
+    override val radioAreaStandard = "Standard"
+    override val radioAreaHint = "Your radio uses the same settings as the radios around you. Your location stays on your phone."
+    override val radioAreaNeedsLocation = "For “Automatic” the app needs your approximate location."
     override val chargeLowTitle = "Radio almost empty"
     override fun chargeLowText(percent: Int) = "$percent% left. Charge it soon so you can use radio in an emergency."
     override val chargeAwayTitle = "Radio not seen for a while"

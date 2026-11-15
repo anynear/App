@@ -16,11 +16,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import app.anynear.anmp.core.radio.DeviceName
+import app.anynear.anmp.core.radio.ProfileDeviation
 import app.anynear.app.AppController
 import app.anynear.i18n.texts
-import app.anynear.mesh.DeviceName
 import app.anynear.mesh.DeviceSetupCheck
-import app.anynear.mesh.ProfileDeviation
 
 /**
  * „Funkgerät einrichten“ (ADR 0006): new device → notice, differently configured device → question,

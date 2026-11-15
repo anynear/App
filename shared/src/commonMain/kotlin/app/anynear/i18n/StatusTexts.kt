@@ -8,6 +8,9 @@ interface StatusTexts {
     val deviceUpdating: String
     val deviceSettingUp: String
     val deviceUpToDate: String
+    /** The radio changes to the settings of another radio area (ADR 0054 §1b). */
+    fun radioAreaChanging(area: String): String
+    fun radioAreaChanged(area: String): String
     val deviceReady: String
     val deviceNotConnected: String
     fun updateFailed(reason: String): String
@@ -138,6 +141,8 @@ internal object StatusTextsDe : StatusTexts {
     override val deviceUpdating = "Dein Funkgerät wird aktualisiert. Es kann dabei mehrmals neu starten."
     override val deviceSettingUp = "Dein Funkgerät wird eingerichtet. Es kann dabei mehrmals neu starten."
     override val deviceUpToDate = "Fertig: Dein Funkgerät ist auf dem neuesten Stand."
+    override fun radioAreaChanging(area: String) = "Dein Funkgerät stellt sich auf das Funkgebiet „$area“ um …"
+    override fun radioAreaChanged(area: String) = "Dein Funkgerät funkt jetzt wie die Funkgeräte im Gebiet „$area“."
     override val deviceReady = "Fertig: Dein Funkgerät ist für $APP eingerichtet."
     override val deviceNotConnected = "Das Funkgerät ist gerade nicht verbunden. Bitte versuch es gleich noch einmal."
     override fun updateFailed(reason: String) = "Aktualisieren hat nicht geklappt: $reason"
@@ -233,6 +238,8 @@ internal object StatusTextsEn : StatusTexts {
     override val deviceUpdating = "Your radio is being updated. It may restart a few times."
     override val deviceSettingUp = "Your radio is being set up. It may restart a few times."
     override val deviceUpToDate = "Done: Your radio is up to date."
+    override fun radioAreaChanging(area: String) = "Your radio is switching to the radio area “$area” …"
+    override fun radioAreaChanged(area: String) = "Your radio now uses the settings of the radios in “$area”."
     override val deviceReady = "Done: Your radio is set up for $APP."
     override val deviceNotConnected = "Your radio isn't connected right now. Please try again in a moment."
     override fun updateFailed(reason: String) = "The update didn't work: $reason"

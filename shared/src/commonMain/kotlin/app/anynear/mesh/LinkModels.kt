@@ -1,5 +1,7 @@
 package app.anynear.mesh
 
+import app.anynear.anmp.core.radio.ProfileDeviation
+import app.anynear.anmp.core.radio.RadioProfile
 import app.anynear.attachments.Attachment
 import app.anynear.attachments.AttachmentKind
 import app.anynear.attachments.RadioAnnouncement
@@ -360,7 +362,6 @@ sealed interface ChannelSetupResult {
  * Value of the device profile that deviates on the radio ([RadioProfile]). [MQTT]: `config_ok_to_mqtt` off or
  * `ignore_mqtt` on (radio bridge, ADR 0054 §1, implementation plan phase 1).
  */
-enum class ProfileDeviation { REGION, MODEM, FREQUENCY, HOPS, TRANSMIT, TX_POWER, MQTT, ROLE, TELEMETRY, SENSORS, ALERTS, POSITION, NAME }
 
 /** Comparison of the connected radio with the device profile. */
 data class DeviceSetupCheck(
@@ -368,6 +369,11 @@ data class DeviceSetupCheck(
     val deviations: Set<ProfileDeviation>,
     /** Current long device name. */
     val currentName: String,
+    /**
+     * Only the radio area changed (ADR 0054 §1b): an app radio still on the settings of another area of the radio list
+     * (or the default) deviates only in its radio values. The app switches it without asking and says so once.
+     */
+    val areaChange: Boolean = false,
 ) {
     enum class Kind {
         /** Matches the profile. */

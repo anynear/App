@@ -15,9 +15,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import app.anynear.anmp.core.radio.DeviceName
 import app.anynear.app.AppController
 import app.anynear.i18n.texts
-import app.anynear.mesh.DeviceName
 
 /**
  * Content of „Erweitert“ on the radio page (ADR 0006/0007), collapsed there so that everyday use
@@ -78,6 +78,7 @@ internal fun RadioAdvanced(controller: AppController, connected: Boolean) {
             }
         }
     }
+    RadioAreaRow(controller)
     val relay by controller.relayForOthers.collectAsState()
     AppRow(
         title = texts.settings.relayForOthers,
@@ -117,5 +118,35 @@ internal fun RadioAdvanced(controller: AppController, connected: Boolean) {
             },
             dismissButton = { AppButton(texts.common.cancel, { confirmReapply = false }, kind = ButtonKind.Quiet) },
         )
+    }
+}
+
+/**
+ * Radio area (ADR 0054 §1b): automatic by location or one area of the radio list. Region, preset and frequency come
+ * from the list; a change is written to the radio at once (without asking, the app says so once).
+ */
+@Composable
+private fun RadioAreaRow(controller: AppController) {
+    val areas = controller.radioAreas
+    val choice by areas.choice.collectAsState()
+    val located by areas.located.collectAsState()
+    val list by areas.areas.collectAsState()
+    val target by areas.target.collectAsState()
+    val allowed by areas.locationAllowed.collectAsState()
+    var choosing by remember { mutableStateOf(false) }
+    val settings = texts.settings
+    val current = target.area ?: settings.radioAreaStandard
+    val subtitle = (if (choice == null) settings.radioAreaAutoIs(located?.let { current }) else current) +
+        " · ${target.label}"
+    AppRow(title = settings.radioArea, subtitle = subtitle, icon = AppIcons.Funk, chevron = true, onClick = { choosing = true })
+    if (choosing) {
+        val options = listOf<Pair<String?, String>>(null to settings.radioAreaAuto) + list.map { it.name to it.name }
+        ChoiceDialog(settings.radioArea, options, choice, onDismiss = { choosing = false }, footer = {
+            Text(settings.radioAreaHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!allowed) {
+                Text(settings.radioAreaNeedsLocation, style = MaterialTheme.typography.bodySmall)
+                AppButton(texts.alerts.allowLocation, controller::allowLocationForRadioArea, kind = ButtonKind.Quiet)
+            }
+        }) { controller.chooseRadioArea(it) }
     }
 }

@@ -1,5 +1,6 @@
 package app.anynear
 
+import app.anynear.anmp.core.radio.RadioProfile
 import app.anynear.contacts.Contact
 import app.anynear.app.CommunityOffer
 import app.anynear.app.PublicRadio
@@ -15,7 +16,6 @@ import app.anynear.mesh.MeshLink
 import app.anynear.mesh.MessageStatus
 import app.anynear.mesh.OwnDevice
 import app.anynear.mesh.PairedDevice
-import app.anynear.mesh.RadioProfile
 import app.anynear.mesh.PublicChannel
 import app.anynear.mesh.PublicChannels
 import app.anynear.mesh.PublicRadioChannel
