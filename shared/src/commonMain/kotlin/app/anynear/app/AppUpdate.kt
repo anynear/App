@@ -37,7 +37,7 @@ sealed interface AppUpdateState {
 
     /**
      * The newest version only exists as a new app with a different app ID (ADR 0025, app ID change). Android
-     * cannot install it via this one; the way is the move by backup (ADR 0027).
+     * cannot install it via this one; the person installs the new app and comes back with the emergency card.
      */
     data class MovedToNewApp(val version: String) : AppUpdateState
 

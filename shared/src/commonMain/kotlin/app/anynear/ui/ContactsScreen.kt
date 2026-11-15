@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -86,7 +85,7 @@ private fun AddContactDialog(controller: AppController, onDismiss: () -> Unit, o
     val scope = rememberCoroutineScope()
     var code by remember { mutableStateOf("") }
     var feedback by remember { mutableStateOf<String?>(null) }
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.people.addContact) },
         text = {
@@ -121,7 +120,7 @@ private fun AddContactDialog(controller: AppController, onDismiss: () -> Unit, o
 @Composable
 internal fun OwnCodeDialog(controller: AppController, onDismiss: () -> Unit) {
     val link by controller.ownContactLink.collectAsState()
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.people.myContact) },
         text = {

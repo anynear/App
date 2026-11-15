@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -151,7 +152,7 @@ internal fun GuideStepScreen(
  */
 @Composable
 private fun EmergencyCardStep(controller: AppController, stepLabel: String?, onDone: () -> Unit, onBack: () -> Unit) {
-    var open by remember { mutableStateOf(false) }
+    var open by rememberSaveable { mutableStateOf(false) }
     PermissionStep(
         icon = AppIcons.Schluessel,
         stepLabel = stepLabel,

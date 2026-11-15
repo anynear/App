@@ -114,7 +114,7 @@ The tests K1–K5 are dropped; the numbers are not reassigned.
 ## Bluetooth permission with a stored radio (23.10.2026)
 
 If a radio is stored via Bluetooth but Bluetooth is not allowed (new installation,
-restore from the backup), the app asks for it: card “Allow Bluetooth?” in
+return with the emergency card), the app asks for it: card “Allow Bluetooth?” in
 Messages, line “Allow Bluetooth” on the Radio page, button in the banner without internet. If
 the system question no longer appears (“Don't ask again”), the button opens the app settings. Tested in the
 emulator: decline twice, afterwards the button opens the app info; after allowing, the
@@ -123,7 +123,7 @@ not tested with a real Bluetooth radio (the emulator has no Bluetooth).
 
 | Nr | Test | Expected | Result |
 |---|---|---|---|
-| B1 | Phone with a stored Bluetooth radio: reinstall the app, restore the backup | card “Allow Bluetooth?”, after “Allow” the radio connects | pending |
+| B1 | Phone with a stored Bluetooth radio: reinstall the app, come back with the emergency card | card “Allow Bluetooth?”, after “Allow” the radio connects | pending |
 | B2 | Revoke Bluetooth again in the Android settings of the app | Radio page shows “Allow Bluetooth”, tapping leads to the permission | pending |
 
 ## Phase 1: vertical prototype
@@ -269,10 +269,10 @@ app data: login and file are back. iOS: app and extension build, app starts in t
 |---|---|---|---|
 | PW1 | Android with fingerprint: open passwords | system prompt with fingerprint or PIN, then list | pending |
 | PW2 | Android 8–10: open passwords | screen lock prompt (PIN/pattern), then list | pending |
-| PW3 | Switch the screen lock off and on again | “Passwords can no longer be read”, “Start over” or restore backup | pending |
+| PW3 | Switch the screen lock off and on again | “Passwords can no longer be read”, “Start over” or the emergency card | pending |
 | PW4 | iPhone: set up and open passwords | Face ID or device passcode, then list | pending |
 | PW5 | iPhone: choose anynear under “AutoFill & Passwords”, sign in in Safari | key symbol → anynear, Face ID, matching logins on top, fields filled in | pending |
-| PW6 | Restore a backup from Android on iPhone and vice versa | logins and My files are back, passwords readable after Face ID or PIN | pending |
+| PW6 | Come back with the emergency card from Android on iPhone and vice versa | logins and My files are back, passwords readable after Face ID or PIN | pending |
 | PW7 | Firefox, Samsung Internet, a native app with sign-in | entry “Fill in with anynear”, filling in after PIN | pending |
 | PW8 | Large font, TalkBack and VoiceOver in the password area and when filling in | everything reachable and read aloud, password only after “Show” | pending |
 
@@ -283,7 +283,7 @@ deleted. Opening a .txt shows the system chooser.
 | Nr | Test | Expected | Result |
 |---|---|---|---|
 | AB1 | iPhone: send and open a Word, Excel and image file as an attachment | preview of iOS (QuickLook) | pending |
-| AB2 | Android ↔ iPhone: file in My files, restore the backup on the other phone | file comes from the relays, even if it was added after the backup | pending |
+| AB2 | Android ↔ iPhone: file in My files, come back with the emergency card on the other phone | file comes from the relays | pending |
 | AB3 | Add a file without internet, internet later | “Not saved online yet”, afterwards “Saved online” by itself | pending |
 | AB4 | Recognizing (ADR 0067): photo of a letter, PDF with text layer, scanned PDF in My files | kind and details in the list, searching for a word from the text finds the file | Android emulator (API 36) passed 07.11.2026 (invoice, contract, insurance; chips filter); search by typing not tested there (input via adb did not arrive); iPhone pending |
 | AB5 | Change the kind by hand, second device or circle member | new kind appears there after the sync without the file being uploaded again | pending |
@@ -590,7 +590,37 @@ anynear network (or a test network).
 | U5 | `direct`, `from` passed, updater knows a build ≥ `min` | full screen “Please update anynear”; Back does not close it; “Update now” downloads and installs; messages and notifications keep arriving meanwhile | pending |
 | U6 | `direct`, `from` passed, newest release below `min` | only the band, no block | pending |
 | U7 | Block with a running check-in | check-in card with “All good” and “I'm done” works on the block screen | pending |
-| U8 | Block, “Create backup” | backup dialog as in the settings, file saved | pending |
+| U8 | dropped: the backup file is gone (ADR 0105) | – | – |
 | U9 | `play`, `from` passed, Play offers a build ≥ `min` | block; “Update now” opens Play's full-screen update | pending |
 | U10 | iPhone, `from` passed | block; “Update now” opens the App Store page (TestFlight: the app TestFlight; not in the store yet: anynear.app/de/app-laden/) | pending |
 | U11 | Debug build, `from` passed | never blocked, only the band | pending |
+
+## Settings in the network and replacing a phone (ADR 0106, 14.11.2026) – none of it tested
+
+Unit tests only (`SettingsSyncTest`, ANMP `replacingPhoneTakesOverTheDeviceSettings`).
+
+| Nr | Test | Expected | Result |
+|---|---|---|---|
+| G1 | Phone with a paired radio and an alert region; new phone, emergency card, choose the old phone under “Does this phone replace one of your devices?” | after the restart the radio and region are set; the old phone is gone from “My devices” without a further question | pending |
+| G2 | Same, choose “No, it is an additional one” | no restart, device settings stay empty, the question does not come again | pending |
+| G3 | Add a tablet with the QR code, answer “No, it is an additional one” | the phone stays under “My devices”, the tablet keeps its own settings | pending |
+| G4 | Change life sign circle on the phone, restart the tablet | tablet uses the same circle | pending |
+| G5 | Without internet right after recovering | question comes once the network answers (up to 2 minutes), otherwise not | pending |
+
+## Direct messages to the person and loading notice (ADR 0107, 14.11.2026) – none of it tested
+
+Every packet to a person goes once to its mailbox recipient; a phone back from the emergency card reads all direct
+conversations. After the update the core moves old entries and the app hands over its local direct history once.
+
+| Nr | Test | Expected | Result |
+|---|---|---|---|
+| DP1 | Anna (one phone) and Ben write each other, then Anna comes back with the emergency card on a second phone | “Loading your messages …” over the list, then both directions of the conversation are there, Anna's own messages included | Android emulator (two Pixel 9, API 36, real relays) passed 15.11.2026: both directions back, new messages both ways after the restore, replaced phone gone from “My devices” without a question; the loading notice was too short to see there; phones pending |
+| DP2 | As DP1, but the conversation was written before the update; update Anna's phone first, then the card | old messages of both sides come back once, no duplicates | pending |
+| DP3 | Anna with phone and tablet, Ben writes once | both get it; Ben's message is one entry, not one per device | pending |
+| DP4 | Ben without internet sends Anna a direct message over radio; Anna's phone at the radio, tablet online | tablet shows the message about 10 minutes later | pending |
+| DP5 | Two devices of Anna at the radio, Ben sends over radio | both take it, Ben sends it once | pending |
+| DP6 | New circle member or added device opens a circle and a direct chat while loading | “Loading earlier messages …” at the top until the messages are there | pending |
+| DP7 | Anna reads all circles and chats on her phone, then Ben writes one more message in a circle; Anna comes back with the emergency card on a second phone | while loading the circle rows say “Loading …”, not “No messages yet”; afterwards only Ben's last message is unread, no notifications for the rest | pending |
+| DP8 | As DP7, but the phone ran a version without “read until” (no mark yet) | everything sent before the restore is read, a message sent during loading is unread | pending |
+| DP9 | Phone and web app, read a circle on the phone | the circle is read in the web app a few seconds later, also after reloading | pending |
+

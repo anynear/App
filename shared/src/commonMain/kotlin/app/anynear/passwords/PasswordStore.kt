@@ -241,8 +241,8 @@ class PasswordStore(
         refresh()
     }
 
-    /** For the backup (ADR 0039, item 5): key after the device lock, `null` without logins. */
-    fun keyForBackup(unlocked: ByteArray): ByteArray? = unlocked.takeIf { hasVault() }
+    /** For adding a device (ADR 0039, item 5): key after the device lock, `null` without logins. */
+    fun keyForHandover(unlocked: ByteArray): ByteArray? = unlocked.takeIf { hasVault() }
 
     /** Encrypted file of the logins, for another device of one's own (ADR 0042 §5); `null` without logins. */
     fun vaultBytes(): ByteArray? = files.read(VaultFile.NAME)
@@ -308,7 +308,7 @@ class PasswordStore(
     }
 
     /**
-     * Restored backup or key from another device: store it. If that is not possible yet (no device lock
+     * Key from another device: store it. If that is not possible yet (no device lock
      * on the new phone), it waits in the app's protected storage until one is set up.
      */
     fun restoreKey(restored: ByteArray) {

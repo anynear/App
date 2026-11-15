@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -192,9 +191,9 @@ internal fun CircleDetailScreen(
         }
     }
     if (editing) EditCircleDialog(controller, circle.id, onDismiss = { editing = false })
-    if (leaving) LeaveDialog(controller, circle, onDismiss = { leaving = false })
+    if (leaving) LeaveCircleDialog(controller, circle, onDismiss = { leaving = false })
     removing?.let { m ->
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { removing = null },
             title = { Text(texts.people.removeMemberTitle(m.name)) },
             text = {
@@ -210,7 +209,7 @@ internal fun CircleDetailScreen(
         )
     }
     if (confirmReset) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text(texts.people.invalidateInviteLinksTitle) },
             text = {
@@ -234,10 +233,11 @@ internal fun circleSummary(circle: Circle, others: Int): String = when {
     else -> texts.people.summaryYouAndOthers(others)
 }
 
+/** Leave a circle (or remove it from the list once removed), from the circle page and from „Chats“ (long press). */
 @Composable
-private fun LeaveDialog(controller: AppController, circle: Circle, onDismiss: () -> Unit) {
+internal fun LeaveCircleDialog(controller: AppController, circle: Circle, onDismiss: () -> Unit) {
     val last = remember(circle.id) { controller.aloneIn(circle.id) }
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (circle.removed) texts.people.removeCircleTitle else texts.people.leaveCircleTitle(circle.name)) },
         text = {
@@ -285,7 +285,7 @@ private fun EditCircleDialog(controller: AppController, circleId: String, onDism
         }
     }
 
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.people.editCircle) },
         text = {

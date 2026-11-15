@@ -221,7 +221,7 @@ enum class OnlineProblem {
 }
 
 /**
- * „Meine Ablage“: on the phone, in the backup (ADR 0040) and permanently on the relays (ADR 0041, the sync
+ * „Meine Ablage“: on the phone (ADR 0040) and permanently on the relays (ADR 0041, the sync
  * is done by [app.anynear.app.PersonalFilesSync] via [listener]). The directory is in [store] (encrypted on the
  * device, [EncryptedKeyValueStore]) under [key], the files encrypted with the device key in
  * [files]. The storage of a circle (ADR 0049) is the same class with its own [key], see

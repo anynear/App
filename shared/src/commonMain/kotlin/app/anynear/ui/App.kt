@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -64,6 +63,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.liveRegion
@@ -118,7 +118,8 @@ private val NoAccessHint: StateFlow<Boolean> = MutableStateFlow(false)
 /** Detail page above list or chat. Back leads to where one came from. No tabs on detail pages. */
 private sealed interface Detail {
     data class CircleInfo(val circleId: String) : Detail
-    data class PersonInfo(val peer: String) : Detail
+    /** [remove]: open the „remove contact“ question right away (from the hint on an unreachable contact). */
+    data class PersonInfo(val peer: String, val remove: Boolean = false) : Detail
     /** My profile: from the ⋮ menu. */
     data object OwnProfile : Detail
     data class Connections(val start: ConnectionsPage = ConnectionsPage.Main) : Detail
@@ -158,6 +159,7 @@ fun App(controller: AppController) {
     AppTheme(dark = dark) {
         val setupDone by controller.setupDone.collectAsState()
         val revoked by controller.revoked.collectAsState()
+        val eraseWaiting by controller.eraseWaiting.collectAsState()
         val updateNotice by controller.updateNotice.collectAsState()
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize()) {
@@ -166,9 +168,11 @@ fun App(controller: AppController) {
                 // On the Mac and the iPad the window is much wider than a phone: content as a centred
                 // column, otherwise buttons and input fields stretch across the full width.
                 // The main view divides up the width itself (sidebar, see MainScreen).
-                val main = !revoked && setupDone
+                val main = !revoked && !eraseWaiting && setupDone
                 Column(Modifier.weight(1f).fillMaxWidth().then(if (main) Modifier else Modifier.wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = MAX_CONTENT_WIDTH))) {
-                    if (revoked) {
+                    if (eraseWaiting) {
+                        Box(Modifier.weight(1f)) { EraseWaitingScreen() }
+                    } else if (revoked) {
                         // Removed by another device of one's own (ADR 0042 §6): nothing works any more, only deleting.
                         Box(Modifier.weight(1f)) { RevokedScreen(controller) }
                     } else if (!setupDone) {
@@ -189,9 +193,17 @@ fun App(controller: AppController) {
 
 @Composable
 private fun MainScreen(controller: AppController) {
-    var tab by remember { mutableStateOf(Tab.Chats) }
+    // Rotating, a new window size or a different system mode must not jump back to „Nachrichten“:
+    // the tab survives a recreated activity (the manifest keeps it alive on rotation anyway).
+    var tab by rememberSaveable { mutableStateOf(Tab.Chats) }
     // Open conversation (circle or person). Back always leads to the „Nachrichten“ overview.
     var open by remember { mutableStateOf<Conversation?>(null) }
+    // The conversation opened under a device (contact link) follows when the device turns out to be a person (ADR 0042).
+    LaunchedEffect(Unit) {
+        controller.peerRenamed.collect { (old, new) ->
+            if ((open as? Conversation.Direct)?.peer == old) open = Conversation.Direct(new)
+        }
+    }
     // Check-in without a circle (ADR 0083): create one, then its chat opens.
     var creatingCircle by remember { mutableStateOf(false) }
     // Open public chat (ADR 0055); separate from circles and people.
@@ -228,6 +240,7 @@ private fun MainScreen(controller: AppController) {
     // Update the name in the conversation header as soon as a contact that was just added is stored.
     val people by controller.people.collectAsState()
     val supportPeer by controller.supportPeer.collectAsState()
+    val unreachableHint by controller.unreachableHint.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val sendScope = rememberCoroutineScope()
     val openChat: (Conversation) -> Unit = { conversation ->
@@ -421,6 +434,7 @@ private fun MainScreen(controller: AppController) {
                                     title = texts.chat.shareTitle,
                                     question = texts.chat.shareQuestion,
                                     preview = sharedNow.text.trim().ifEmpty { sharedNow.files.joinToString(", ") { it.name } },
+                                    invitedCircle = remember(sharedNow) { controller.invitedOwnCircle(sharedNow.text) },
                                 )
                             } else when (val detail = details.lastOrNull()) {
                                 is Detail.CircleInfo -> CircleDetailScreen(
@@ -490,6 +504,7 @@ private fun MainScreen(controller: AppController) {
                                 is Detail.PersonInfo -> PersonDetailScreen(
                                     controller = controller,
                                     peer = detail.peer,
+                                    askRemove = detail.remove,
                                     onBack = closeDetail,
                                     onOpenCircle = { openChatHere(Conversation.Circle(it)) },
                                     // Coming from the conversation, this leads back into the same one; otherwise it opens the conversation.
@@ -511,7 +526,7 @@ private fun MainScreen(controller: AppController) {
                                         controller = controller,
                                         conversation = conversation,
                                         title = people.firstOrNull { it.peer == conversation.peer }?.name ?: controller.peerName(conversation.peer),
-                                        // As in the design: the header leads to the profile; „Zuletzt erreicht“ is shown there.
+                                        // As in the design: the header leads to the profile; „Zuletzt kontaktiert“ is shown there.
                                         subtitle = texts.chat.viewProfile,
                                         onBack = { open = null },
                                         onTitleClick = { showDetail(Detail.PersonInfo(conversation.peer)) },
@@ -519,6 +534,15 @@ private fun MainScreen(controller: AppController) {
                                         // With support only via the form, a separate circle per question (ADR 0065).
                                         readOnlyReason = if (conversation.peer == supportPeer) texts.support.directBlocked else null,
                                         readOnlyAction = if (conversation.peer == supportPeer) texts.support.openForm to { controller.command(AppCommand.Help) } else null,
+                                        topHint = controller.findPerson(conversation.peer)?.deviceId?.takeIf { it in unreachableHint }?.let { person ->
+                                            @Composable {
+                                                UnreachableNotice(
+                                                    name = controller.findPerson(conversation.peer)?.name.orEmpty(),
+                                                    onRemove = { showDetail(Detail.PersonInfo(conversation.peer, remove = true)) },
+                                                    onKeep = { controller.keepUnreachable(person) },
+                                                )
+                                            }
+                                        },
                                     )
                                     openCircle != null -> ChatScreen(
                                         controller = controller,
@@ -533,7 +557,18 @@ private fun MainScreen(controller: AppController) {
                                         readOnlyReason = if (openCircle.removed) texts.setup.removedFromCircle else null,
                                     )
                                     tab == Tab.Chats && newMessage -> NewMessageScreen(controller, onBack = { newMessage = false }, onPick = openChat)
-                                    tab == Tab.Chats -> ChatListScreen(controller, onOpen = openChat, onNewMessage = { newMessage = true }, onOpenPublic = { openPublic = it })
+                                    tab == Tab.Chats -> ChatListScreen(
+                                        controller,
+                                        onOpen = openChat,
+                                        onNewMessage = { newMessage = true },
+                                        onOpenPublic = { openPublic = it },
+                                        onOpenInfo = { c ->
+                                            when (c) {
+                                                is Conversation.Circle -> showDetail(Detail.CircleInfo(c.circleId))
+                                                is Conversation.Direct -> showDetail(Detail.PersonInfo(c.peer))
+                                            }
+                                        },
+                                    )
                                     // Circles (ADR 0100): first the circle detail, from there into the chat.
                                     tab == Tab.Circles -> CirclesScreen(controller, onOpenCircle = { showDetail(Detail.CircleInfo(it)) }, onOpenChat = openChatHere)
                                     tab == Tab.Files -> FilesScreen(
@@ -559,7 +594,7 @@ private fun MainScreen(controller: AppController) {
     InviteDialog(controller)
     PendingPairingDialog(controller)
     UnknownDeviceDialog(controller)
-    PreviousDeviceDialog(controller)
+    ReplaceDeviceDialog(controller)
     PasswordRequestDialog(controller)
     pending?.let { PendingInviteDialog(controller, it.circleName) }
     pendingContact?.let { PendingContactDialog(controller, it.name) }
@@ -705,7 +740,7 @@ private fun RowScope.TabItem(entry: Tab, selected: Boolean, unread: Int, style: 
 /** Android would put anynear to sleep: one sentence, one button straight to the matching setting. */
 @Composable
 private fun BackgroundHintDialog(controller: AppController, restriction: BackgroundRestriction) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = controller::postponeBackgroundHint,
         title = { Text(texts.setup.backgroundTitle) },
         text = {
@@ -729,7 +764,7 @@ private fun BackgroundHintDialog(controller: AppController, restriction: Backgro
 /** Opened invitation link: only after „Beitreten“ does one become a member. */
 @Composable
 private fun PendingInviteDialog(controller: AppController, circleName: String) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = controller::dismissPendingInvite,
         title = { Text(texts.setup.joinCircleConfirmTitle(circleName)) },
         text = { Text(texts.setup.joinCircleConfirmText, Modifier.verticalScroll(rememberScrollState())) },
@@ -741,7 +776,7 @@ private fun PendingInviteDialog(controller: AppController, circleName: String) {
 /** Opened contact link: only after „Hinzufügen“ is the contact stored. */
 @Composable
 private fun PendingContactDialog(controller: AppController, name: String) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = controller::dismissPendingContact,
         title = { Text(texts.setup.addContactConfirmTitle(name)) },
         text = { Text(texts.setup.addContactConfirmText(name), Modifier.verticalScroll(rememberScrollState())) },

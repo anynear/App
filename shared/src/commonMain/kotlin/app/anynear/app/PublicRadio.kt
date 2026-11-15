@@ -80,13 +80,13 @@ sealed interface PublicSendResult {
 
 /**
  * Public radio of the area (ADR 0055): chats „Alle in der Nähe“ and „Mesh Hessen“. Radio only, only on this phone:
- * none of it goes to the internet, into the backup or to one's own other devices. At most [MAX_MESSAGES] messages
+ * none of it goes to the internet, or to one's own other devices. At most [MAX_MESSAGES] messages
  * and [MAX_AGE_MILLIS] old. Notifications only if they are switched on at the chat (default off, ADR 0055 §4).
  */
 class PublicRadio(
     private val scope: CoroutineScope,
     private val link: MeshLink,
-    /** Own file outside the backup, encrypted with the device key. */
+    /** Own file, encrypted with the device key. */
     private val file: TextFile,
     private val cipher: LocalCipher?,
     /** Settings (switch, read until, explanation seen). */

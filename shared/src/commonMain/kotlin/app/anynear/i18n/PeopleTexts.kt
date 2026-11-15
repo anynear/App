@@ -153,6 +153,12 @@ interface PeopleTexts {
     fun inviteWhichCircle(name: String): String
     fun staysWhileSharedCircle(name: String): String
     fun removeDirectContactText(name: String): String
+    /** Every relay refuses our messages to [name] (ADR 0046): hint in the chat. */
+    fun unreachableText(name: String): String
+    val unreachableRemove: String
+    val unreachableKeep: String
+    /** Below the name in lists. */
+    val unreachableShort: String
     fun removeDirectContactInCircleText(name: String, circles: String): String
     /** Button in the remove dialog: only the contact, the conversation stays. */
     val removeKeepHistory: String
@@ -258,9 +264,9 @@ internal object PeopleTextsDe : PeopleTexts {
     override val noCircleSelfAdded = "Ohne Kreis · direkter Kontakt"
     override val pasteLink = "Link einfügen"
     override val pasteLinkHint = "Den Kontaktlink, den du bekommen hast"
-    override val scanContactHint = "Kontakt oder Einladung von einem anderen Handy"
+    override val scanContactHint = "Kontakt oder Einladung einer anderen Person scannen"
     override val myContact = "Mein Kontakt"
-    override val myContactHint = "Zum Weitergeben, als Link oder QR-Code"
+    override val myContactHint = "Gib deinen Kontakt an andere weiter, als Link oder QR-Code"
     override val addContactText =
         "Für Menschen außerhalb deiner Kreise: Tippe auf den Kontaktlink, den du bekommen hast, scanne den QR-Code oder füge den Link hier ein. " +
             "Menschen aus deinen Kreisen erscheinen automatisch."
@@ -310,8 +316,8 @@ internal object PeopleTextsDe : PeopleTexts {
     override val shareMyContact = "Meinen Kontakt teilen"
     override val openConversation = "Gespräch öffnen"
     override val radioOnly = "nur über Funk"
-    override val lastReached = "Zuletzt erreicht"
-    override val lastReachedFooter = "Das weiß nur dein Handy. Ob die Nachricht ankommt, zeigt sich beim Senden."
+    override val lastReached = "Zuletzt kontaktiert"
+    override val lastReachedFooter = "Wann diese Person zuletzt eine Nachricht empfangen hat."
     override fun nothingReceivedFrom(name: String) = "Noch nichts von $name erhalten"
     override val viaInternetAndRadio = "über Internet und Funk"
     override val viaRadio = "über Funk"
@@ -322,6 +328,10 @@ internal object PeopleTextsDe : PeopleTexts {
     override fun inviteWhichCircle(name: String) = "$name in welchen Kreis einladen?"
     override fun staysWhileSharedCircle(name: String) = "$name bleibt in deinen Kontakten, solange ihr einen gemeinsamen Kreis habt."
     override fun removeDirectContactText(name: String) = "$name steht danach nicht mehr in deinen Kontakten und kann dir nicht mehr direkt schreiben. Wieder verbinden könnt ihr euch über den Kontaktlink. Euer Gespräch kannst du behalten oder mit löschen."
+    override fun unreachableText(name: String) = "$name ist über anynear nicht mehr erreichbar. Vielleicht wurde das Konto gelöscht."
+    override val unreachableRemove = "Kontakt entfernen"
+    override val unreachableKeep = "Behalten"
+    override val unreachableShort = "nicht erreichbar"
     override fun removeDirectContactInCircleText(name: String, circles: String) = "$name steht danach nicht mehr als direkter Kontakt in deinen Kontakten. Weil ihr gemeinsam in einem Kreis seid ($circles), bleibt $name dort als Mitglied sichtbar, und ihr könnt euch weiter schreiben. Schreibt ihr euch wieder direkt, gilt $name wieder als dein Kontakt. Euer Gespräch kannst du behalten oder mit löschen."
     override val removeKeepHistory = "Nur Kontakt entfernen"
     override val removeWithHistory = "Kontakt und Gespräch löschen"
@@ -432,9 +442,9 @@ internal object PeopleTextsEn : PeopleTexts {
     override val noCircleSelfAdded = "No circle · direct contact"
     override val pasteLink = "Paste link"
     override val pasteLinkHint = "The contact link you got"
-    override val scanContactHint = "Contact or invite from another phone"
+    override val scanContactHint = "Scan another person's contact or invite"
     override val myContact = "My contact"
-    override val myContactHint = "To pass on, as a link or QR code"
+    override val myContactHint = "Share your contact with others, as a link or QR code"
     override val addContactText =
         "For people outside your circles: tap the contact link you got, scan the QR code or paste the link here. " +
             "People from your circles show up automatically."
@@ -484,8 +494,8 @@ internal object PeopleTextsEn : PeopleTexts {
     override val shareMyContact = "Share my contact"
     override val openConversation = "Open conversation"
     override val radioOnly = "radio only"
-    override val lastReached = "Last reached"
-    override val lastReachedFooter = "Only your phone knows this. Whether a message arrives shows when you send it."
+    override val lastReached = "Last contacted"
+    override val lastReachedFooter = "When this person last received a message."
     override fun nothingReceivedFrom(name: String) = "Nothing received from $name yet"
     override val viaInternetAndRadio = "over the internet and radio"
     override val viaRadio = "over radio"
@@ -496,6 +506,10 @@ internal object PeopleTextsEn : PeopleTexts {
     override fun inviteWhichCircle(name: String) = "Invite $name to which circle?"
     override fun staysWhileSharedCircle(name: String) = "$name stays in your contacts as long as you share a circle."
     override fun removeDirectContactText(name: String) = "$name will no longer be in your contacts and can no longer write to you directly. You can connect again via the contact link. You can keep your conversation or delete it too."
+    override fun unreachableText(name: String) = "$name can no longer be reached on anynear. The account may have been deleted."
+    override val unreachableRemove = "Remove contact"
+    override val unreachableKeep = "Keep"
+    override val unreachableShort = "unreachable"
     override fun removeDirectContactInCircleText(name: String, circles: String) = "$name will no longer be saved as a direct contact. Because you share a circle ($circles), $name stays visible there as a member and you can keep writing to each other. If you message each other directly again, $name counts as your contact again. You can keep your conversation or delete it too."
     override val removeKeepHistory = "Remove contact only"
     override val removeWithHistory = "Delete contact and conversation"

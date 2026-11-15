@@ -65,7 +65,6 @@ internal fun FamilySetupScreen(controller: AppController, modifier: Modifier = M
     var step by rememberSaveable { mutableStateOf(SetupStep.Welcome) }
     var name by rememberSaveable { mutableStateOf(savedName) }
     var error by remember { mutableStateOf<String?>(null) }
-    var restoring by remember { mutableStateOf(false) }
     var returning by remember { mutableStateOf(false) }
     // Steps after the name (ADR 0073): determined when leaving the name, so that „Schritt x von y“ stays stable.
     var guide by rememberSaveable { mutableStateOf("") }
@@ -223,7 +222,7 @@ internal fun FamilySetupScreen(controller: AppController, modifier: Modifier = M
                 top = { BrandMark(size = 96.dp) },
                 action = texts.setup.letsGo,
                 onAction = { go(SetupStep.Name) },
-                // New phone or tablet: with the other device, the emergency card (ADR 0042) or a backup (ADR 0027).
+                // New phone or tablet: with the other device or the emergency card (ADR 0042).
                 dismiss = texts.devices.returning,
                 onDismiss = { returning = true },
                 tagline = true,
@@ -262,8 +261,7 @@ internal fun FamilySetupScreen(controller: AppController, modifier: Modifier = M
             }
         }
     }
-    if (restoring) RestoreBackupDialog(controller) { restoring = false }
-    if (returning) ReturningDialog(controller, onBackupFile = { restoring = true }.takeIf { controller.backupAvailable }) { returning = false }
+    if (returning) ReturningDialog(controller) { returning = false }
 }
 
 @Composable

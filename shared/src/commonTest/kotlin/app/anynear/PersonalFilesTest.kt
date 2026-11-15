@@ -74,7 +74,7 @@ class PersonalFilesTest {
 
         personal.rename(pdf.id, "  Vollmacht Oma.pdf ")
         assertEquals("Vollmacht Oma.pdf", personal.list.value.single().name)
-        // Reloaded (e.g. after a restart or a restored backup) everything is still there.
+        // Reloaded (e.g. after a restart) everything is still there.
         assertEquals(personal.list.value, files().list.value)
 
         val draft = personal.asDraft(personal.list.value.single())!!

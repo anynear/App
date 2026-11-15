@@ -72,14 +72,13 @@ internal fun UpdateBanner(controller: AppController, notice: UpdateNotice) {
 /**
  * Full screen over the app when the network requires a newer build and there is a way to it (ADR 0096 §5, §6).
  * Only the interface is covered; the core keeps receiving, notifying and alarming. Reachable from here: the update,
- * a running check-in (ADR 0083) and saving a backup (ADR 0027). Back does not close it.
+ * and a running check-in (ADR 0083). Back does not close it.
  */
 @Composable
 internal fun UpdateBlockScreen(controller: AppController) {
     // Back does nothing here: it must not uncover the app.
     SystemBackHandler(enabled = true, onBack = {})
     val state by controller.appUpdate.collectAsState()
-    var backingUp by remember { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             Modifier.fillMaxSize()
@@ -108,11 +107,7 @@ internal fun UpdateBlockScreen(controller: AppController) {
                 val busy = current is AppUpdateState.Downloading || current is AppUpdateState.Installing
                 AppButton(texts.settings.updateNow, controller::startUpdate, Modifier.fillMaxWidth(), kind = ButtonKind.Main, enabled = !busy)
                 controller.lifeSigns?.let { RunningLifeSignCard(it) }
-                if (controller.backupAvailable) {
-                    AppButton(texts.system.saveBackup, { backingUp = true }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary, icon = AppIcons.Speichern)
-                }
             }
         }
     }
-    if (backingUp) CreateBackupDialog(controller) { backingUp = false }
 }

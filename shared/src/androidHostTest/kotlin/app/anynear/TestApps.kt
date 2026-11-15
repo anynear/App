@@ -88,7 +88,6 @@ internal fun testController(
         attachmentFiles = AttachmentFiles(TestFiles(), cipher),
         avatars = AvatarImages(AttachmentFiles(TestFiles(), cipher), store),
         drafts = DraftStore(store, AttachmentFiles(TestFiles(), cipher)),
-        localCipher = cipher,
         networkId = config.networkId.toString(),
     ).also {
         host.target = it.coreHost

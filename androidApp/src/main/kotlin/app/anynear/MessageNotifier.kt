@@ -65,60 +65,19 @@ class MessageNotifier(private val context: Context) {
             .setPublicVersion(public)
             .setContentIntent(openIntent(notification.key))
             .setAutoCancel(true)
-            // Own group: without one Android bundles all notifications of the app, and the always present
-            // background notification („empfängt Nachrichten“) would stand on top with the message hidden below.
-            .setGroup(GROUP)
+            // Own group with a summary, apart from the background notification ([NotificationGroups]).
+            .setGroup(NotificationGroups.MESSAGES)
             .build()
         try {
-            manager.notify(notification.key, NOTIFICATION_ID, built)
-            showSummary()
+            // Summary of app versions up to 13.11.2026, replaced by the one of [NotificationGroups].
+            manager.cancel(OLD_SUMMARY_ID)
+            NotificationGroups.notify(context, notification.key, NOTIFICATION_ID, built)
         } catch (e: SecurityException) {
             // Permission was revoked in the meantime; the message is in the app anyway.
         }
     }
 
-    fun cancel(key: String) {
-        manager.cancel(key, NOTIFICATION_ID)
-        if (activeConversations().isEmpty()) manager.cancel(SUMMARY_ID)
-    }
-
-    /**
-     * Summary of the group, shown by Android only when several conversations are there. It never alerts
-     * itself (the conversation does) and lists the conversations.
-     */
-    private fun showSummary() {
-        val titles = activeConversations().mapNotNull { it.notification.extras.getCharSequence(NotificationCompat.EXTRA_TITLE) }
-        if (titles.isEmpty()) return
-        val inbox = NotificationCompat.InboxStyle()
-        titles.forEach(inbox::addLine)
-        val summary = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(AppBrand.notificationIcon)
-            .setContentTitle(AppBrand.name)
-            .setContentText(titles.joinToString(", "))
-            .setStyle(inbox)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setGroup(GROUP)
-            .setGroupSummary(true)
-            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
-            .setContentIntent(openAppIntent())
-            .setAutoCancel(true)
-            .build()
-        manager.notify(SUMMARY_ID, summary)
-    }
-
-    /** Message notifications currently shown, without the summary. */
-    private fun activeConversations() =
-        context.getSystemService(NotificationManager::class.java).activeNotifications.filter {
-            it.id == NOTIFICATION_ID && it.tag != null && it.notification.group == GROUP
-        }
-
-    private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(
-        context,
-        SUMMARY_ID,
-        Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-        PendingIntent.FLAG_IMMUTABLE,
-    )
+    fun cancel(key: String) = NotificationGroups.cancel(context, NotificationGroups.MESSAGES, key, NOTIFICATION_ID)
 
     private fun allowed(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
@@ -156,9 +115,8 @@ class MessageNotifier(private val context: Context) {
         /** One notification per conversation: tag = conversation, ID always the same. */
         private const val NOTIFICATION_ID = 100
 
-        /** Group of all message notifications and its summary. */
-        private const val GROUP = "messages"
-        private const val SUMMARY_ID = 101
+        /** Former summary of the messages, before [NotificationGroups]. */
+        private const val OLD_SUMMARY_ID = 101
 
         const val ACTION_OPEN_CONVERSATION = "app.anynear.OPEN_CONVERSATION"
         const val EXTRA_CONVERSATION = "conversation"

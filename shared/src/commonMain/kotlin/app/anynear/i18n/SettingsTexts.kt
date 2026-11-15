@@ -211,6 +211,10 @@ interface SettingsTexts {
     val helpWhatIsCircle: String
     val helpWhatIsContactCode: String
     val helpNeedRadio: String
+    val helpHowMessages: String
+    val helpHowMessagesAnswer: String
+    val helpInternetDown: String
+    val helpInternetDownAnswer: String
 
     // Start afresh (ADR 0046)
     val startOver: String
@@ -230,6 +234,8 @@ interface SettingsTexts {
     val eraseReason: String
     val erasing: String
     val eraseOffline: String
+    val eraseWaitingTitle: String
+    val eraseWaitingText: String
 }
 
 internal object SettingsTextsDe : SettingsTexts {
@@ -301,19 +307,19 @@ internal object SettingsTextsDe : SettingsTexts {
     override val wayPowerNote = "Im WLAN hängt das Funkgerät am Router. Fällt der Strom aus, ist auch das WLAN weg. Dann hilft das USB-Kabel: direkt so benutzen oder zurück auf Bluetooth stellen."
     override val wayWifiWarning = "Stimmt das Passwort nicht, erreichst du das Funkgerät danach nur noch mit dem USB-Kabel. Darüber lässt es sich wieder umstellen."
     override val wayBluetoothTitle = "Auf Bluetooth umstellen?"
-    override val wayBluetoothText = "Das Funkgerät startet neu und verbindet sich dann per Bluetooth. Dabei fragt dein Handy nach der Zahl vom Display."
+    override val wayBluetoothText = "Das Funkgerät startet neu und verbindet sich dann per Bluetooth. Dabei wirst du nach der Zahl vom Display gefragt."
     override val wayWorkingWifi = "Dein Funkgerät startet neu und meldet sich gleich im WLAN …"
     override val wayWorkingBluetooth = "Dein Funkgerät startet neu und wird per Bluetooth gesucht …"
     override val wayNotSeenWifi = "Das Funkgerät meldet sich nicht im WLAN. Stimmt das Passwort nicht, steck es per USB-Kabel ans Handy und stell es dort wieder um."
     override val wayNotSeenBluetooth = "Das Funkgerät taucht über Bluetooth nicht auf. Ist es mit einem anderen Handy verbunden? Sonst hilft das USB-Kabel."
     override val wayFailed = "Das hat nicht geklappt. Am Funkgerät hat sich nichts geändert."
     override fun wayDoneWifi(name: String) = "„$name“ ist jetzt im WLAN verbunden."
-    override fun wayDoneBluetooth(name: String) = "„$name“ verbindet sich jetzt per Bluetooth. Gib die Zahl vom Display ein, wenn dein Handy danach fragt."
+    override fun wayDoneBluetooth(name: String) = "„$name“ verbindet sich jetzt per Bluetooth. Gib die Zahl vom Display ein, wenn du danach gefragt wirst."
     override val radioViaWifi = "im WLAN"
     override val radioViaUsb = "per USB-Kabel"
     override val pairNewRadio = "Neues Funkgerät koppeln"
     override val pairNewRadioFooter =
-        "Beim ersten Koppeln fragt dein Handy nach einer Zahl. Sie steht auf dem Display des Funkgeräts, ohne Display ist es 123456."
+        "Nur bei Bluetooth: Beim ersten Koppeln wirst du nach einer Zahl gefragt. Sie steht auf dem Display des Funkgeräts, ohne Display ist es 123456. Sonst brauchst du das Display nicht, alles stellst du in $APP ein."
     override val pairRadio = "Koppeln"
     override val searchRadios = "Suchen"
     override val myRadiosFooter = "Verbinden geht, wenn das Funkgerät eingeschaltet und in der Nähe ist."
@@ -341,13 +347,13 @@ internal object SettingsTextsDe : SettingsTexts {
 
     override val privacy = "Datenschutz"
     override val usageStats = "Nutzungsstatistik teilen"
-    override val usageStatsOn = "Einmal am Tag ein paar Zahlen, ohne Namen und ohne Inhalte."
+    override val usageStatsOn = "Einmal am Tag ein paar Zahlen an einen Server von $APP, ohne Namen und ohne Inhalte. Der Server zählt sie nur zusammen."
     override val usageStatsOff = "Aus. Es wird nichts geschickt."
     override val usageStatsTestMode = "Testmodus: Diese Version schickt nichts."
     override val usageStatsSent = "Was zuletzt geschickt wurde"
     override val usageStatsNone = "Noch nichts geschickt."
     override val usageStatsOffTitle = "Nutzungsstatistik abschalten?"
-    override val usageStatsOffText = "$APP schickt einmal am Tag nur ein paar grobe Zahlen: zum Beispiel die Version der App, ob Android oder iOS und wie viele Geräte und Kreise du hast. Namen, Inhalte, Standorte und IP-Adressen werden nicht gespeichert. Die Zahlen helfen uns, $APP möglichst gut weiterzuentwickeln."
+    override val usageStatsOffText = "$APP schickt einmal am Tag nur ein paar grobe Zahlen an einen Server von $APP: zum Beispiel die Version der App, ob Android oder iOS und wie viele Geräte und Kreise du hast. Namen, Inhalte und Standorte werden nicht geschickt. Deine IP-Adresse wird nicht gespeichert. Die Meldung wird sofort nach dem Zählen verworfen. Die Zahlen helfen uns, $APP möglichst gut weiterzuentwickeln."
     override val usageStatsOffConfirm = "Abschalten"
     override val usageStatsKeep = "Eingeschaltet lassen"
     override fun usageStatsReport(devices: Int, radios: Int, circles: Int, channels: Int, nina: Boolean, platform: String, version: String) =
@@ -436,6 +442,10 @@ internal object SettingsTextsDe : SettingsTexts {
     override val helpWhatIsCircle = "Was ist ein Kreis?"
     override val helpWhatIsContactCode = "Wofür ist mein Kontaktcode?"
     override val helpNeedRadio = "Brauche ich ein Funkgerät?"
+    override val helpHowMessages = "Wie kommen meine Nachrichten an?"
+    override val helpHowMessagesAnswer = "Normalerweise über das Internet, wie bei anderen Messengern. Hast du ein Funkgerät, springt $APP auf Funk um, wenn eine Nachricht übers Internet nicht ankommt. Das klappt ohne Internet und Mobilfunk, reicht aber nur so weit wie die Funkgeräte in der Gegend. Über Funk gehen nur Texte, Bilder und Dateien brauchen Internet."
+    override val helpInternetDown = "Was passiert, wenn das Internet ausfällt?"
+    override val helpInternetDownAnswer = "Ohne Funkgerät warten deine Nachrichten auf dem Handy und gehen raus, sobald wieder Internet da ist. Mit Funkgerät erreichst du über Funk alle, die selbst ein Funkgerät in Reichweite haben. Kommt das Internet zurück, gleicht $APP alles von selbst ab."
 
     override val startOver = "Neu anfangen"
     override val resetDevice = "Gerät zurücksetzen"
@@ -443,16 +453,18 @@ internal object SettingsTextsDe : SettingsTexts {
     override val resetTitle = "Gerät zurücksetzen?"
     override val resetText = "$APP löscht alles auf diesem Gerät und startet neu, wie frisch installiert. Deine Kreise und Kontakte bleiben im Netz."
     override val resetLosesPerson = "Du hast keine Notfallkarte und kein anderes Gerät mit $APP. Danach kommst du nicht mehr an deine Kreise und Kontakte."
-    override val resetMore = "Gelöscht werden Nachrichten, Bilder, Meine Ablage, Passwörter, Einstellungen und die Schlüssel dieses Geräts. Zurück geht es bei der Einrichtung mit „Ich hatte $APP schon“: mit einem anderen Gerät, der Notfallkarte oder einer Sicherung. Unter „Meine Geräte“ steht dieses Gerät danach noch; entferne es dort von einem anderen Gerät aus. Falls sich $APP danach nur schließt, öffne es wieder."
+    override val resetMore = "Gelöscht werden Nachrichten, Bilder, Meine Ablage, Passwörter, Einstellungen und die Schlüssel dieses Geräts. Zurück geht es bei der Einrichtung mit „Ich habe $APP schon“: mit einem anderen Gerät oder der Notfallkarte. Unter „Meine Geräte“ steht dieses Gerät danach noch; entferne es dort von einem anderen Gerät aus. Falls sich $APP danach nur schließt, öffne es wieder."
     override val resetConfirm = "Zurücksetzen"
     override val eraseAll = "Alle Daten löschen"
-    override val eraseAllHint = "Auf diesem Gerät und im Netz"
+    override val eraseAllHint = "Auf allen deinen Geräten und im anynear-Netz"
     override val eraseTitle = "Alle Daten löschen?"
-    override val eraseText = "$APP löscht dich hier und im Netz: Du verlässt alle Kreise, Kontakte, Meine Ablage und Passwörter sind weg, deine anderen Geräte werden abgemeldet. Das lässt sich nicht rückgängig machen."
-    override val eraseMore = "Nachrichten, die andere schon bekommen haben, bleiben bei ihnen. Deine Notfallkarte führt danach zu nichts mehr. Sicherungsdateien, die du selbst gespeichert hast, löscht $APP nicht. Dafür braucht es Internet. Falls sich $APP danach nur schließt, öffne es wieder."
+    override val eraseText = "$APP löscht dich hier und im anynear-Netz: Du verlässt alle Kreise und Kontakte. Meine Ablage und deine Passwörter sind weg, deine anderen Geräte werden abgemeldet. Das lässt sich nicht rückgängig machen, auch nicht mit der Notfallkarte."
+    override val eraseMore = "Nachrichten, die andere schon bekommen haben, bleiben bei ihnen. Deine Notfallkarte funktioniert danach nicht mehr. Zum Löschen braucht es Internet. Falls sich $APP danach nur schließt, öffne es wieder."
     override val eraseConfirm = "Alles löschen"
     override val eraseReason = "Alles löschen"
     override val erasing = "Wird gelöscht …"
+    override val eraseWaitingTitle = "Wird noch gelöscht …"
+    override val eraseWaitingText = "$APP meldet dich noch bei deinen Kreisen und Kontakten ab. Dafür braucht es Internet. Lass die App offen. Danach startet sie neu, wie frisch installiert."
     override val eraseOffline = "Gerade ist kein Internet da. Ohne Internet kann $APP nichts im Netz löschen; es wurde nichts verändert."
 }
 
@@ -525,19 +537,19 @@ internal object SettingsTextsEn : SettingsTexts {
     override val wayPowerNote = "On Wi-Fi the radio depends on your router. If the power goes out, the Wi-Fi is gone too. Then the USB cable helps: use it that way or switch back to Bluetooth."
     override val wayWifiWarning = "If the password is wrong, you can only reach the radio with the USB cable afterwards. You can switch it back from there."
     override val wayBluetoothTitle = "Switch to Bluetooth?"
-    override val wayBluetoothText = "The radio restarts and then connects over Bluetooth. Your phone will ask for the number shown on the display."
+    override val wayBluetoothText = "The radio restarts and then connects over Bluetooth. You'll be asked for the number shown on the display."
     override val wayWorkingWifi = "Your radio is restarting and will show up on your Wi-Fi in a moment …"
     override val wayWorkingBluetooth = "Your radio is restarting; looking for it over Bluetooth …"
     override val wayNotSeenWifi = "The radio doesn't show up on your Wi-Fi. If the password was wrong, plug it into your phone with a USB cable and switch it back there."
     override val wayNotSeenBluetooth = "The radio doesn't show up over Bluetooth. Is it connected to another phone? Otherwise the USB cable helps."
     override val wayFailed = "That didn't work. Nothing changed on the radio."
     override fun wayDoneWifi(name: String) = "“$name” is now connected over Wi-Fi."
-    override fun wayDoneBluetooth(name: String) = "“$name” now connects over Bluetooth. Enter the number from the display when your phone asks for it."
+    override fun wayDoneBluetooth(name: String) = "“$name” now connects over Bluetooth. Enter the number from the display when you're asked for it."
     override val radioViaWifi = "on Wi-Fi"
     override val radioViaUsb = "with USB cable"
     override val pairNewRadio = "Pair a new radio"
     override val pairNewRadioFooter =
-        "The first time you pair, your phone asks for a number. It's shown on the radio's display; without a display it's 123456."
+        "Bluetooth only: the first time you pair, you'll be asked for a number. It's shown on the radio's display; without a display it's 123456. Apart from that you can ignore the display: you set everything up in $APP."
     override val pairRadio = "Pair"
     override val searchRadios = "Search"
     override val myRadiosFooter = "You can connect when the radio is switched on and nearby."
@@ -565,13 +577,13 @@ internal object SettingsTextsEn : SettingsTexts {
 
     override val privacy = "Privacy"
     override val usageStats = "Share usage statistics"
-    override val usageStatsOn = "A few numbers once a day, without names or content."
+    override val usageStatsOn = "A few numbers once a day to an $APP server, without names or content. The server only adds them up."
     override val usageStatsOff = "Off. Nothing is sent."
     override val usageStatsTestMode = "Test mode: this build sends nothing."
     override val usageStatsSent = "What was sent last"
     override val usageStatsNone = "Nothing sent yet."
     override val usageStatsOffTitle = "Switch off usage statistics?"
-    override val usageStatsOffText = "$APP sends only a few rough numbers once a day: for example the app version, whether Android or iOS, and how many devices and circles you have. Names, content, locations and IP addresses are not stored. The numbers help us keep improving $APP."
+    override val usageStatsOffText = "$APP sends only a few rough numbers once a day to an $APP server: for example the app version, whether Android or iOS, and how many devices and circles you have. Names, content and locations are not sent. Your IP address is not stored. The report is discarded right after counting. The numbers help us keep improving $APP."
     override val usageStatsOffConfirm = "Switch off"
     override val usageStatsKeep = "Keep on"
     override fun usageStatsReport(devices: Int, radios: Int, circles: Int, channels: Int, nina: Boolean, platform: String, version: String) =
@@ -660,6 +672,10 @@ internal object SettingsTextsEn : SettingsTexts {
     override val helpWhatIsCircle = "What is a circle?"
     override val helpWhatIsContactCode = "What is my contact code for?"
     override val helpNeedRadio = "Do I need a radio?"
+    override val helpHowMessages = "How do my messages get through?"
+    override val helpHowMessagesAnswer = "Usually over the internet, like other messengers. If you have a radio, $APP switches to radio when a message doesn't get through over the internet. That works without internet or cell service, but only as far as the radios in the area reach. Only text goes over radio; pictures and files need the internet."
+    override val helpInternetDown = "What happens if the internet goes down?"
+    override val helpInternetDownAnswer = "Without a radio, your messages wait on your phone and go out as soon as the internet is back. With a radio, you reach everyone who has a radio in range. When the internet is back, $APP syncs everything on its own."
 
     override val startOver = "Start over"
     override val resetDevice = "Reset this device"
@@ -667,15 +683,17 @@ internal object SettingsTextsEn : SettingsTexts {
     override val resetTitle = "Reset this device?"
     override val resetText = "$APP deletes everything on this device and restarts as if newly installed. Your circles and contacts stay in the network."
     override val resetLosesPerson = "You have no emergency card and no other device with $APP. Afterwards you can no longer get to your circles and contacts."
-    override val resetMore = "This deletes messages, pictures, My files, passwords, settings and this device's keys. To come back, choose “I used $APP before” during setup: with another device, the emergency card or a backup. This device still shows under “My devices”; remove it there from another device. If $APP just closes afterwards, open it again."
+    override val resetMore = "This deletes messages, pictures, My files, passwords, settings and this device's keys. To come back, choose “I already use $APP” during setup: with another device or the emergency card. This device still shows under “My devices”; remove it there from another device. If $APP just closes afterwards, open it again."
     override val resetConfirm = "Reset"
     override val eraseAll = "Delete all data"
-    override val eraseAllHint = "On this device and in the network"
+    override val eraseAllHint = "On all your devices and in the anynear network"
     override val eraseTitle = "Delete all data?"
-    override val eraseText = "$APP deletes you here and in the network: you leave all circles, contacts, My files and passwords are gone, your other devices are signed out. This cannot be undone."
-    override val eraseMore = "Messages others already received stay with them. Your emergency card leads to nothing afterwards. Backup files you saved yourself are not deleted by $APP. This needs the internet. If $APP just closes afterwards, open it again."
+    override val eraseText = "$APP deletes you here and in the anynear network: you leave all circles and contacts. My files and your passwords are gone, and your other devices are signed out. This cannot be undone, not even with the emergency card."
+    override val eraseMore = "Messages others already received stay with them. Your emergency card no longer works afterwards. Deleting needs the internet. If $APP just closes afterwards, open it again."
     override val eraseConfirm = "Delete everything"
     override val eraseReason = "Delete everything"
     override val erasing = "Deleting …"
+    override val eraseWaitingTitle = "Still deleting …"
+    override val eraseWaitingText = "$APP is still signing you out of your circles and contacts. This needs internet. Keep the app open. Afterwards it restarts as if newly installed."
     override val eraseOffline = "There is no internet right now. Without it $APP cannot delete anything in the network; nothing was changed."
 }

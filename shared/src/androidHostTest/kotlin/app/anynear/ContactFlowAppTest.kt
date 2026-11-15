@@ -258,6 +258,18 @@ class ContactFlowAppTest {
     }
 
     @Test
+    fun sharedInvitationNamesTheOwnCircle() = withApp { a ->
+        var circleId: String? = null
+        a.controller.createCircle("Testkreis", onCreated = { circleId = it })
+        eventually { circleId != null && a.controller.inviteLink(circleId!!) != null }
+        val link = a.controller.inviteLink(circleId!!)!!
+        // As the share menu passes it on: a sentence with the link.
+        assertEquals(circleId, a.controller.invitedOwnCircle("Komm in meinen Kreis „Testkreis“ bei anynear: $link"))
+        assertNull(a.controller.invitedOwnCircle("Nur Text ohne Link"))
+        assertNull(a.controller.invitedOwnCircle("https://anynear.net/k#kaputt"))
+    }
+
+    @Test
     fun sharingOwnContactIsASentenceWithTheName() {
         val hooks = SharingHooks()
         withApp(hooks) { a ->

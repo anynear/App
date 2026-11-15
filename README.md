@@ -273,11 +273,14 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   fresh start (ADR 0061, decision 13). The app ID `app.anynear` starts empty; nothing moves over from an earlier app ID.
 - Honest message states: “delivery confirmed” only on a confirmation from the recipient's device.
 - Only what the radio has not yet accepted is repeated automatically.
-- Manual backup (ADR 0027): “Settings → Backup” saves the whole state as a file,
-  encrypted with its own password (`data/StateBackup.kt`, format 2 with keys and state of the
-  ANMP core; the app rejects backups from before the fresh start with a notice). Restore there or in the first
-  step of setup, also on a new phone; the app notes the backup and replaces everything on the
-  next start before it reads anything.
+- No backup file (ADR 0105, replaces ADR 0027): a new phone comes back with another own device or the emergency
+  card (ADR 0042, 0093); everything else is on the relays. A restore staged by an older version is discarded at start.
+- Settings in the network (ADR 0106, `app/SettingsSync.kt`): every stored setting is a person setting (`PERSON`, in
+  the profile space with prefix `kv:`, the same on all own devices; received ones take effect at the next start), a
+  device setting (`DEVICE`, in the device space of ANMP under this device's ID) or stays on the device. The store is an
+  `ObservedKeyValueStore`, so changes go out as they happen. After the emergency card or adding a phone, the app asks
+  once “Does this phone replace one of your devices?”; the chosen device's settings come over, then the app restarts.
+  Drafts are not in the network yet.
 - Passwords (ADR 0039): under “Files”, between personal storage and circles. Opening only with the screen lock (Android: RSA key in the
   Keystore, 30 seconds after confirmation by `BiometricPrompt` or the screen lock prompt; iOS:
   keychain with “user presence”). Create, search, view, copy (marked confidential),
@@ -290,15 +293,14 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   clipboard after the password; passkeys (ES256, attestation “none”) via the Credential Manager from Android 14
   (`PasskeyProviderService`, `PasskeyActivity`, list of privileged browsers in `res/raw`) and the iOS extension from
   iOS 17, codes there from iOS 18; new passkeys reach the logins via the file `incoming`. `vault` is version 2
-  as soon as a login has a code or passkey. The backup includes the logins with their key, after confirmation with the
-  screen lock. For TestFlight the identifier `app.anynear.credentials` with app group
+  as soon as a login has a code or passkey. The logins come back with the emergency card (ADR 0048). For TestFlight the identifier `app.anynear.credentials` with app group
   and “AutoFill Credential Provider” must exist in Apple Developer and the capability must also be enabled on `app.anynear`.
 - Profile and settings (ADR 0050): name, own picture, light/dark and “sign over radio” are the same on all
   your own devices and come back with the emergency card. They lie in the person's profile space on the relays;
   per item the newest change wins. Which setting travels along is defined in `ProfileRepository.personalSettings`;
   notices, radio and setup stay on the device.
 - My files (German “Meine Ablage”; ADR 0040, 0041): photos and any files (50 MB each) only for you, encrypted on the phone
-  (`data/PersonalFiles.kt`), in the backup and permanently on the relays in a separate space without expiry date
+  (`data/PersonalFiles.kt`) and permanently on the relays in a separate space without expiry date
   (`app/PersonalFilesSync.kt`, ANMP core `storePut`/`storeList`); open, rename, delete, save on the phone,
   send into a chat; attachments from the chat via “Save to my files”.
 - Storage per circle (ADR 0049): the same pages and the same sync as My files (`app/CircleFiles.kt`), online
@@ -309,8 +311,8 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   search `DocIndex` in the ANMP core). Text is read only by the device (`attachments/DocumentText.kt`): Android via PP-OCRv5 with
   LiteRT (`attachments/TextOcr.android.kt`, models under `androidApp/src/main/assets/ocr/`, reproducible from
   `tools/ocr-models/convert.sh`, ADR 0078) and `PdfRenderer` from Android 15, iOS via Vision and PDFKit; a better
-  reader re-reads existing files (`readerVersion`); the text read is shown on the file's page under “Text read”; stored encrypted in `file-texts`, not in the
-  backup (`data/DocTexts.kt`). Kind and details are recognized by `DocRecognizer` in the core (`app/DocReading.kt`); they go to the relays as
+  reader re-reads existing files (`readerVersion`); the text read is shown on the file's page under “Text read”; stored encrypted in `file-texts`, only on the
+  device (`data/DocTexts.kt`). Kind and details are recognized by `DocRecognizer` in the core (`app/DocReading.kt`); they go to the relays as
   field `doc` with the entry, changes without a new upload; the kind can be chosen by hand.
 - Gallery and photo topics (ADR 0070): switch “Documents/Photos”, photos as a grid with topic chips. Topics are recognized
   only by the device: Android MobileNet v1 with LiteRT (`:androidApp:visionModel` downloads the model at build time with a fixed
@@ -324,7 +326,7 @@ their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the r
   finishes in the background (ADR 0071 item 9: Android `DocFinderService` as foreground service `dataSync` with
   progress and “Stop”, iOS from 26 `BGContinuedProcessingTask`, otherwise pause);
   suggestions with check marks, adopting like “Add photo” or “Add file” with `doc`. What has been seen is remembered only by the
-  phone (`doc-finder`, not in the backup).
+  phone (`doc-finder`).
 - Finding new documents automatically (ADR 0081): off until you say “Yes” after the first search run; switch on
   “Find documents”. Then once a day on the charging cable `DocFinder.checkNew()` over the remembered sources (photos, whole
   phone, folders), only unchecked items, cloud folders only on Wi-Fi; Android `DocFinderWorker` (WorkManager), iOS
