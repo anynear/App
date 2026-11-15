@@ -133,8 +133,8 @@ class SdkMeshLinkRulesTest {
         assertEquals(null, DefaultChannel.index(listOf(ch(0, "", private)), null), "eigener Schlüssel")
         assertEquals(null, DefaultChannel.index(listOf(ch(0, "", okio.ByteString.EMPTY)), null), "unverschlüsselt")
         assertEquals(null, DefaultChannel.index(emptyList(), null))
-        // ABpi_7840: slot 0 private „k3vin“, default channel on slot 1, `anynear` on slot 3.
-        val tablet = listOf(ch(0, "k3vin", private), ch(1, "", default), ch(3, "anynear", private))
+        // A radio seen in the field: slot 0 private „home“, default channel on slot 1, `anynear` on slot 3.
+        val tablet = listOf(ch(0, "home", private), ch(1, "", default), ch(3, "anynear", private))
         assertEquals(1, DefaultChannel.index(tablet, null))
         assertEquals(listOf(PublicRadioChannel(PublicChannel.NEARBY, 1)), PublicChannels.of(tablet, byteArrayOf()))
     }
