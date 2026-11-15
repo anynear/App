@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -23,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import app.anynear.app.AppController
 import app.anynear.app.FirmwareBlocker
 import app.anynear.app.RadioSoftware
@@ -78,7 +76,7 @@ private fun ConsentDialog(software: RadioSoftware, onDismiss: () -> Unit) {
             delay(BLOCKER_REFRESH)
         }
     }
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.radioSoftware.title) },
         text = { Text(blocker?.text() ?: texts.radioSoftware.noticeText) },
@@ -101,7 +99,7 @@ internal fun RadioSoftwareProgress(controller: AppController) {
     val state by software.state.collectAsState()
     when (val s = state) {
         is RadioSoftwareState.Installing -> InstallingScreen(software, s)
-        is RadioSoftwareState.Done -> AlertDialog(
+        is RadioSoftwareState.Done -> AppDialog(
             onDismissRequest = software::dismissResult,
             title = { Text(texts.radioSoftware.doneTitle) },
             text = { Text(if (s.settingsKept) texts.radioSoftware.doneText else texts.radioSoftware.doneSetUpAgain) },
@@ -112,7 +110,7 @@ internal fun RadioSoftwareProgress(controller: AppController) {
                 })
             },
         )
-        is RadioSoftwareState.Failed -> AlertDialog(
+        is RadioSoftwareState.Failed -> AppDialog(
             onDismissRequest = software::dismissResult,
             title = { Text(texts.radioSoftware.failedTitle) },
             text = {
@@ -133,7 +131,7 @@ private fun InstallingScreen(software: RadioSoftware, state: RadioSoftwareState.
     KeepScreenOn()
     Dialog(
         onDismissRequest = { leave = true },
-        properties = DialogProperties(dismissOnClickOutside = false, usePlatformDefaultWidth = false),
+        properties = AppFullScreenDialogProperties,
     ) {
         // Also in the window of the dialog: it covers the activity completely.
         KeepScreenOn()
@@ -163,7 +161,7 @@ private fun InstallingScreen(software: RadioSoftware, state: RadioSoftwareState.
         }
     }
     if (leave) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { leave = false },
             title = { Text(texts.radioSoftware.leaveTitle) },
             text = { Text(if (state.writing) texts.radioSoftware.leaveWriting else texts.radioSoftware.leaveText) },

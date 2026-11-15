@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -552,7 +551,7 @@ private fun FolderChooser(access: DeviceDocAccess, onDismiss: () -> Unit, onChoo
     val folders by produceState(emptyList<DeviceFolder>(), current?.path) {
         value = withContext(Dispatchers.Default) { access.folders(current?.path) }
     }
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(current?.name ?: texts.find.chooseFolderTitle) },
         text = {

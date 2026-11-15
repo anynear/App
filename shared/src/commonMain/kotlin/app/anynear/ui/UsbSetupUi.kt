@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,8 +35,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import app.anynear.anmp.core.firmware.RecommendedRadio
 import app.anynear.app.AppController
 import app.anynear.app.RecommendedRadios
@@ -66,14 +64,14 @@ internal fun UsbSetupContent(controller: AppController, rescue: UsbRescueFlow, s
             Text(t.usbChooseText)
             // New, empty or with other software: say so, setting up installs Meshtastic.
             if (!state.radio.answered) Hint(t.usbNoMeshtasticYet)
+            // Always possible; for a radio that is set up already it only chooses the way of use again.
             AppButton(
-                t.usbChooseSetup,
+                if (state.alreadySetUp) t.usbChooseSetupAgain else t.usbChooseSetup,
                 onClick = { scope.launch { rescue.choose(UsbPurpose.SETUP, state.radio) } },
-                kind = if (state.canSetUp) ButtonKind.Main else ButtonKind.Secondary,
-                enabled = state.canSetUp,
+                kind = if (state.alreadySetUp) ButtonKind.Secondary else ButtonKind.Main,
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (!state.canSetUp) Hint(t.usbSetupNotPossible)
+            if (state.alreadySetUp) Hint(t.usbSetupAlready)
             AppButton(
                 t.usbChooseUse,
                 onClick = { scope.launch { rescue.choose(UsbPurpose.USE, state.radio) } },
@@ -85,7 +83,7 @@ internal fun UsbSetupContent(controller: AppController, rescue: UsbRescueFlow, s
             // Switch the way of use in both directions with one tap (ADR 0094 §3): a radio in the Wi-Fi back to
             // Bluetooth (power cut), a radio on Bluetooth into the Wi-Fi (stationary at home).
             if (state.canSwitchToBluetooth) {
-                AppButton(t.usbSwitchToBluetooth, onClick = { scope.launch { rescue.chooseMobile(state.radio) } }, kind = ButtonKind.Secondary, modifier = Modifier.fillMaxWidth())
+                AppButton(t.usbSwitchToBluetooth, onClick = { rescue.inBackground { chooseMobile(state.radio) } }, kind = ButtonKind.Secondary, modifier = Modifier.fillMaxWidth())
             }
             if (state.canSwitchToWifi) {
                 AppButton(t.usbSwitchToWifi, onClick = { rescue.chooseStationary(state.radio) }, kind = ButtonKind.Secondary, modifier = Modifier.fillMaxWidth())
@@ -107,7 +105,7 @@ internal fun UsbSetupContent(controller: AppController, rescue: UsbRescueFlow, s
         }
         is UsbRescueState.ChooseMode -> {
             Text(t.usbModeTitle)
-            AppButton(t.usbModeMobile, onClick = { scope.launch { rescue.chooseMobile(state.radio) } }, kind = ButtonKind.Main, modifier = Modifier.fillMaxWidth())
+            AppButton(t.usbModeMobile, onClick = { rescue.inBackground { chooseMobile(state.radio) } }, kind = ButtonKind.Main, modifier = Modifier.fillMaxWidth())
             Hint(t.usbModeMobileHint)
             if (state.wifiPossible) {
                 AppButton(t.usbModeStationary, onClick = { rescue.chooseStationary(state.radio) }, kind = ButtonKind.Secondary, modifier = Modifier.fillMaxWidth())
@@ -115,7 +113,8 @@ internal fun UsbSetupContent(controller: AppController, rescue: UsbRescueFlow, s
                 Text(t.usbModePowerNote, style = MaterialTheme.typography.bodySmall)
             }
         }
-        is UsbRescueState.WifiCredentials -> WifiForm(state, rescue, scope)
+        is UsbRescueState.WifiCredentials -> WifiForm(state, rescue)
+        is UsbRescueState.WifiJoining -> Busy(t.usbWifiJoining(state.ssid))
         is UsbRescueState.Pairing -> when (state.via) {
             UsbConnection.BLUETOOTH -> {
                 Busy(t.usbPairing)
@@ -126,7 +125,7 @@ internal fun UsbSetupContent(controller: AppController, rescue: UsbRescueFlow, s
         }
         is UsbRescueState.Paired -> when {
             state.via == UsbConnection.USB -> Text(t.usbPairedUsb(state.name))
-            state.via == UsbConnection.WIFI -> Text(t.usbPairedWifi(state.name))
+            state.via == UsbConnection.WIFI -> Text(state.ssid?.let(t::usbPairedWifiIn) ?: t.usbPairedWifi(state.name))
             connected -> Text(t.usbPairedConnected(state.name))
             else -> {
                 Text(t.usbPaired(state.name))
@@ -257,10 +256,12 @@ private fun RadioPicture(url: String?) {
 }
 
 @Composable
-private fun WifiForm(state: UsbRescueState.WifiCredentials, rescue: UsbRescueFlow, scope: CoroutineScope) {
+private fun WifiForm(state: UsbRescueState.WifiCredentials, rescue: UsbRescueFlow) {
     val t = texts.radioSoftware
-    var ssid by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    // After „kommt nicht ins WLAN“ the name stays, only the password is typed again.
+    var ssid by rememberSaveable(state) { mutableStateOf(state.ssid) }
+    var password by remember(state) { mutableStateOf("") }
+    if (state.notJoined) Text(t.usbWifiNotJoined, color = MaterialTheme.colorScheme.error)
     Text(t.usbWifiText)
     OutlinedTextField(
         value = ssid,
@@ -269,19 +270,12 @@ private fun WifiForm(state: UsbRescueState.WifiCredentials, rescue: UsbRescueFlo
         label = { Text(t.usbWifiName) },
         modifier = Modifier.fillMaxWidth(),
     )
-    OutlinedTextField(
-        value = password,
-        onValueChange = { password = it },
-        singleLine = true,
-        label = { Text(t.usbWifiPassword) },
-        visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        modifier = Modifier.fillMaxWidth(),
-    )
+    PasswordField(value = password, onValueChange = { password = it }, label = t.usbWifiPassword, modifier = Modifier.fillMaxWidth())
     if (state.failed) Text(t.usbWifiFailed, color = MaterialTheme.colorScheme.error)
     AppButton(
         t.usbWifiConnect,
-        onClick = { scope.launch { rescue.enableWifi(state.radio, ssid, password) } },
+        // Goes on without the dialog: closing it by mistake no longer stops joining and connecting.
+        onClick = { rescue.inBackground { enableWifi(state.radio, ssid, password) } },
         kind = ButtonKind.Main,
         enabled = ssid.isNotBlank(),
         modifier = Modifier.fillMaxWidth(),

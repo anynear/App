@@ -4,9 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -15,10 +13,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import app.anynear.app.AppController
 import app.anynear.app.AppController.WayChange
@@ -37,8 +34,8 @@ internal fun WayOfUseSection(controller: AppController) {
     val s = texts.settings
     val inWifi = controller.radioInWifi
     val usb = UsbDevices.isUsbDevice(device)
-    var askWifi by remember { mutableStateOf(false) }
-    var askBluetooth by remember { mutableStateOf(false) }
+    var askWifi by rememberSaveable { mutableStateOf(false) }
+    var askBluetooth by rememberSaveable { mutableStateOf(false) }
 
     AppSection(s.wayTitle, footer = if (canSwitch && !inWifi) s.wayPowerNote else null) {
         AppRow(
@@ -63,7 +60,7 @@ internal fun WayOfUseSection(controller: AppController) {
         controller.switchWay(ssid, password)
     }
     if (askBluetooth) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { askBluetooth = false },
             title = { Text(s.wayBluetoothTitle) },
             text = { Text(s.wayBluetoothText) },
@@ -83,24 +80,16 @@ internal fun WayOfUseSection(controller: AppController) {
 private fun WifiDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
     val s = texts.settings
     val t = texts.radioSoftware
-    var ssid by remember { mutableStateOf("") }
+    var ssid by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(t.usbSwitchToWifi) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(t.usbWifiText)
                 OutlinedTextField(value = ssid, onValueChange = { ssid = it }, singleLine = true, label = { Text(t.usbWifiName) }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    singleLine = true,
-                    label = { Text(t.usbWifiPassword) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                PasswordField(value = password, onValueChange = { password = it }, label = t.usbWifiPassword, modifier = Modifier.fillMaxWidth())
                 // Honest: with a wrong password the radio is out of reach until the cable resets it.
                 Text(s.wayWifiWarning, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -118,7 +107,7 @@ private fun WayChangeDialog(controller: AppController) {
     val s = texts.settings
     val working = current is WayChange.Working
     if (working) KeepScreenOn()
-    AlertDialog(
+    AppDialog(
         onDismissRequest = { if (!working) controller.dismissWayChange() },
         title = { Text(s.wayTitle) },
         text = {
@@ -129,7 +118,16 @@ private fun WayChangeDialog(controller: AppController) {
                         if (!current.toWifi) Text(texts.radioSoftware.usbPairingHint, style = MaterialTheme.typography.bodySmall)
                     }
                     is WayChange.Done -> Text(if (current.toWifi) s.wayDoneWifi(current.name) else s.wayDoneBluetooth(current.name))
-                    is WayChange.NotSeen -> Text(if (current.toWifi) s.wayNotSeenWifi else s.wayNotSeenBluetooth)
+                    is WayChange.NotSeen -> {
+                        Text(if (current.toWifi) s.wayNotSeenWifi else s.wayNotSeenBluetooth)
+                        // Without Bluetooth only the cable reaches the radio again: offer it right here (FUT 14.11.2026).
+                        if (current.toWifi && controller.usbRescue != null) {
+                            AppButton(texts.radioSoftware.usbConnectRow, onClick = {
+                                controller.dismissWayChange()
+                                controller.openUsbPlugged()
+                            }, kind = ButtonKind.Secondary, icon = AppIcons.Funkgeraet, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
                     WayChange.Failed -> Text(s.wayFailed)
                 }
             }

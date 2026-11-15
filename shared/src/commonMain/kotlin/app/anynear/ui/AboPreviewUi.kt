@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -96,7 +98,8 @@ internal fun AboPreviewScreen(title: String = texts.files.moreStorage, onBack: (
                 Text(texts.files.aboChooseHint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 CompareTable(p, compare, yearly, selectedId) { selectedId = it.id }
                 compare.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                selected?.let { PlanCard(p, it, yearly, showFeatures = false) }
+                // The chosen plan is always framed and its button orange, like the chosen column above (FUT 14.11.2026).
+                selected?.let { PlanCard(p, it, yearly, showFeatures = false, highlighted = true) }
             } else {
                 // Older previews without a table: the free plan first, so that every plan can be read against it.
                 p.free?.let { FreePlanCard(it) }
@@ -146,13 +149,14 @@ private fun CompareTable(preview: AboPreview, compare: AboCompare, yearly: Boole
         }
         Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             CompareRow(plans) { plan ->
-                Text(plan.name(german()), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+                // Two lines at most, so that „Kostenlos“ stays whole with a large font.
+                Text(plan.name(german()), style = MaterialTheme.typography.titleSmall.copy(hyphens = Hyphens.Auto), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 2)
                 val tag = when {
                     plan.monthlyCents == 0L -> texts.files.aboYourPlan
                     plan.recommended -> texts.files.aboRecommendedShort
                     else -> null
                 }
-                Text(tag ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, maxLines = 1)
+                Text(tag ?: "", style = MaterialTheme.typography.labelSmall.copy(hyphens = Hyphens.Auto), color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, maxLines = 2)
             }
             CompareRow(plans) { plan ->
                 Text(texts.files.euro(if (yearly) plan.yearlyCents else plan.monthlyCents), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
@@ -160,18 +164,24 @@ private fun CompareTable(preview: AboPreview, compare: AboCompare, yearly: Boole
             }
             compare.rows.forEach { row ->
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // A band across the whole table, so that the label reads as the heading of the row and not as
+                    // text of the first plan that runs into the next column (FUT 14.11.2026).
                     Text(
                         row.label,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 8.dp),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                     )
                     val base = free?.let(row::value)
                     CompareRow(plans) { plan ->
                         val v = row.value(plan)
                         Text(
                             v,
-                            style = MaterialTheme.typography.bodyMedium,
+                            // Narrow columns: long words („Deutschland“) break at a syllable, not anywhere.
+                            style = MaterialTheme.typography.bodyMedium.copy(hyphens = Hyphens.Auto, lineBreak = LineBreak.Paragraph),
                             fontWeight = if (plan != free && v != base) FontWeight.Bold else FontWeight.Normal,
                             textAlign = TextAlign.Center,
                         )
@@ -193,12 +203,12 @@ private fun CompareRow(plans: List<AboPlan>, cell: @Composable (AboPlan) -> Unit
 }
 
 @Composable
-private fun PlanCard(preview: AboPreview, plan: AboPlan, yearly: Boolean, showFeatures: Boolean = true) {
+private fun PlanCard(preview: AboPreview, plan: AboPlan, yearly: Boolean, showFeatures: Boolean = true, highlighted: Boolean = plan.recommended) {
     val uriHandler = LocalUriHandler.current
     val url = preview.interestUrl(plan, yearly, german = german())
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = if (plan.recommended) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        border = if (highlighted) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -225,7 +235,7 @@ private fun PlanCard(preview: AboPreview, plan: AboPlan, yearly: Boolean, showFe
                     texts.files.aboInterest(preview.trialMonths),
                     { runCatching { uriHandler.openUri(url) } },
                     Modifier.fillMaxWidth(),
-                    kind = if (plan.recommended) ButtonKind.Main else ButtonKind.Secondary,
+                    kind = if (highlighted) ButtonKind.Main else ButtonKind.Secondary,
                     icon = AppIcons.Link,
                 )
             }

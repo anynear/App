@@ -87,6 +87,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode"
             android:windowSoftInputMode="adjustResize">
             <!-- Invitation links (/k#…), contact links (/c#…), device links (/p#…), channel links (/a#…,
                  ADR 0062) and the settings link (/s#erase, ADR 0089) open the app directly (ADR 0036): created on

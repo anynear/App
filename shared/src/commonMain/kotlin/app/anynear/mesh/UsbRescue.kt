@@ -34,6 +34,13 @@ interface UsbRescue {
     suspend fun enableWifi(radio: UsbRadio, ssid: String, password: String): Boolean = false
 
     /**
+     * Asks the radio on the cable whether it got into the Wi-Fi (Meshtastic `DeviceConnectionStatus`). `null`: it does
+     * not answer right now (restarting) or does not tell. Name and password are not checked by anything else: with a
+     * wrong password the radio keeps trying and only this tells (FUT 14.11.2026).
+     */
+    suspend fun wifiStatus(radio: UsbRadio): RadioWifiStatus? = null
+
+    /**
      * Whether the phone sees any device on its USB port at all. `false` means nothing reaches the app: a cable that only
      * charges, USB host (OTG) switched off on the phone, or the radio is not powered. Then no permission or software
      * can help, and the dialog says what to check.
@@ -77,6 +84,8 @@ data class UsbRadio(
     /** USB IDs of the device on the cable (0: unknown); tell the USB-serial chip of the board. */
     val vendorId: Int = 0,
     val productId: Int = 0,
+    /** Address of the radio in the Wi-Fi as it reported it over the cable; the app connects there without searching. */
+    val wifiAddress: String? = null,
 ) {
     /**
      * This is the radio's name over Bluetooth after the reset: Meshtastic resets the short name to the last four
@@ -89,6 +98,18 @@ data class UsbRadio(
      * so that the search recognizes exactly the radio on the cable and not the neighbour's.
      */
     val bluetoothSuffix: String? get() = nodeNum?.let { "_" + (it and 0xFFFF).toString(16).padStart(4, '0') }
+}
+
+/** What the radio reports about its Wi-Fi: [connected] with its address [ip] (`null` if it gave none). */
+data class RadioWifiStatus(val connected: Boolean, val ip: String? = null) {
+    companion object {
+        /**
+         * Meshtastic sends the IPv4 address as a 32-bit number with the first part in the lowest byte (ESP32
+         * `IPAddress`); 0 means none.
+         */
+        fun ipOf(raw: Int): String? =
+            if (raw == 0) null else (0 until 4).joinToString(".") { ((raw ushr (8 * it)) and 0xFF).toString() }
+    }
 }
 
 /**

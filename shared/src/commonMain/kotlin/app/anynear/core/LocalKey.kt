@@ -16,8 +16,9 @@ import dev.whyoleg.cryptography.algorithms.SHA256
  */
 object LocalKey {
     /**
-     * Seed of the local key after restoring a backup (ADR 0093): the restored phone gets new device keys, the data of
-     * the backup stays readable with the device key it came with. Without it the seed is the device key itself.
+     * Seed of the local key on a phone where an older version restored a backup file (ADR 0093, file removed by
+     * ADR 0105): it got new device keys, its data stays readable with the device key it came with. Without it the
+     * seed is the device key itself.
      */
     const val SEED = "app.local.seed"
 

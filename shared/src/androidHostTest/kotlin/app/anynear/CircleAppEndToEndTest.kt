@@ -39,7 +39,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -171,6 +173,26 @@ class CircleAppEndToEndTest {
     }
 
     @Test
+    fun chatOpenedFromAContactLinkFollowsThePerson() = e2e {
+        // „Hinzufügen und schreiben“ opens the chat under the link's device; once the device turns out to be Anna's
+        // person, messages and draft move there and the open chat follows (it showed an empty chat before).
+        val anna = device(this, "Anna")
+        val ben = device(this, "Ben")
+        eventually("Annas Link") { anna.controller.ownContactLink.value != null }
+        check(ben.controller.receiveLink(anna.controller.ownContactLink.value!!) == null)
+        check(ben.controller.acceptPendingContact(openChat = true) == null)
+        val opened = ben.controller.openRequest.value as Conversation.Direct
+        val renamed = async { ben.controller.peerRenamed.first { it.first == opened.peer } }
+        ben.controller.send(opened, "Erste Nachricht")
+        val (_, person) = withTimeout(60.seconds) { renamed.await() }
+        check(person == "d:" + anna.controller.myPersonId.value) { "auf Annas Person umgestellt" }
+        eventually("Bens Nachricht im Gespräch der Person") {
+            ben.controller.messages.value.any { it.text == "Erste Nachricht" && it.conversation == Conversation.Direct(person) }
+        }
+        eventually("Anna hat sie") { anna.controller.messages.value.any { it.text == "Erste Nachricht" } }
+    }
+
+    @Test
     fun removedMemberGetsNoticeAndNoLongerReads() = e2e {
         val anna = device(this, "Anna")
         val ben = device(this, "Ben")
@@ -222,7 +244,7 @@ class CircleAppEndToEndTest {
         eventually("Clara hat beide") {
             clara.controller.messages.value.filter { it.system == null }.map { it.text }.sorted() == listOf("Erste", "Zweite")
         }
-        eventually("Verlauf vollständig") { clara.controller.historyHint(id) == null }
+        eventually("Verlauf vollständig") { clara.controller.historyHint(Conversation.Circle(id)) == null }
     }
 
     /**

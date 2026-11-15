@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -94,11 +93,13 @@ private fun UsbRescueDialog(controller: AppController, rescue: UsbRescueFlow, on
     val pickDrive = rememberUf2DrivePicker { drive -> scope.launch { rescue.write(drive) } }
     val t = texts.radioSoftware
     val uri = LocalUriHandler.current
-    val busy = state is UsbRescueState.Searching || state is UsbRescueState.Working || state is UsbRescueState.Installing
+    // Joining the Wi-Fi is a wait like installing: the dialog stays until the answer is there (FUT 14.11.2026).
+    val busy = state is UsbRescueState.Searching || state is UsbRescueState.Working || state is UsbRescueState.Installing ||
+        state is UsbRescueState.WifiJoining
     if (busy || state is UsbRescueState.Pairing) KeepScreenOn()
     val link by controller.linkState.collectAsState()
 
-    AlertDialog(
+    AppDialog(
         onDismissRequest = { if (!busy) onClose() },
         title = { Text(t.usbTitle) },
         text = {
@@ -106,7 +107,7 @@ private fun UsbRescueDialog(controller: AppController, rescue: UsbRescueFlow, on
                 when (val s = state) {
                     // Plugging in, setting up, installing, way of use, connecting (ADR 0094): own file.
                     is UsbRescueState.Choose, is UsbRescueState.PickRadio, is UsbRescueState.Installing,
-                    is UsbRescueState.ChooseMode, is UsbRescueState.WifiCredentials, is UsbRescueState.Pairing,
+                    is UsbRescueState.ChooseMode, is UsbRescueState.WifiCredentials, is UsbRescueState.WifiJoining, is UsbRescueState.Pairing,
                     is UsbRescueState.Paired, is UsbRescueState.NotSeen,
                     -> UsbSetupContent(controller, rescue, s, link == LinkState.Connected, scope)
                     UsbRescueState.Start -> Text(t.usbRescueIntro)
@@ -179,9 +180,10 @@ private fun UsbRescueDialog(controller: AppController, rescue: UsbRescueFlow, on
                 UsbRescueState.Start, UsbRescueState.NotFound, UsbRescueState.NoUsbDevice, is UsbRescueState.NoSoftware, is UsbRescueState.Failed ->
                     AppButton(t.usbSearch, onClick = { scope.launch { rescue.search() } })
                 is UsbRescueState.PickDrive -> AppButton(t.usbChooseDrive, onClick = pickDrive)
-                is UsbRescueState.NotSeen -> AppButton(t.usbTryAgain, onClick = { scope.launch { rescue.connect(s.radio, s.via) } })
+                is UsbRescueState.NotSeen -> AppButton(t.usbTryAgain, onClick = { rescue.inBackground { connect(s.radio, s.via) } })
                 is UsbRescueState.Paired -> when {
-                    link == LinkState.Connected -> AppButton(texts.common.ok, onClick = onClose)
+                    // Over Wi-Fi and cable the app is connected once it says so; only Bluetooth still waits for the number.
+                    link == LinkState.Connected || s.via != UsbConnection.BLUETOOTH -> AppButton(texts.common.ok, onClick = onClose)
                     s.via == UsbConnection.BLUETOOTH && controller.canOpenBluetoothSettings ->
                         AppButton(texts.settings.openBluetoothSettings, onClick = controller::openBluetoothSettings)
                     else -> Unit
@@ -205,7 +207,7 @@ private fun UsbRescueDialog(controller: AppController, rescue: UsbRescueFlow, on
 
     if (confirmReset) {
         val found = state as? UsbRescueState.Found
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text(t.usbFactoryResetTitle) },
             text = { Text(t.usbFactoryResetText) },

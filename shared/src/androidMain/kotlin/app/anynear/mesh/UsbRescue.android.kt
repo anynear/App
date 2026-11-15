@@ -130,6 +130,14 @@ internal class AndroidUsbRescue(private val context: Context, private val log: (
             rc.admin.editSettings { setConfig(Config.Builder().also { it.network = network }.build()) } is AdminResult.Success
         } == true
 
+    override suspend fun wifiStatus(radio: UsbRadio): RadioWifiStatus? =
+        withClient(radio.port, quietAfter = QUIET_AFTER) { rc ->
+            val wifi = (rc.admin.getDeviceConnectionStatus() as? AdminResult.Success)?.value?.wifi ?: return@withClient null
+            val status = wifi.status
+            RadioWifiStatus(connected = status?.is_connected == true, ip = status?.ip_address?.let(RadioWifiStatus::ipOf))
+                .also { log("WLAN laut Funkgerät: ${if (it.connected) "verbunden" else "nicht verbunden"}") }
+        }
+
     override suspend fun detectChip(): EspInfo? = withLoader { loader, nativeUsb ->
         val chip = loader.connect(nativeUsb)
         loader.hardReset()

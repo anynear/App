@@ -10,7 +10,9 @@ import app.anynear.anmp.AnmpKind
 import app.anynear.anmp.AnmpRadio
 import app.anynear.anmp.AnmpInfo
 import app.anynear.anmp.AnmpVerifier
+import app.anynear.anmp.core.HistoryLoading
 import app.anynear.anmp.core.Invite
+import app.anynear.anmp.core.OwnHistoryItem
 import app.anynear.anmp.core.AddContactResult as CoreAddContactResult
 import app.anynear.anmp.core.BlobResult
 import app.anynear.anmp.core.ContactCard
@@ -20,6 +22,8 @@ import app.anynear.alerts.Alerts
 import app.anynear.lifesigns.LifeSigns
 import app.anynear.anmp.core.JoinResult
 import app.anynear.anmp.core.DeviceInfo
+import app.anynear.anmp.core.StoredDevice
+import app.anynear.data.ObservedKeyValueStore
 import app.anynear.anmp.core.PairResult
 import app.anynear.anmp.core.EraseResult
 import app.anynear.anmp.core.AnmpCore
@@ -56,8 +60,10 @@ import app.anynear.chats.ChatListEntry
 import app.anynear.chats.InviteCard
 import app.anynear.chats.InviteKind
 import app.anynear.chats.InviteLink
+import app.anynear.chats.findInviteLinks
 import app.anynear.chats.isSettingsLink
 import app.anynear.chats.ReactionNotices
+import app.anynear.chats.ReadUntil
 import app.anynear.chats.conversationOf
 import app.anynear.chats.key
 import app.anynear.circles.Circle
@@ -69,7 +75,6 @@ import app.anynear.core.PushToken
 import app.anynear.core.b64
 import app.anynear.data.DraftStore
 import app.anynear.data.KeyValueStore
-import app.anynear.data.LocalCipher
 import app.anynear.data.MessageOutbox
 import app.anynear.data.MessageStore
 import app.anynear.data.PairedDeviceRepository
@@ -135,7 +140,6 @@ import app.anynear.people.circleMembers
 import app.anynear.people.ownDevicesIn
 import app.anynear.people.radioDevicesOf
 import kotlin.time.Clock
-import app.anynear.data.StateBackup
 import app.anynear.data.PersonalFiles
 import app.anynear.data.SharedStorage
 import app.anynear.passwords.PasswordState
@@ -168,6 +172,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
@@ -226,10 +231,6 @@ class AppController(
     val debugLog: DebugLog = DebugLog(),
     /** Crash reports on the device (ADR 0082); `null` in tests and where the platform keeps none. */
     val crashes: CrashRecorder? = null,
-    /** Manual backup and restore (ADR 0027); `null` in tests. */
-    private val backup: StateBackup? = null,
-    /** Key of the data on the device, for scheduling a backup; `null` in tests. */
-    private val localCipher: LocalCipher? = null,
     /** network ID of the network the app works in (ADR 0035 §6); it rejects links from other networks. */
     private val networkId: String,
     /** Passwords (ADR 0039); `null` in tests without a platform. */
@@ -281,68 +282,77 @@ class AppController(
     /** Disconnected by hand: the radio stays assigned, it only reconnects on „Verbinden“. */
     val radioDisconnected: StateFlow<Boolean> = pairedDevices.disconnected
 
-    // --- Backup (ADR 0027) ---
+    // --- Settings in the network (ADR 0106) ---
 
-    /** Does the backup exist on this platform? */
-    val backupAvailable: Boolean get() = backup != null
+    /** Person settings to the profile space, device settings to the device space; `null` in tests with a plain store. */
+    private val settingsSync: SettingsSync? = (store as? ObservedKeyValueStore)?.let { observed ->
+        SettingsSync(scope, observed, object : SettingsSync.Target {
+            override suspend fun setPersonSettings(values: Map<String, ByteArray>) = core.setSettings(values)
 
-    /**
-     * Backup file of the whole state, encrypted with [password]; takes a few seconds. [passwordKey]: key of the
-     * passwords read after the device lock, needed as soon as there are logins ([backupNeedsDeviceLock]).
-     */
-    suspend fun createBackup(password: String, passwordKey: ByteArray? = null): ByteArray = withContext(Dispatchers.Default) {
-        checkNotNull(backup).create(
-            password, Clock.System.now().toEpochMilliseconds(), appVersion,
-            passwordKey = passwordKey?.let { passwords?.keyForBackup(it) },
-        )
+            override suspend fun setDeviceSettings(values: Map<String, ByteArray>) = core.setDeviceSettings(values)
+
+            override suspend fun takeOverDevice(deviceId: String): Map<String, ByteArray>? = core.takeOverDevice(deviceId)
+        })
     }
 
-    /** If there are logins, the backup asks for the device lock first (ADR 0039, item 5). */
-    val backupNeedsDeviceLock: Boolean get() = passwords?.hasVault() == true
+    /** An own device this phone may replace (ADR 0106 §7); [listed]: still in „Meine Geräte“. */
+    data class ReplaceCandidate(val deviceId: String, val name: String, val listed: Boolean)
 
-    /** Checks [file] and schedules it for restoring; afterwards [restartForRestore]. */
-
-    /** Checks [file] and schedules it for restoring; afterwards [restartForRestore]. */
-    suspend fun stageRestore(file: ByteArray, password: String): StateBackup.RestoreCheck = withContext(Dispatchers.Default) {
-        checkNotNull(backup).stageRestore(file, StateBackup.normalize(password), checkNotNull(localCipher))
-    }
-
-    private val _previousDevice = MutableStateFlow<DeviceInfo?>(null)
+    private val _replaceOffer = MutableStateFlow<List<ReplaceCandidate>?>(null)
 
     /**
-     * After restoring a backup (ADR 0093): the phone it came from, still in „Meine Geräte“. The app asks once
-     * „Hast du dein altes Handy noch?“ ([answerPreviousDevice]).
+     * After the emergency card or adding this phone: own devices with settings in the network, for „Ersetzt dieses
+     * Handy eins deiner Geräte?“; `null` = nothing to ask.
      */
-    val previousDevice: StateFlow<DeviceInfo?> = _previousDevice.asStateFlow()
+    val replaceOffer: StateFlow<List<ReplaceCandidate>?> = _replaceOffer.asStateFlow()
 
-    private suspend fun askAboutPreviousDevice() {
-        val b = backup ?: return
-        val seed = b.previousDeviceSeed() ?: return
-        val id = app.anynear.andp.B64.encode(app.anynear.anmp.AnmpKeys.deviceIdOf(app.anynear.andp.SigningKey.fromSeed(seed).key.bytes))
-        // The own list arrives after the start; if the old phone is not (or no longer) in it, there is nothing to ask.
-        val d = withTimeoutOrNull(PREVIOUS_DEVICE_WAIT) { core.ownDevices.first { list -> list.size > 1 && list.any { it.deviceId == id } } }
-            ?.firstOrNull { it.deviceId == id }
-        if (d == null || d.deviceId == _myDeviceId.value) {
-            if (d == null && core.ownDevices.value.isNotEmpty()) b.forgetPreviousDevice()
+    private suspend fun offerReplace() {
+        if (settingsSync == null || store.getString(ASK_REPLACE_KEY) == null) return
+        val stored: List<StoredDevice> = withTimeoutOrNull(REPLACE_WAIT) {
+            var found: List<StoredDevice>? = core.storedDevices()
+            while (found == null) {
+                delay(REPLACE_RETRY)
+                found = core.storedDevices()
+            }
+            found
+        } ?: return
+        if (stored.isEmpty()) {
+            store.putString(ASK_REPLACE_KEY, null)
             return
         }
-        _previousDevice.value = d
+        // The own list arrives shortly after the start; without it the names are missing.
+        withTimeoutOrNull(REPLACE_LIST_WAIT) { core.ownDevices.first { it.isNotEmpty() } }
+        val listed = core.ownDevices.value.associateBy { it.deviceId }
+        _replaceOffer.value = stored.map { ReplaceCandidate(it.deviceId, listed[it.deviceId]?.name.orEmpty(), it.deviceId in listed) }
     }
 
-    /** Answer to „Hast du dein altes Handy noch?“; removing or locking out the old phone does the UI after the device lock. */
-    fun answerPreviousDevice() {
-        _previousDevice.value = null
-        backup?.forgetPreviousDevice()
+    /**
+     * Answer to „Ersetzt dieses Handy eins deiner Geräte?“: `null` = no, it is an additional one. Otherwise the settings
+     * of [deviceId] become this phone's (they take effect with [finishReplace]) and the replaced device leaves „Meine
+     * Geräte“ right away: whoever says this phone replaces it has answered that already (no second question). `false`
+     * if the network did not answer.
+     */
+    suspend fun replaceDevice(deviceId: String?): Boolean {
+        if (deviceId == null) {
+            store.putString(ASK_REPLACE_KEY, null)
+            _replaceOffer.value = null
+            return true
+        }
+        val ok = settingsSync?.takeOver(deviceId) == true
+        if (!ok) return false
+        if (core.ownDevices.value.any { it.deviceId == deviceId }) runCatching { core.removeOwnDevice(deviceId) }
+        store.putString(ASK_REPLACE_KEY, null)
+        return true
     }
 
-    /** A new backup code to show and write down (ADR 0093); [createBackup] takes it as the password. */
-    fun newBackupCode(): String = StateBackup.newCode()
+    /** After taking over the settings of a replaced device: restart, so that every part of the app reads them. */
+    fun finishReplace() {
+        _replaceOffer.value = null
+        restartApp()
+    }
 
-    /** Typed once to confirm: the same code, in any spelling. */
-    fun backupCodeMatches(shown: String, typed: String): Boolean = StateBackup.normalize(typed) == shown
-
-    /** Restart; at startup the scheduled backup is restored. */
-    fun restartForRestore() = restartApp()
+    /** If there are logins, adding a device asks for the device lock first (ADR 0039, item 5). */
+    val passwordsNeedDeviceLock: Boolean get() = passwords?.hasVault() == true
 
     private val _oldAppToRemove = MutableStateFlow(false)
 
@@ -398,9 +408,39 @@ class AppController(
      * emergency card), then [resetThisDevice]. Returns the reason if it is not possible right now; then all stays.
      */
     suspend fun eraseEverything(): String? {
-        if (core.eraseEverything() == EraseResult.Offline) return texts.settings.eraseOffline
-        resetThisDevice()
+        when (core.eraseEverything()) {
+            EraseResult.Offline -> return texts.settings.eraseOffline
+            EraseResult.Done -> resetThisDevice()
+            // Not every leave and revocation reached a relay yet: deleting the installation now would lose them, and
+            // circles and contacts would never learn of it. Wait, also across restarts, without a way around.
+            EraseResult.Partly -> {
+                store.putString(ERASE_WAITING_KEY, "1")
+                waitForErase()
+            }
+        }
         return null
+    }
+
+    private val _eraseWaiting = MutableStateFlow(store.getString(ERASE_WAITING_KEY) != null)
+
+    /** „Alle Daten löschen“ waits for writes no relay has yet ([EraseResult.Partly]); the app shows only that. */
+    val eraseWaiting: StateFlow<Boolean> = _eraseWaiting.asStateFlow()
+
+    private var eraseWaiter: Job? = null
+
+    private fun waitForErase() {
+        _eraseWaiting.value = true
+        if (eraseWaiter?.isActive == true) return
+        eraseWaiter = scope.launch {
+            while (core.undeliveredWrites() > 0) delay(ERASE_POLL)
+            store.putString(ERASE_WAITING_KEY, null)
+            resetThisDevice()
+        }
+    }
+
+    init {
+        // Interrupted while waiting (app closed, phone restarted): the writes go on after the start, so does the wait.
+        if (_eraseWaiting.value) waitForErase()
     }
 
     fun uninstallOldApp() {
@@ -414,10 +454,6 @@ class AppController(
         }
     }
 
-    /** Do not restore after all. */
-    fun discardPendingRestore() {
-        backup?.discardPendingRestore()
-    }
     val ownDevice = link.ownDevice
     val contacts: StateFlow<List<Contact>> = contactRepository.contacts
     val messages: StateFlow<List<ChatMessage>> = messageStore.messages
@@ -955,6 +991,8 @@ class AppController(
     /** Conversation viewed: counts as read, the senders get a read receipt (ADR 0019). */
     private fun markConversationRead(conversation: Conversation) {
         val read = messageStore.markRead(conversation).filter { !it.outgoing && it.system == null && !it.fromHistory }
+        // For the own other devices and a phone after the emergency card: read up to the newest message (ADR 0107 §8).
+        ReadUntil.keyOf(conversation)?.let { key -> messageStore.newestSentAt(conversation)?.let { profile.markReadUntil(key, it) } }
         if (read.isEmpty()) return
 
         // Internet: per message with message ID to the device of the sender, collected there.
@@ -1355,6 +1393,32 @@ class AppController(
         pairingHintDismissed.value = maxOf(pairingHintDismissed.value, pairingTroubleLevel.value)
     }
 
+    // --- Unreachable contacts (ADR 0046): every relay refuses our messages, likely the account was deleted ---------
+
+    /** „Behalten“ per person, with the time of the mark it applies to: a new mark shows the hint again. */
+    private val unreachableKept = MutableStateFlow(
+        store.getString(UNREACHABLE_KEPT_KEY).orEmpty().split(',').mapNotNull { e ->
+            e.substringBeforeLast(':').takeIf { it.isNotEmpty() }?.let { it to (e.substringAfterLast(':').toLongOrNull() ?: 0L) }
+        }.toMap(),
+    )
+
+    /** Persons (person ID) that can no longer be reached, with since when (ms). */
+    val unreachable: StateFlow<Map<String, Long>> get() = core.unreachable
+
+    /** Persons whose hint in the chat is still open: unreachable and not kept for this mark. */
+    val unreachableHint: StateFlow<Set<String>> by lazy {
+        combine(core.unreachable, unreachableKept) { marks, kept -> marks.filter { (p, since) -> kept[p] != since }.keys }
+            .stateIn(scope, SharingStarted.Eagerly, emptySet())
+    }
+
+    /** „Behalten“: hides the hint for [person] until it is marked again. */
+    fun keepUnreachable(person: String) {
+        val since = core.unreachable.value[person] ?: return
+        val kept = unreachableKept.value.filterKeys { it in core.unreachable.value } + (person to since)
+        unreachableKept.value = kept
+        store.putString(UNREACHABLE_KEPT_KEY, kept.entries.joinToString(",") { "${it.key}:${it.value}" }.ifEmpty { null })
+    }
+
     /** Rescue via USB cable (ADR 0056); `null` where the platform cannot do USB (iOS). */
     val usbRescue: UsbRescueFlow? = platformUsbRescue { log("USB-Rettung: $it") }?.let { usb ->
         UsbRescueFlow(
@@ -1364,6 +1428,7 @@ class AppController(
             log = { log("USB-Rettung: $it") },
             connect = ::connectUsbRadio,
             radios = { RecommendedRadios.loadOnce(store) },
+            background = scope,
         )
     }
 
@@ -1380,21 +1445,33 @@ class AppController(
             pairKnown(device)
             return device.name.ifBlank { null } ?: radio.firmware?.hwModel
         }
+        // The radio told its address over the cable: connect there, no search in the Wi-Fi needed (FUT 14.11.2026).
+        if (via == UsbConnection.WIFI) radio.wifiAddress?.let { ip -> connectAtAddress(radio, ip)?.let { return it } }
         val suffix = radio.bluetoothSuffix?.lowercase() ?: return null
         return findAndPair(suffix, if (via == UsbConnection.WIFI) FoundDevice.Connection.NETWORK else FoundDevice.Connection.BLUETOOTH)
     }
 
+    /** Assigns the radio at [ip] in the Wi-Fi and waits until it is connected; `null` if it does not answer there. */
+    private suspend fun connectAtAddress(radio: UsbRadio, ip: String): String? {
+        val address = NetworkTransport.parse(ip) ?: return null
+        val device = NetworkTransport.deviceFor(address, radio.name)
+        pairKnown(device)
+        val connected = withTimeoutOrNull(WIFI_CONNECT_WAIT) { linkState.first { it == LinkState.Connected } } != null
+        if (!connected) log("Funkgerät unter $ip nicht erreicht, suche im WLAN")
+        return if (connected) device.name else null
+    }
+
     /**
      * Looks on [connection] for exactly the radio whose name ends with [suffix] (`_xxxx` from the node number) and
-     * pairs it; over Bluetooth the phone then asks for the number. `null` if it does not show up within
-     * [USB_PAIR_WAIT] (restart included).
+     * pairs it; over Bluetooth the phone then asks for the number. `null` if it does not show up within [wait]
+     * (restart included).
      */
-    private suspend fun findAndPair(suffix: String, connection: FoundDevice.Connection): String? {
+    private suspend fun findAndPair(suffix: String, connection: FoundDevice.Connection, wait: Duration = USB_PAIR_WAIT): String? {
         if (connection == FoundDevice.Connection.BLUETOOTH && !hooks.bluetoothPermissionGranted.value) {
             hooks.requestBluetoothPermission()
             withTimeoutOrNull(USB_PAIR_WAIT) { hooks.bluetoothPermissionGranted.first { it } } ?: return null
         }
-        val found = withTimeoutOrNull(USB_PAIR_WAIT) {
+        val found = withTimeoutOrNull(wait) {
             coroutineScope {
                 // A search ends after 30 seconds; the radio may still be restarting, so keep searching.
                 val keepSearching = launch {
@@ -1458,7 +1535,9 @@ class AppController(
                 return@launch
             }
             val suffix = "_" + (node and 0xFFFF).toString(16).padStart(4, '0')
-            val name = findAndPair(suffix, if (toWifi) FoundDevice.Connection.NETWORK else FoundDevice.Connection.BLUETOOTH)
+            // Into the Wi-Fi without cable nothing tells a wrong password (Bluetooth is off by then): only the time limit,
+            // kept short so that the message comes soon (FUT 14.11.2026).
+            val name = if (toWifi) findAndPair(suffix, FoundDevice.Connection.NETWORK, WAY_WIFI_WAIT) else findAndPair(suffix, FoundDevice.Connection.BLUETOOTH)
             _wayChange.value = if (name != null) WayChange.Done(name, toWifi) else WayChange.NotSeen(toWifi)
         }
     }
@@ -1491,7 +1570,8 @@ class AppController(
 
     private fun openUsb(purpose: UsbPurpose?) {
         val rescue = usbRescue ?: return
-        val fresh = !_usbRescueOpen.value
+        // A step that goes on without the dialog (joining the Wi-Fi, connecting): show it instead of starting anew.
+        val fresh = !_usbRescueOpen.value && !rescue.runningInBackground
         if (fresh) rescue.reset(purpose)
         // Only ever one notice: the pairing notice is settled with the rescue.
         dismissPairingHint()
@@ -1735,6 +1815,7 @@ class AppController(
             }
     }
 
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
     fun start() {
         if (started) return
         started = true
@@ -1770,6 +1851,7 @@ class AppController(
             _myDeviceId.value = me.deviceId
             _myPersonId.value = me.personId
             core.setOwnDeviceName(platformDeviceName())
+            runCatching { reattributeRemovedDevices(me.personId) }.onFailure { if (it is CancellationException) throw it }
             // Own name and radio go along with every registration in the circle; afterwards the contact link.
             combine(profile.ownName, profile.ownNodeNum, link.ownDevice) { name, node, _ -> name to node }
                 .distinctUntilChanged()
@@ -1856,7 +1938,9 @@ class AppController(
         scope.launch { radioFallbackLoop() }
         scope.launch { removeOldRadioChannels() }
         scope.launch { suggestDevices() }
-        scope.launch { runCatching { askAboutPreviousDevice() } }
+        scope.launch { keepOwnHistory() }
+        settingsSync?.start()
+        scope.launch { runCatching { offerReplace() } }
         startImageTransfers()
         passwords?.onVaultChanged = { data, changed, key -> scope.launch { core.vaultPut(data, changed, key) } }
         passwords?.onKeyAvailable = ::onPasswordKey
@@ -1879,20 +1963,41 @@ class AppController(
         scope.launch {
             core.identity.filterNotNull().first()
             runCatching { syncProfile() }
-            profile.personalSettingsChanged.distinctUntilChanged().drop(1).collect { values ->
+            // Briefly collected, so reading in an open chat does not write the profile space for every message.
+            profile.personalSettingsChanged.distinctUntilChanged().drop(1).debounce(PERSONAL_SETTINGS_DELAY).collect { values ->
                 core.setSettings(values.mapValues { it.value.encodeToByteArray() })
             }
         }
-        // A device became a person (ADR 0042): conversations and receipts move silently to the person.
+        // Read up to a point on an own device, also on a phone back from the emergency card (ADR 0107 §8).
         scope.launch {
+            profile.readUntil.collect { marks -> applyReadUntil(marks) }
+        }
+        // A device became a person (ADR 0042): conversations, receipts and drafts move silently to the person, and a
+        // conversation open under the device follows ([peerRenamed]), e.g. right after „Hinzufügen und schreiben“.
+        scope.launch {
+            val told = mutableSetOf<String>()
             memberDirectory.members.collect { list ->
                 list.filter { it.personId != it.deviceId }.map { it.deviceId to it.personId }.distinct().forEach { (device, person) ->
-                    if (messageStore.renamePeer(PeerId.device(device), PeerId.device(person))) log("Gespräch von Gerät auf Person umgestellt")
+                    val old = PeerId.device(device)
+                    val new = PeerId.device(person)
+                    if (messageStore.renamePeer(old, new)) log("Gespräch von Gerät auf Person umgestellt")
+                    if (told.add(device)) {
+                        drafts.move(Conversation.Direct(old), Conversation.Direct(new))
+                        _peerRenamed.tryEmit(old to new)
+                    }
                 }
             }
         }
         scope.launch { core.identity.filterNotNull().collect { _myPersonId.value = it.personId } }
     }
+
+    private val _peerRenamed = MutableSharedFlow<Pair<String, String>>(replay = 1, extraBufferCapacity = 16)
+
+    /**
+     * A conversation partner known by a device became a person (old peer → new peer, ADR 0042). The UI moves an open
+     * conversation along; its messages and draft are already under the new key.
+     */
+    val peerRenamed: SharedFlow<Pair<String, String>> = _peerRenamed.asSharedFlow()
 
     /** What the core needs from the app: history for new members and pictures or attachments for `want` (ADR 0014). */
     val coreHost: AnmpCoreHost = object : AnmpCoreHost {
@@ -1946,6 +2051,10 @@ class AppController(
                 if (Transport.INTERNET !in m.via) messageStore.updateStatus(m.localId, MessageStatus.ONLINE, Transport.INTERNET)
             }
             is CoreEvent.SendFailed -> messageStore.find(event.ref)?.takeIf { it.outgoing && it.via.isEmpty() }?.let { messageStore.markFailed(it.localId) }
+            is CoreEvent.ContactUnreachable -> findPerson(PeerId.device(event.personId))?.let { person ->
+                messageStore.addSystem(newId(), Conversation.Direct(person.peer), texts.status.lineUnreachable(person.name.ifBlank { texts.status.someone }))
+            }
+            is CoreEvent.ContactReachable -> Unit
             is CoreEvent.MemberUpdated -> if (event.member.image != null) imageWake.trySend(Unit)
             is CoreEvent.MemberLeft -> {
                 messageStore.dropRecipient(Conversation.Circle(event.circleId), peerOfDevice(event.deviceId))
@@ -1997,6 +2106,28 @@ class AppController(
             ?.takeIf { it != _myDeviceId.value && it != _myPersonId.value }?.let { setOf(conversation.peer) }.orEmpty()
     }
 
+    /**
+     * Messages kept under a device that the core could not name a person for: until ANMP knew removed devices in the
+     * circle history, the old phone after the emergency card was „someone else“ (FUT B8). Own ones become own again,
+     * those of another person move to that person.
+     */
+    private suspend fun reattributeRemovedDevices(myPerson: String) {
+        val devices = messageStore.messages.value
+            .filter { !it.outgoing && it.system == null && it.fromDevice != null && it.fromPeer == PeerId.device(it.fromDevice) }
+            .mapNotNull { it.fromDevice }.toSet()
+        if (devices.isEmpty()) return
+        val own = mutableSetOf<String>()
+        for (device in devices) {
+            val person = core.personOfDevice(device)
+            when {
+                person == myPerson -> own += device
+                person != device -> messageStore.renamePeer(PeerId.device(device), PeerId.device(person))
+            }
+        }
+        val fixed = messageStore.claimOwn(own, ::ownCopyRecipients)
+        if (fixed > 0) log("$fixed eigene Nachrichten eines entfernten Geräts wieder als eigene")
+    }
+
     private fun conversationOf(c: CoreConversation): Conversation = when (c) {
         is CoreConversation.Circle -> Conversation.Circle(c.circleId)
         is CoreConversation.Direct -> Conversation.Direct(PeerId.device(c.personId))
@@ -2040,9 +2171,10 @@ class AppController(
         }
         // Passed on at the shared radio (ADR 0022): the sender gets the delivery receipt as over the internet.
         if (e.forwarded) e.mid?.let { core.confirmReceipt(e.fromDevice, it, AnmpArrived.INTERNET) }
-        val added = messageStore.addOnline(e.objectId, message)
+        val read = !own && readOnArrival(conversation, message.timestampMillis)
+        val added = messageStore.addOnline(e.objectId, message, read)
         if (message.attachments.isNotEmpty() || message.link?.image != null) downloadWake.trySend(Unit)
-        if (added) onReceived(conversation)
+        if (added && !read) onReceived(conversation)
     }
 
     /** Attachment of a received message; unknown kinds are skipped. */
@@ -3265,6 +3397,16 @@ class AppController(
         }
     } ?: InviteCard.Broken
 
+    /**
+     * The own circle whose invitation is being passed on in [text] (shared into the app from the share menu), so that
+     * „An wen?“ can show who is already in it and leave out the circle itself; `null` without exactly one such link.
+     */
+    fun invitedOwnCircle(text: String): String? =
+        findInviteLinks(text).filter { it.kind == InviteKind.Circle }
+            .mapNotNull { link -> core.parseInvite(link.url)?.takeIf { it.networkId == networkId }?.let(::memberCircleOf) }
+            .distinctBy { it.id }
+            .singleOrNull()?.id
+
     /** Circle from the invitation that one is already in (as in [receiveLink]). */
     private fun memberCircleOf(invite: Invite): Circle? =
         (circleRepository.find(invite.circleId) ?: circleRepository.circles.value.firstOrNull { it.secret == invite.secret })
@@ -3630,11 +3772,55 @@ class AppController(
         }
     }
 
-    /** Notice at the top of the chat as long as the history is not completely there yet; `null` otherwise. */
-    fun historyHint(circleId: String): String? {
-        val circle = circleRepository.find(circleId)?.takeIf { it.historyPending && !it.removed } ?: return null
-        val waitingLong = nowMillis() - circle.joinedAt > HISTORY_HINT_SWITCH.inWholeMilliseconds
-        return if (waitingLong) texts.status.historyWaiting else texts.status.historyLoading
+    /**
+     * A received message comes back while its conversation still loads (ADR 0107 §8): read if it was read on an own
+     * device before ([ReadUntil]), without a mark if it was sent before this device began to load.
+     */
+    private fun readOnArrival(conversation: Conversation, sentAt: Long): Boolean {
+        val loading = core.loading.value
+        val stillLoading = when (conversation) {
+            is Conversation.Direct -> loading.mailbox
+            is Conversation.Circle -> conversation.circleId in loading.circles
+        }
+        if (!stillLoading) return false
+        val mark = ReadUntil.keyOf(conversation)?.let { profile.readUntil.value[it] }
+        return ReadUntil.readOnArrival(sentAt, mark, loadingSince())
+    }
+
+    /** When this device began to load the messages after the emergency card or being added; noted the first time. */
+    private fun loadingSince(): Long =
+        store.getString(LOADING_SINCE_KEY)?.toLongOrNull() ?: nowMillis().also { store.putString(LOADING_SINCE_KEY, it.toString()) }
+
+    /** Marks from [ReadUntil] that came from another own device: silently read here too. */
+    private fun applyReadUntil(marks: Map<String, Long>) {
+        for ((key, sentAt) in marks) {
+            val conversation = ReadUntil.conversationOf(key) ?: continue
+            if (messageStore.markReadUntil(conversation, sentAt)) cancelNotification(conversation)
+        }
+    }
+
+    /** What this device has not read through once yet (ADR 0107 §8): own mailbox and circles. */
+    val historyLoading: StateFlow<HistoryLoading> = core.loading
+
+    /**
+     * Notice at the top of a chat as long as its messages are not all there yet (ADR 0014, 0107 §8); `null` otherwise.
+     * Direct: until the own mailbox was read once. Circle: until its space was read once, and while a member still owes
+     * the history.
+     */
+    fun historyHint(conversation: Conversation): String? {
+        val loading = core.loading.value
+        return when (conversation) {
+            is Conversation.Direct -> texts.status.historyLoading.takeIf { loading.mailbox }
+            is Conversation.Circle -> {
+                val circle = circleRepository.find(conversation.circleId)?.takeIf { !it.removed } ?: return null
+                when {
+                    conversation.circleId in loading.circles -> texts.status.historyLoading
+                    !circle.historyPending -> null
+                    nowMillis() - circle.joinedAt > HISTORY_HINT_SWITCH.inWholeMilliseconds -> texts.status.historyWaiting
+                    else -> texts.status.historyLoading
+                }
+            }
+        }
     }
 
     fun setOwnName(name: String) {
@@ -3699,22 +3885,14 @@ class AppController(
     }
 
     private fun onDevicesChanged(e: CoreEvent.DevicesChanged) {
-        if (e.own) {
-            // The core reports a device added here while acceptPairing is still running: no „Warst du das?“ for it.
-            if (addingDevice) {
-                addedHere += e.added.map { it.deviceId }
-                return
-            }
-            e.added.firstOrNull { it.deviceId !in addedHere && it.deviceId != _myDeviceId.value }?.let { _unknownDevice.value = it }
+        // Devices of other people show nothing: how many devices someone uses is nobody else's business (ADR 0042 §6).
+        if (!e.own) return
+        // The core reports a device added here while acceptPairing is still running: no „Warst du das?“ for it.
+        if (addingDevice) {
+            addedHere += e.added.map { it.deviceId }
             return
         }
-        // Quiet line in the direct conversation and in shared circles, without notification (like ADR 0023).
-        val person = findPerson(PeerId.device(e.personId)) ?: return
-        for (d in e.added) {
-            val line = texts.devices.lineNewDevice(person.name.ifBlank { texts.status.someone }, d.name)
-            messageStore.addSystem(newId(), Conversation.Direct(person.peer), line)
-            person.circleIds.forEach { systemLine(it, line) }
-        }
+        e.added.firstOrNull { it.deviceId !in addedHere && it.deviceId != _myDeviceId.value }?.let { _unknownDevice.value = it }
     }
 
     /**
@@ -3735,7 +3913,7 @@ class AppController(
     suspend fun addDevice(link: String, passwordKey: ByteArray?): String? {
         val extras = buildMap {
             put(EXTRA_NAME, profile.ownName.value.encodeToByteArray())
-            passwordKey?.let { k -> passwords?.keyForBackup(k)?.let { put(EXTRA_PV, it) } }
+            passwordKey?.let { k -> passwords?.keyForHandover(k)?.let { put(EXTRA_PV, it) } }
             if (passwordKey != null) passwords?.vaultBytes()?.let { put(EXTRA_VAULT, it) }
         }
         addingDevice = true
@@ -3743,7 +3921,6 @@ class AppController(
         return when (val r = result) {
             is PairResult.Added -> {
                 addedHere += r.device.deviceId
-                scope.launch { sendDirectHistory(r.device.deviceId) }
                 _pendingPairing.value = null
                 null
             }
@@ -3775,6 +3952,7 @@ class AppController(
     suspend fun awaitPairing(): Boolean {
         val extras = core.awaitPairing(PAIRING_WAIT) ?: return false
         takeExtras(extras)
+        store.putString(ASK_REPLACE_KEY, "1")
         restartApp()
         return true
     }
@@ -3793,6 +3971,12 @@ class AppController(
      * a card in „Nachrichten“ until it is confirmed.
      */
     val emergencyCardMissing: Boolean get() = !core.hasEmergencyCard && core.canRenewWithoutCode
+
+    /**
+     * Code of a card made but not yet confirmed: shown again instead of a new card, so the code written down stays
+     * valid after the dialog was closed (user test 14.11.2026). `null` if there is none.
+     */
+    suspend fun pendingEmergencyCard(): String? = core.pendingEmergencyCard()
 
     /** New emergency card; the code is shown and has to be typed in once. `null`: not possible right now. */
     suspend fun createEmergencyCard(oldCode: String? = null): String? {
@@ -3817,6 +4001,8 @@ class AppController(
             e.name?.takeIf { it.isNotBlank() }?.let { profile.setOwnName(it) }
             e.settings.isNotEmpty() && profile.applyPersonalSettings(e.settings.mapValues { it.value.decodeToString() }, nowMillis())
         }
+        // Further person settings of the app (ADR 0106): stored now, read at the next start.
+        settingsSync?.applyPerson(e.settings)
         // There were receipts here that the other device did not know yet: write back the merged state.
         if (pushBack) core.setSettings(profile.personalSettings().mapValues { it.value.encodeToByteArray() })
         if (e.imageChanged) {
@@ -3886,22 +4072,34 @@ class AppController(
         }
     }
 
-    /** Direct conversations for an own device just added (circle histories come from the members, ADR 0014). */
-    private suspend fun sendDirectHistory(deviceId: String) {
-        val items = messageStore.messages.value.filter { it.conversation is Conversation.Direct && it.system == null }
-        if (items.isEmpty()) return
-        val bytes = ownDataJson.encodeToString(ListSerializer(ChatMessage.serializer()), items).encodeToByteArray()
-        if (core.sendOwnData(TOPIC_HISTORY, bytes, deviceId)) log("Direktverlauf (${items.size}) an neues Gerät")
+    /**
+     * Hands the local direct history to the core once (ADR 0107 §6): what this person sent from its only device lay
+     * only in the recipients' mailboxes; the core writes it as own copies, so other devices and the emergency card get
+     * it. A new device reads everything from its mailbox itself; there is no hand-over between devices any more.
+     */
+    private suspend fun keepOwnHistory() {
+        var pause = HISTORY_RETRY_MIN
+        while (true) {
+            val items = messageStore.messages.value
+                .filter { it.conversation is Conversation.Direct && it.system == null && !it.deleted }
+                .mapNotNull(::ownHistoryItem)
+            if (runCatching { core.keepOwnHistory(items) }.getOrDefault(false)) return
+            delay(pause)
+            pause = minOf(pause * 2, HISTORY_RETRY_MAX)
+        }
+    }
+
+    private fun ownHistoryItem(m: ChatMessage): OwnHistoryItem? {
+        val peer = (m.conversation as? Conversation.Direct)?.peer?.let(PeerId::deviceIdOf) ?: return null
+        val mid = if (m.outgoing) m.localId else m.remoteId ?: return null
+        val author = if (m.outgoing) null else m.fromDevice ?: return null
+        return OwnHistoryItem(
+            peer, mid, m.timestampMillis, m.text, author, m.attachments.map(::anmpAttachment), m.replyTo?.mid, m.replyTo?.tag,
+        )
     }
 
     private fun onOwnData(e: CoreEvent.OwnData) {
         when (e.topic) {
-            TOPIC_HISTORY -> {
-                val items = runCatching { ownDataJson.decodeFromString(ListSerializer(ChatMessage.serializer()), e.data.decodeToString()) }.getOrNull() ?: return
-                val added = messageStore.addFromOwnDevice(items)
-                if (added > 0) downloadWake.trySend(Unit)
-                log("Direktverlauf vom eigenen Gerät: $added übernommen")
-            }
             TOPIC_PV -> passwords?.let { p -> scope.launch(Dispatchers.Main) { if (!p.hasKey()) p.restoreKey(e.data) } }
             TOPIC_PV_ASK -> onPasswordRequest(e)
         }
@@ -3936,6 +4134,7 @@ class AppController(
         val r = core.recoverWithCode(code)
         if (r is RecoverResult.Recovered) {
             takeExtras(r.extras)
+            store.putString(ASK_REPLACE_KEY, "1")
             restartApp()
         }
         return r
@@ -4256,9 +4455,28 @@ class AppController(
         /** How long setting up via USB waits for the radio over Bluetooth (restart after „Bluetooth einschalten“ included). */
         private val USB_PAIR_WAIT = 90.seconds
 
+        /** Connecting at the address the radio reported over the cable. */
+        private val WIFI_CONNECT_WAIT = 30.seconds
+
+        /** Switching into the Wi-Fi without cable: restart and joining take well under a minute. */
+        private val WAY_WIFI_WAIT = 60.seconds
+
         /** Model of the radio connected last (Meshtastic `hw_model`), for the USB rescue. */
         private const val LAST_RADIO_MODEL_KEY = "radio.lastHwModel"
         private const val FILES_SORT_KEY = "files.sort"
+
+        /** When this device began to load after the emergency card (ms), see [loadingSince]. */
+        private const val LOADING_SINCE_KEY = "history.loadingSince"
+
+        /** How long changes to the person's settings are collected before they go to the profile space. */
+        private val PERSONAL_SETTINGS_DELAY = 3.seconds
+
+        /** „Behalten“ on the hint for unreachable contacts: `person:since` separated by commas. */
+        private const val UNREACHABLE_KEPT_KEY = "contacts.unreachableKept"
+
+        /** Set while „Alle Daten löschen“ waits for writes that no relay has yet (ADR 0046). */
+        private const val ERASE_WAITING_KEY = "erase.waiting"
+        private val ERASE_POLL = 2.seconds
 
         /** When „Später“ was tapped on the band with a date (ADR 0096 §4); Unix milliseconds. */
         private const val UPDATE_LATER_KEY = "update.laterAt"
@@ -4283,12 +4501,16 @@ class AppController(
         private const val EXTRA_NAME = "name"
         private const val EXTRA_PV = "pv"
 
-        /** How long to wait for the own device list after restoring a backup (ADR 0093). */
-        private val PREVIOUS_DEVICE_WAIT = 2.minutes
+        /** Set before the restart after the emergency card or adding this phone: ask once which device it replaces. */
+        private const val ASK_REPLACE_KEY = "devices.ask_replace"
+        private val REPLACE_WAIT = 2.minutes
+        private val REPLACE_RETRY = 10.seconds
+        private val REPLACE_LIST_WAIT = 30.seconds
         private const val EXTRA_VAULT = "vault"
 
         /** Topics of the data to own devices (`sendOwnData`). */
-        private const val TOPIC_HISTORY = "history"
+        private val HISTORY_RETRY_MIN = 30.seconds
+        private val HISTORY_RETRY_MAX = 30.minutes
         private const val TOPIC_PV = "pv"
 
         /** „Am Handy bestätigen“ (ADR 0059 §6): request of the browser with a 16-byte identifier, answer with the same one. */

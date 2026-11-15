@@ -27,7 +27,7 @@ internal enum class MenuTarget { Profile, About, Internet, Radio, Devices, Setti
 
 /**
  * ⋮ menu in the header of every tab (ADR 0062 §1): what used to be under „Mehr“, in the same order, plus „Über“ next to
- * „Hilfe“. Every entry opens a detail page; backup and emergency card are in the settings,
+ * „Hilfe“. Every entry opens a detail page; the emergency card is in the settings,
  * the log under „Fehlerbehebung“.
  *
  * Above the fixed entries the open page can put its own, rarely needed actions (ADR 0101, [AppHeader] `menu`): under a

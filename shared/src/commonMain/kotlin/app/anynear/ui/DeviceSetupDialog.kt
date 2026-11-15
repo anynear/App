@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -42,7 +41,7 @@ internal fun DeviceSetupDialog(controller: AppController) {
     val isUpdate = check.kind == DeviceSetupCheck.Kind.UPDATE
     var showDetails by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AppDialog(
         // A new device does not send at all without setup, hence no „Nicht jetzt“ there.
         onDismissRequest = { if (!isNew) controller.postponeDeviceSetup() },
         title = {

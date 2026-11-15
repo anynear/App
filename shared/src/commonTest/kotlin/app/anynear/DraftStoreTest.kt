@@ -37,6 +37,20 @@ class DraftStoreTest {
     }
 
     @Test
+    fun draftMovesWhenTheDeviceTurnsOutToBeAPerson() {
+        // Opened from a contact link under the device; then the device became the person (ADR 0042).
+        val person = Conversation.Direct(PeerId.device("person-anna"))
+        store().setText(direct, "Hallo Anna")
+        store().move(direct, person)
+        assertEquals("Hallo Anna", store().text(person))
+        assertEquals("", store().text(direct))
+        // A draft already under the person stays.
+        store().setText(direct, "alt")
+        store().move(direct, person)
+        assertEquals("Hallo Anna", store().text(person))
+    }
+
+    @Test
     fun emptyTextRemovesEntry() {
         store().setText(circle, "x")
         store().setText(circle, "")

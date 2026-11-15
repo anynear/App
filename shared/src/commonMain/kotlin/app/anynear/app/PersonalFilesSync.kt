@@ -35,7 +35,7 @@ import kotlin.time.Duration.Companion.minutes
 
 /**
  * Keeps “Meine Ablage” in sync with the own space on the relays (ADR 0041): new and renamed items go up,
- * deleted ones are deleted there, what only lies there (e.g. after restoring an older backup) comes
+ * deleted ones are deleted there, what only lies there (e.g. on a new device) comes
  * down. Runs after the start, after every change and every [INTERVAL] minutes (in the background every
  * [BACKGROUND_INTERVAL]); without internet it waits. What
  * did not go up (too large, not accepted) is retried by every sync; the file page shows the reason.
@@ -224,7 +224,7 @@ internal class PersonalFilesSync(
             }
         }
         files.checked()
-        // Kept on the device again (ADR 0080) or after restoring a backup: fetch missing files.
+        // Kept on the device again (ADR 0080) or on a new device: fetch missing files.
         for (local in files.all.value) {
             if (local.onlineOnly || files.onDevice(local.id)) continue
             val r = byId[local.id] ?: continue

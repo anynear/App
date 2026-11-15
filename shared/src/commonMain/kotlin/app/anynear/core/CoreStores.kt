@@ -48,7 +48,7 @@ internal class CoreBlobs(private val files: BinaryFiles, private val cipher: Loc
     }
 }
 
-/** Names in the protected storage that the core creates itself (backup and move, ADR 0027). */
+/** Names in the protected storage that the core creates itself (fresh start, ADR 0046). */
 object CoreSecretKeys {
     const val DEVICE_SIGN = "core.device.sign"
     const val DEVICE_X = "core.device.x"

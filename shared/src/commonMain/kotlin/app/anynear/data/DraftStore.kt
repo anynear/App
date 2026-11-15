@@ -49,6 +49,15 @@ class DraftStore(private val store: KeyValueStore, private val files: Attachment
         fileOf.values.removeAll { it in before && it !in kept }
     }
 
+    /** The conversation got a new key (a device became a person, ADR 0042): its draft moves along, unless [to] has one. */
+    fun move(from: Conversation, to: Conversation) {
+        if (from == to) return
+        if (text(to).isEmpty()) store.putString(textKey(to), store.getString(textKey(from)))
+        if (saved(to).isEmpty()) store.putString(filesKey(to), store.getString(filesKey(from)))
+        store.putString(textKey(from), null)
+        store.putString(filesKey(from), null)
+    }
+
     private fun saved(conversation: Conversation): List<SavedAttachment> =
         store.getString(filesKey(conversation))?.let { runCatching { json.decodeFromString<List<SavedAttachment>>(it) }.getOrNull() }.orEmpty()
 

@@ -11,14 +11,20 @@ import app.anynear.anmp.core.firmware.UsbFamily
 import app.anynear.anmp.core.firmware.UsbInstallRelease
 import app.anynear.anmp.core.firmware.UsbModelHints
 import app.anynear.anmp.core.firmware.selectRadios
+import app.anynear.mesh.RadioWifiStatus
 import app.anynear.mesh.Uf2Drive
 import app.anynear.mesh.UsbRadio
 import app.anynear.mesh.UsbRescue
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /** Where the dialog at the USB cable currently stands (rescue ADR 0056 §2 step 7, setting up and using ADR 0094). */
@@ -28,8 +34,11 @@ sealed interface UsbRescueState {
      * ([UsbRadio.answered] `false`: no Meshtastic yet).
      */
     data class Choose(val radio: UsbRadio) : UsbRescueState {
-        /** Setting up only while it is not set up for anynear yet. */
-        val canSetUp: Boolean get() = !radio.setUp
+        /**
+         * Already set up for anynear, e.g. still from before the app was installed anew: setting up stays possible
+         * (only the way of use is chosen again), but using it over the cable is the main way then (FUT 14.11.2026).
+         */
+        val alreadySetUp: Boolean get() = radio.answered && radio.setUp
 
         /** Using over the cable only once it is set up. */
         val canUse: Boolean get() = radio.answered && radio.setUp
@@ -94,14 +103,20 @@ sealed interface UsbRescueState {
         val wifiPossible: Boolean get() = radio.firmware?.hasWifi == true
     }
 
-    /** Stationary: Wi-Fi name and password. [failed]: writing them did not work. */
-    data class WifiCredentials(val radio: UsbRadio, val failed: Boolean = false) : UsbRescueState
+    /**
+     * Stationary: Wi-Fi name and password. [failed]: writing them did not work. [notJoined]: the radio took them but did
+     * not get into the Wi-Fi (wrong password, wrong name or too far from the router). [ssid]: what was entered last.
+     */
+    data class WifiCredentials(val radio: UsbRadio, val failed: Boolean = false, val ssid: String = "", val notJoined: Boolean = false) : UsbRescueState
+
+    /** Name and password are on the radio; it restarts and the app asks over the cable whether it got into [ssid]. */
+    data class WifiJoining(val radio: UsbRadio, val ssid: String) : UsbRescueState
 
     /** Looking for the radio on the chosen way and connecting it; over Bluetooth the phone then asks for the number. */
     data class Pairing(val radio: UsbRadio, val via: UsbConnection) : UsbRescueState
 
-    /** Connected (or pairing) as [name] over [via]. */
-    data class Paired(val name: String, val via: UsbConnection) : UsbRescueState
+    /** Connected (or pairing) as [name] over [via]; [ssid]: the Wi-Fi it is in, if known. */
+    data class Paired(val name: String, val via: UsbConnection, val ssid: String? = null) : UsbRescueState
 
     /** The radio did not show up on the chosen way (Bluetooth: probably connected to another phone). */
     data class NotSeen(val radio: UsbRadio, val via: UsbConnection) : UsbRescueState
@@ -163,6 +178,13 @@ class UsbRescueFlow(
     private val radios: suspend () -> RadioCatalog? = { null },
     /** Pause while the radio restarts after installing; tests pass zero. */
     private val restartWait: suspend () -> Unit = { kotlinx.coroutines.delay(RESTART_WAIT_MS) },
+    /**
+     * Where steps run that must not end with the dialog (joining the Wi-Fi, connecting): the app's scope. Closing the
+     * dialog by mistake cancelled them before (FUT 14.11.2026).
+     */
+    private val background: CoroutineScope = CoroutineScope(SupervisorJob()),
+    /** Pause between two questions „im WLAN?“ over the cable; tests pass zero. */
+    private val wifiPollWait: suspend () -> Unit = { kotlinx.coroutines.delay(WIFI_POLL_WAIT_MS) },
 ) {
     private val _state = MutableStateFlow<UsbRescueState>(UsbRescueState.Start)
     val state: StateFlow<UsbRescueState> = _state.asStateFlow()
@@ -177,8 +199,21 @@ class UsbRescueFlow(
     /** The radio on the cable while its model is chosen ([UsbRescueState.PickRadio]); `null` when stuck in the bootloader. */
     private var choosing: UsbRadio? = null
 
+    private var detached: Job? = null
+
+    /** Is a step still running that goes on without the dialog ([inBackground])? Opening the dialog then shows it. */
+    val runningInBackground: Boolean get() = detached?.isActive == true
+
+    /** Runs [step] in the app's scope, so that it goes on and shows its result also if the dialog is closed meanwhile. */
+    fun inBackground(step: suspend UsbRescueFlow.() -> Unit) {
+        detached?.cancel()
+        detached = background.launch { step() }
+    }
+
     /** Fresh start; [purpose] `null`: look first, then ask (just plugged in). */
     fun reset(purpose: UsbPurpose? = UsbPurpose.RESCUE) {
+        detached?.cancel()
+        detached = null
         this.purpose = purpose
         _state.value = UsbRescueState.Start
         hwModel = null
@@ -353,21 +388,53 @@ class UsbRescueFlow(
         _state.value = UsbRescueState.WifiCredentials(radio)
     }
 
-    /** Wi-Fi name and password onto the radio, then find it in the Wi-Fi and connect. */
+    /**
+     * Wi-Fi name and password onto the radio, then ask it over the cable whether it got into the Wi-Fi: in it, connect
+     * at the address it reports; not in it after [WIFI_POLL_TRIES], back to the form with a clear message; no answer
+     * at all (older software), find it in the Wi-Fi as before.
+     */
     suspend fun enableWifi(radio: UsbRadio, ssid: String, password: String) {
-        _state.value = UsbRescueState.Working(UsbRescueStep.BLUETOOTH)
-        if (guard { usb.enableWifi(radio, ssid.trim(), password) } != true) {
-            _state.value = UsbRescueState.WifiCredentials(radio, failed = true)
+        val name = ssid.trim()
+        _state.value = UsbRescueState.WifiJoining(radio, name)
+        if (guard { usb.enableWifi(radio, name, password) } != true) {
+            _state.value = UsbRescueState.WifiCredentials(radio, failed = true, ssid = name)
             return
         }
-        connect(radio.copy(wifiOn = true, bluetoothOff = true), UsbConnection.WIFI)
+        val inWifi = radio.copy(wifiOn = true, bluetoothOff = true)
+        when (val joined = waitForWifi(inWifi)) {
+            null -> connect(inWifi, UsbConnection.WIFI, name)
+            else -> if (joined.connected) {
+                connect(inWifi.copy(wifiAddress = joined.ip), UsbConnection.WIFI, name)
+            } else {
+                log("nicht ins WLAN gekommen")
+                _state.value = UsbRescueState.WifiCredentials(radio, ssid = name, notJoined = true)
+            }
+        }
     }
 
-    /** Find and connect the radio on [via] (also „Nochmal“ after [UsbRescueState.NotSeen]). */
-    suspend fun connect(radio: UsbRadio, via: UsbConnection) {
+    /**
+     * Asks until the radio reports itself in the Wi-Fi, [WIFI_POLL_TRIES] are used up or [WIFI_JOIN_LIMIT] has passed. Returns the last answer:
+     * connected, not connected, or `null` if it never answered (restart takes longer, or it does not tell).
+     */
+    private suspend fun waitForWifi(radio: UsbRadio): RadioWifiStatus? {
+        var last: RadioWifiStatus? = null
+        val started = TimeSource.Monotonic.markNow()
+        repeat(WIFI_POLL_TRIES) {
+            // Asking over a cable that does not answer yet takes a while itself: stop at the limit, not only by count.
+            if (started.elapsedNow() > WIFI_JOIN_LIMIT) return last
+            wifiPollWait()
+            val status = guard { usb.wifiStatus(radio) }
+            if (status?.connected == true) return status
+            if (status != null) last = status
+        }
+        return last
+    }
+
+    /** Find and connect the radio on [via] (also „Nochmal“ after [UsbRescueState.NotSeen]); [ssid]: the Wi-Fi, if known. */
+    suspend fun connect(radio: UsbRadio, via: UsbConnection, ssid: String? = null) {
         _state.value = UsbRescueState.Pairing(radio, via)
         val name = guard { connect.invoke(radio, via) }
-        _state.value = if (name != null) UsbRescueState.Paired(name, via) else UsbRescueState.NotSeen(radio, via)
+        _state.value = if (name != null) UsbRescueState.Paired(name, via, ssid) else UsbRescueState.NotSeen(radio, via)
     }
 
     suspend fun factoryReset(radio: UsbRadio) {
@@ -492,6 +559,11 @@ class UsbRescueFlow(
     private companion object {
         const val RESTART_WAIT_MS = 5_000L
         const val RESTART_TRIES = 8
+
+        /** The radio restarts (some seconds) and joins the Wi-Fi (some more): up to about 45 s, then it says so. */
+        const val WIFI_POLL_WAIT_MS = 3_000L
+        const val WIFI_POLL_TRIES = 12
+        val WIFI_JOIN_LIMIT = 60.seconds
         val MIN_SEARCH_SHOWN = 1200.milliseconds
     }
 }

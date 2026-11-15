@@ -27,10 +27,10 @@ import app.anynear.core.LocalKey
 import app.anynear.core.AppNet
 import app.anynear.data.DraftStore
 import app.anynear.data.EncryptedKeyValueStore
+import app.anynear.data.ObservedKeyValueStore
 import app.anynear.data.MessageHistory
 import app.anynear.data.MessageStore
 import app.anynear.data.PairedDeviceRepository
-import app.anynear.data.StateBackup
 import app.anynear.data.PersonalFiles
 import app.anynear.data.SharedStorage
 import app.anynear.passwords.PasswordStore
@@ -59,7 +59,10 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
-/** Folders of the app on the device that concern backup and fresh start. */
+/** Folders of the app on the device that concern a fresh start. */
+/** Where older versions staged a backup file for restoring at the next start (ADR 0027, removed by ADR 0105). */
+private const val OLD_RESTORE_DIR = "restore"
+
 internal val APP_BINARY_DIRS = listOf(AttachmentFiles.DIR_NAME, AvatarImages.DIR_NAME, DraftStore.DIR_NAME, CoreBlobs.DIR_NAME, PersonalFiles.DIR_NAME, CircleFiles.DIR_NAME)
 
 /** Wires up the real building blocks. Create once per process. */
@@ -79,14 +82,14 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val secrets = platformSecretStore()
     val rawKeyValues = platformRawKeyValueAccess()
-    // On iOS passwords live in the app group's container (password extension), but go into backup and fresh start just the same.
+    // On iOS passwords live in the app group's container (password extension), but go into a fresh start just the same.
     val binaryDirs = APP_BINARY_DIRS.associateWith(::platformBinaryFiles) + (PasswordStore.DIR_NAME to platformPasswordFiles())
     val historyFile = platformTextFile(MessageHistory.FILE_NAME)
     // Flagged (ADR 0046, “Gerät zurücksetzen”, “Alle Daten löschen”): everything on the device, like freshly installed.
     val resetRequested = FreshStart.requested(rawKeyValues)
-    // Public radio (ADR 0055): own file, not in the backup, but deleted on reset.
+    // Public radio (ADR 0055): own file, deleted on reset.
     val publicFile = platformTextFile(PublicRadio.FILE_NAME)
-    // Read text of the storages (ADR 0067): not in the backup, but deleted on reset.
+    // Read text of the storages (ADR 0067): deleted on reset.
     val docTextDir = platformBinaryFiles(DocTexts.DIR_NAME)
     // What the search for documents on the phone has already looked at (ADR 0071): likewise.
     val finderDir = platformBinaryFiles(FinderMemory.DIR_NAME)
@@ -95,24 +98,13 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
     }
     if (resetRequested) {
         platformPasswordKeyStore().delete()
-        platformBinaryFiles(StateBackup.PENDING_DIR).let { dir -> dir.names().forEach(dir::delete) }
         deleteRadioCache()
     }
     val passwords = PasswordStore(binaryDirs.getValue(PasswordStore.DIR_NAME), platformPasswordKeyStore(), secrets, ::publishCredentialIdentities) {
         Clock.System.now().toEpochMilliseconds()
     }
-    // Backup (ADR 0027): a flagged one is restored before anything is read.
-    val backup = StateBackup(
-        keyValues = rawKeyValues,
-        secrets = secrets,
-        secretKeys = ::platformSecretKeys,
-        textFiles = mapOf(MessageHistory.FILE_NAME to historyFile),
-        binaryDirs = binaryDirs,
-        pending = platformBinaryFiles(StateBackup.PENDING_DIR),
-        restorePasswordKey = { passwords.restoreKey(it) },
-    )
-    val restored = backup.applyPendingRestore { LocalKey.cipher(secrets) }
-    if (restored) debugLog.add("Sicherung", "eingespielt")
+    // The backup file is gone (ADR 0105): a restore staged by an older version is discarded.
+    platformBinaryFiles(OLD_RESTORE_DIR).let { dir -> dir.names().forEach(dir::delete) }
     // Bring stored data to the state of this version (ADR 0061, decision 13) before anything reads it.
     StorageVersion.migrate(StorageVersion.Stores(rawKeyValues, secrets, ::platformSecretKeys))
     val plainStore = platformKeyValueStore()
@@ -121,11 +113,10 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
     if (freshStart || removedHere) FreshStart.noticeShown(plainStore)
     // Settings and history lie on the device encrypted with a key derived from the device key.
     val localCipher = LocalKey.cipher(secrets)
-    val store = EncryptedKeyValueStore(plainStore, localCipher)
+    // Observed, so that settings go to the network as they change (ADR 0106).
+    val store = ObservedKeyValueStore(EncryptedKeyValueStore(plainStore, localCipher))
     val scanner = DeviceScanner()
     val profile = ProfileRepository(store)
-    // After that the new app may offer to delete the old one (ADR 0025, app ID change).
-    if (restored) profile.markRestoredFromBackup(Clock.System.now().toEpochMilliseconds())
     // ANMP core on ANDP (ADR 0034–0036): circles, contacts, personal mailbox, sending and fetching.
     val host = ForwardingHost()
     val config = AppNet.config()
@@ -249,8 +240,6 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
         log = { logSink.log(LogLevel.INFO, "Lesen", it, null) },
         debugLog = debugLog,
         crashes = crashes,
-        backup = backup,
-        localCipher = localCipher,
         networkId = config.networkId.toString(),
         freshStart = freshStart,
         removedHere = removedHere,
