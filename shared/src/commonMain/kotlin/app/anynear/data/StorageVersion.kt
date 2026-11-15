@@ -5,8 +5,7 @@ package app.anynear.data
  * stored data is migrated instead of discarded. Any change to names or shape of stored values increments [CURRENT] and
  * comes with a [Migration] with a test; [MIGRATIONS] contains them in the order of the versions.
  *
- * The number is stored unencrypted under [KEY] in the key-value store and travels with the backup (ADR 0027); a
- * restored older backup is migrated at the next start as well.
+ * The number is stored unencrypted under [KEY] in the key-value store.
  */
 object StorageVersion {
     const val KEY = "storage.version"
@@ -50,7 +49,7 @@ object StorageVersion {
     }
 
     /**
-     * Before everything else at start, after the fresh start and the restore of a backup. Without a number the store is
+     * Before everything else at start, after the fresh start. Without a number the store is
      * new or from [FIRST]. A higher number than known (older app restored over a newer one) stays untouched.
      * Returns the version the store is at afterwards.
      */

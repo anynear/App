@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import androidx.core.content.pm.ShortcutManagerCompat
 import android.hardware.usb.UsbManager
+import android.content.res.Configuration
 import android.os.Build
 import android.graphics.Color
 import android.os.Bundle
@@ -83,6 +84,15 @@ class MainActivity : ComponentActivity() {
         handleLink(intent)
     }
 
+    /**
+     * Dark mode switched (e.g. on a schedule in the evening): handled here instead of a new window (`uiMode` in the
+     * manifest), so open dialogs and what was typed stay. Compose follows by itself; the status bar icons are set anew.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT))
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleLink(intent)
@@ -155,6 +165,8 @@ class MainActivity : ComponentActivity() {
         app.hooks.refreshNotificationChannels()
         // Back from „Unbekannte Apps installieren“: continue the update.
         app.hooks.updater.onResume()
+        // Summaries of notification groups whose notifications were tapped away.
+        NotificationGroups.tidy(this)
         // Google Play: install a downloaded update, continue an immediate one.
         app.hooks.store?.onResume()
     }

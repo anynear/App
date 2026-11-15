@@ -3,7 +3,6 @@ package app.anynear.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -106,7 +105,7 @@ internal fun RadioAdvanced(controller: AppController, connected: Boolean) {
     UsbRescueRow(controller)
 
     if (confirmReapply) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { confirmReapply = false },
             title = { Text(texts.settings.reapplyTitle) },
             text = { Text(texts.settings.reapplyText) },

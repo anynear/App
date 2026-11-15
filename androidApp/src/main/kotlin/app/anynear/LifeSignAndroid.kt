@@ -97,11 +97,9 @@ class LifeSignActionReceiver : BroadcastReceiver() {
  * „Bin fertig“ work without unlocking and without opening the app. Tapping opens the big button.
  */
 class CheckInNotifier(private val context: Context) {
-    private val manager = androidx.core.app.NotificationManagerCompat.from(context)
-
     fun show(checkIn: app.anynear.app.CheckInNotification?) {
         if (checkIn == null) {
-            manager.cancel(NOTIFICATION_ID)
+            NotificationGroups.cancel(context, NotificationGroups.CHECK_IN, null, NOTIFICATION_ID)
             return
         }
         val system = context.getSystemService(android.app.NotificationManager::class.java)
@@ -132,15 +130,15 @@ class CheckInNotifier(private val context: Context) {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(androidx.core.app.NotificationCompat.CATEGORY_REMINDER)
-            // Own group, not bundled with messages (like [MeshConnectionService]).
-            .setGroup(CHANNEL_ID)
+            // Own group with a summary, apart from the background notification ([NotificationGroups]).
+            .setGroup(NotificationGroups.CHECK_IN)
             .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(open)
             .addAction(0, checkIn.okLabel, LifeSignActionReceiver.intent(context, checkIn.okAction, ""))
             .addAction(0, checkIn.endLabel, LifeSignActionReceiver.intent(context, checkIn.endAction, ""))
             .build()
         try {
-            manager.notify(NOTIFICATION_ID, built)
+            NotificationGroups.notify(context, null, NOTIFICATION_ID, built)
         } catch (e: SecurityException) {
             // Notifications not allowed; the card in the app stays.
         }

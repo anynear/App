@@ -2,6 +2,7 @@ package app.anynear.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,7 +38,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.anynear.anmp.core.HistoryLoading
 import app.anynear.app.AppController
+import app.anynear.circles.Circle
 import app.anynear.app.PublicRadio
 import app.anynear.chats.ChatListEntry
 import app.anynear.i18n.texts
@@ -58,6 +61,8 @@ internal fun ChatListScreen(
     onOpen: (Conversation) -> Unit,
     onNewMessage: () -> Unit,
     onOpenPublic: (PublicChannel) -> Unit = {},
+    /** Circle page or person page, from the long-press actions. */
+    onOpenInfo: (Conversation) -> Unit = {},
 ) {
     val entries by controller.chatList.collectAsState()
     val unread by controller.unreadCount.collectAsState()
@@ -66,15 +71,19 @@ internal fun ChatListScreen(
     val notificationHint by controller.notificationHint.collectAsState()
     val bluetoothHint by controller.bluetoothHint.collectAsState()
     val suggestedDevice by controller.suggestedDevice.collectAsState()
+    val loading by controller.historyLoading.collectAsState()
     val publicRadio = controller.publicRadio
     val publicChannels by (publicRadio?.available ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }).collectAsState()
     val communityOffer by (publicRadio?.offer ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) }).collectAsState()
     var adding by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
+    var actionsFor by remember { mutableStateOf<ChatListEntry?>(null) }
+    var leaving by remember { mutableStateOf<Circle?>(null) }
+    var deleting by remember { mutableStateOf<ChatListEntry?>(null) }
     val now = Clock.System.now().toEpochMilliseconds()
     var query by rememberSaveable { mutableStateOf("") }
     // The search covers the name and the last message, the way the row shows them.
-    val shown = entries.filter { matchesSearch(query, it.title, it.preview()) }
+    val shown = entries.filter { matchesSearch(query, it.title, it.preview(loading)) }
     // Space below the list, as high as the button (grows with the font size), so that it never covers the last entry.
     var buttonHeight by remember { mutableStateOf(MainButtonHeight) }
     val density = LocalDensity.current
@@ -87,6 +96,8 @@ internal fun ChatListScreen(
                 else -> texts.chat.newMessages(unread)
             },
         )
+        // New device or back from the emergency card: the messages are still coming (ADR 0107 §8).
+        if (loading.any) HistoryStrip(texts.status.messagesLoading)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             Column(Modifier.fillMaxSize()) {
                 if (entries.isNotEmpty()) {
@@ -167,7 +178,7 @@ internal fun ChatListScreen(
                         }
                     }
                     items(shown, key = { it.key }) { entry ->
-                        ChatListRow(entry, now, onClick = { onOpen(entry.conversation) }) {
+                        ChatListRow(entry, now, loading, onClick = { onOpen(entry.conversation) }, onLongClick = { actionsFor = entry }) {
                             when (val c = entry.conversation) {
                                 is Conversation.Circle -> CircleAvatar(controller, c.circleId, circles.firstOrNull { it.id == c.circleId }?.image, AVATAR_SIZE)
                                 is Conversation.Direct -> PersonAvatar(controller, c.peer, people.firstOrNull { it.peer == c.peer }?.image, AVATAR_SIZE)
@@ -204,6 +215,33 @@ internal fun ChatListScreen(
             )
         }
     }
+    // Long press on a row (FUT 14.11.2026): the actions of the circle or person page that one looks for here, with
+    // the same confirmation dialogs as there.
+    actionsFor?.let { entry ->
+        ActionsDialog(entry.title, onDismiss = { actionsFor = null }) {
+            when (val c = entry.conversation) {
+                is Conversation.Circle -> {
+                    AppRow(title = texts.chat.viewCircle, icon = AppIcons.Kreis, onClick = { actionsFor = null; onOpenInfo(c) })
+                    circles.firstOrNull { it.id == c.circleId }?.let { circle ->
+                        AppRow(
+                            title = if (circle.removed) texts.people.removeFromList else texts.people.leaveCircle,
+                            icon = AppIcons.Verlassen,
+                            danger = true,
+                            onClick = { actionsFor = null; leaving = circle },
+                        )
+                    }
+                }
+                is Conversation.Direct -> {
+                    AppRow(title = texts.chat.viewProfile, icon = AppIcons.Person, onClick = { actionsFor = null; onOpenInfo(c) })
+                    AppRow(title = texts.people.deleteHistory, icon = AppIcons.Schliessen, danger = true, onClick = { actionsFor = null; deleting = entry })
+                }
+            }
+        }
+    }
+    leaving?.let { LeaveCircleDialog(controller, it, onDismiss = { leaving = null }) }
+    deleting?.let { entry ->
+        (entry.conversation as? Conversation.Direct)?.let { c -> DeleteHistoryDialog(controller, c.peer, entry.title, onDismiss = { deleting = null }) }
+    }
     if (adding) AddContactFlow(controller, onDismiss = { adding = false }, onOpenChat = { onOpen(Conversation.Direct(it)) })
     if (creating) CreateCircleDialog(controller, onDismiss = { creating = false }, onCreated = { onOpen(Conversation.Circle(it)) })
 }
@@ -237,9 +275,9 @@ private fun PermissionCard(
 private val FLOATING_MARGIN = 16.dp
 
 @Composable
-private fun ChatListRow(entry: ChatListEntry, now: Long, onClick: () -> Unit, avatar: @Composable () -> Unit) {
+private fun ChatListRow(entry: ChatListEntry, now: Long, loading: HistoryLoading, onClick: () -> Unit, onLongClick: () -> Unit, avatar: @Composable () -> Unit) {
     val hasNew = entry.unread > 0
-    val preview = entry.preview()
+    val preview = entry.preview(loading)
     val time = entry.last?.let { formatChatListTime(it.timestampMillis, now) }
     // For screen readers one sentence instead of individual parts.
     val spoken = buildString {
@@ -256,7 +294,7 @@ private fun ChatListRow(entry: ChatListEntry, now: Long, onClick: () -> Unit, av
         Modifier
             .fillMaxWidth()
             .heightIn(min = 80.dp)
-            .clickable(onClick = onClick)
+            .combinedClickable(onLongClickLabel = texts.chat.chatActions, onLongClick = onLongClick, onClick = onClick)
             .clearAndSetSemantics { contentDescription = spoken }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -363,7 +401,18 @@ private fun UnreadBadge(count: Int) {
     }
 }
 
-private fun ChatListEntry.preview(): String {
-    val message = last ?: return if (removed) texts.chat.noLongerInCircle else texts.chat.noMessagesYet
+/** Last message; without one „Wird geladen …“ while its messages are still coming (ADR 0107 §8). */
+private fun ChatListEntry.preview(loading: HistoryLoading): String {
+    val message = last ?: return when {
+        removed -> texts.chat.noLongerInCircle
+        loading.has(conversation) -> texts.chat.loadingMessages
+        else -> texts.chat.noMessagesYet
+    }
     return lastSender?.let { "$it: ${message.previewText}" } ?: message.previewText
+}
+
+/** Whether the messages of [conversation] are still coming on this device (ADR 0107 §8). */
+private fun HistoryLoading.has(conversation: Conversation): Boolean = when (conversation) {
+    is Conversation.Circle -> conversation.circleId in circles
+    is Conversation.Direct -> mailbox
 }

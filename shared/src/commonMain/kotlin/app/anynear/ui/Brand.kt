@@ -723,6 +723,26 @@ internal object AppIcons {
         }
     }
 
+    /** Printer: sheet on top, body, printed sheet below. */
+    val Drucken: ImageVector = icon("Drucken") {
+        line {
+            moveTo(6f, 9f); verticalLineTo(3f); horizontalLineTo(18f); verticalLineTo(9f)
+        }
+        line {
+            moveTo(6f, 18f)
+            horizontalLineTo(4f)
+            arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+            verticalLineTo(11f)
+            arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+            horizontalLineTo(20f)
+            arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+            verticalLineTo(16f)
+            arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+            horizontalLineTo(18f)
+        }
+        line { box(6f, 14f, 12f, 8f, 1f) }
+    }
+
     /** Battery of the radio. */
     val Akku: ImageVector = icon("Akku") {
         line { box(2f, 7f, 18f, 10f, 2f) }

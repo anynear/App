@@ -2,6 +2,7 @@ package app.anynear.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,10 +32,15 @@ import androidx.compose.ui.unit.dp
 import app.anynear.anmp.core.DeviceInfo
 import app.anynear.anmp.core.RecoverResult
 import app.anynear.app.AppController
+import app.anynear.data.platformDeviceName
 import app.anynear.i18n.texts
 import app.anynear.passwords.UnlockResult
+import app.anynear.passwords.copySecret
 import app.anynear.passwords.rememberDeviceCheck
 import app.anynear.passwords.rememberPasswordUnlock
+import io.github.alexzhirkevich.qrose.ImageFormat
+import io.github.alexzhirkevich.qrose.rememberQrCodePainter
+import io.github.alexzhirkevich.qrose.toByteArray
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
@@ -43,7 +49,7 @@ import kotlin.time.Clock
 internal fun MyDevicesScreen(controller: AppController, onBack: () -> Unit) {
     val devices by controller.ownDevices.collectAsState()
     val me by controller.myDeviceId.collectAsState()
-    var adding by remember { mutableStateOf(false) }
+    var adding by rememberSaveable { mutableStateOf(false) }
     var removing by remember { mutableStateOf<DeviceInfo?>(null) }
     var lockingOut by remember { mutableStateOf<DeviceInfo?>(null) }
 
@@ -65,11 +71,11 @@ internal fun MyDevicesScreen(controller: AppController, onBack: () -> Unit) {
             }
         }
     }
-    if (adding) AddDeviceDialog(controller, initial = null) { adding = false }
+    if (adding) AddDeviceFlow(controller) { adding = false }
     // Removing another own device locks the person out there: only after the device lock (ADR 0042).
     val confirmRemove = rememberLockCheck { removing?.let { controller.removeDevice(it.deviceId) }; removing = null }
     removing?.let { d ->
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { removing = null },
             title = { Text(texts.devices.removeTitle(d.name.ifBlank { texts.devices.unnamed })) },
             text = {
@@ -93,7 +99,7 @@ internal fun MyDevicesScreen(controller: AppController, onBack: () -> Unit) {
 internal fun EmergencyCardReminder(controller: AppController) {
     var missing by remember { mutableStateOf(controller.emergencyCardMissing) }
     if (!missing) return
-    var open by remember { mutableStateOf(false) }
+    var open by rememberSaveable { mutableStateOf(false) }
     AppSection(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
         SectionContent {
             Text(texts.setup.cardReminderTitle, style = MaterialTheme.typography.titleMedium)
@@ -110,7 +116,7 @@ internal fun EmergencyCardReminder(controller: AppController) {
 /** Emergency card as its own row in the settings, not under „Meine Geräte“. */
 @Composable
 internal fun EmergencyCardRow(controller: AppController) {
-    var card by remember { mutableStateOf(false) }
+    var card by rememberSaveable { mutableStateOf(false) }
     AppRow(
         title = if (controller.hasEmergencyCard) texts.devices.cardRenew else texts.devices.cardCreate,
         subtitle = if (controller.hasEmergencyCard) texts.devices.cardDone else texts.devices.cardFooter,
@@ -121,13 +127,30 @@ internal fun EmergencyCardRow(controller: AppController) {
     if (card) EmergencyCardDialog(controller) { card = false }
 }
 
+private enum class AddDeviceStep { Menu, Scan }
+
 /**
- * Add a new own device by code: paste the link or from scanning ([initial]), then confirm with the device
- * lock. If there are passwords, the same prompt opens their key; they come along (ADR 0039, 0042 §5).
+ * „Gerät hinzufügen“: built like „Kontakt hinzufügen“, but only with the camera. The QR code on the new device
+ * leads like a tapped link to [PendingPairingDialog]; there is nothing to paste (FUT B3).
  */
 @Composable
-internal fun AddDeviceDialog(controller: AppController, initial: String?, onDismiss: () -> Unit) {
-    var link by remember { mutableStateOf(initial.orEmpty()) }
+internal fun AddDeviceFlow(controller: AppController, onDismiss: () -> Unit) {
+    var step by remember { mutableStateOf(AddDeviceStep.Menu) }
+    when (step) {
+        AddDeviceStep.Menu -> ActionsDialog(texts.devices.add, onDismiss = onDismiss) {
+            Text(texts.devices.addText, modifier = Modifier.padding(bottom = 8.dp))
+            AppRow(title = texts.people.scanQrCode, subtitle = texts.devices.scanHint, icon = AppIcons.Kamera, onClick = { step = AddDeviceStep.Scan })
+        }
+        AddDeviceStep.Scan -> QrScanDialog(controller, help = texts.devices.scanHelp, onDismiss = onDismiss)
+    }
+}
+
+/**
+ * Add a new own device from its code ([link], scanned or tapped), then confirm with the device lock.
+ * If there are passwords, the same prompt opens their key; they come along (ADR 0039, 0042 §5).
+ */
+@Composable
+internal fun AddDeviceDialog(controller: AppController, link: String, onDismiss: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -161,9 +184,9 @@ internal fun AddDeviceDialog(controller: AppController, initial: String?, onDism
         }
     }
 
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (compare != null) texts.devices.compareTitle else if (initial != null) texts.devices.addConfirmTitle else texts.devices.add) },
+        title = { Text(if (compare != null) texts.devices.compareTitle else texts.devices.addConfirmTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val c = compare
@@ -172,12 +195,7 @@ internal fun AddDeviceDialog(controller: AppController, initial: String?, onDism
                     Text(c, style = MaterialTheme.typography.displaySmall, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                     Text(texts.devices.addConfirmText, style = MaterialTheme.typography.bodySmall)
                 } else {
-                    Text(if (initial != null) texts.devices.addConfirmText else texts.devices.addText)
-                    if (initial == null) {
-                        OutlinedTextField(value = link, onValueChange = { link = it; error = null }, minLines = 2, maxLines = 4, label = { Text(texts.devices.addPaste) }, modifier = Modifier.fillMaxWidth())
-                        // A pasted link can come from anyone: only a device lying in front of you (ADR 0093).
-                        Text(texts.devices.addPasteHint, style = MaterialTheme.typography.bodySmall)
-                    }
+                    Text(texts.devices.addConfirmText)
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (busy) CircularProgressIndicator()
@@ -194,7 +212,7 @@ internal fun AddDeviceDialog(controller: AppController, initial: String?, onDism
                 }, kind = ButtonKind.Primary)
             } else {
                 AppButton(texts.devices.compareYes, {
-                    if (controller.backupNeedsDeviceLock) unlockPasswords(texts.devices.addReason) else check(texts.devices.addReason)
+                    if (controller.passwordsNeedDeviceLock) unlockPasswords(texts.devices.addReason) else check(texts.devices.addReason)
                 }, kind = ButtonKind.Primary, enabled = !busy)
             }
         },
@@ -232,13 +250,13 @@ internal fun LockOutDialog(controller: AppController, device: DeviceInfo, onDism
             }
         }
     }
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.devices.lockOut) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(if (needsCode) texts.devices.lockOutText else texts.devices.lockOutTextNoCode)
-                if (needsCode) OutlinedTextField(value = code, onValueChange = { code = it; error = null }, singleLine = true, label = { Text(texts.devices.cardCode) })
+                if (needsCode) CardCodeField({ code = it; error = null })
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (busy) CircularProgressIndicator()
             }
@@ -250,12 +268,17 @@ internal fun LockOutDialog(controller: AppController, device: DeviceInfo, onDism
     )
 }
 
-/** Create or renew the emergency card: show the code, have it written down, type it once (ADR 0023, 0042 §2). */
+/**
+ * Create or renew the emergency card: show the code, have it written down, type it once (ADR 0023, 0042 §2). A card
+ * not yet confirmed is shown again with the same code, also after closing the dialog or a restart of the app; the
+ * code itself is not kept in the saved state of the screen, it comes from the core.
+ */
 @Composable
 internal fun EmergencyCardDialog(controller: AppController, onDismiss: () -> Unit) {
     var oldCode by remember { mutableStateOf("") }
     var code by remember { mutableStateOf<String?>(null) }
-    var typing by remember { mutableStateOf(false) }
+    var looked by remember { mutableStateOf(false) }
+    var typing by rememberSaveable { mutableStateOf(false) }
     var typed by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -270,18 +293,26 @@ internal fun EmergencyCardDialog(controller: AppController, onDismiss: () -> Uni
             if (code == null) error = texts.devices.cardFailed
         }
     }
-    LaunchedEffect(Unit) { if (!needsOld) create() }
+    LaunchedEffect(Unit) {
+        code = controller.pendingEmergencyCard()
+        looked = true
+        if (code == null) {
+            typing = false
+            if (!needsOld) create()
+        }
+    }
 
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.devices.cardTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 val c = code
                 when {
+                    !looked -> Unit
                     c == null && needsOld -> {
                         Text(texts.devices.cardOldCode)
-                        OutlinedTextField(value = oldCode, onValueChange = { oldCode = it; error = null }, singleLine = true)
+                        CardCodeField({ oldCode = it; error = null })
                     }
                     c != null && !typing -> {
                         Text(texts.devices.cardShowText)
@@ -289,10 +320,11 @@ internal fun EmergencyCardDialog(controller: AppController, onDismiss: () -> Uni
                             Text(c, style = MaterialTheme.typography.titleLarge, fontFamily = FontFamily.Monospace, textAlign = TextAlign.Center)
                         }
                         QrCode(c, size = 160.dp)
+                        CardCopyAndPrint(c)
                     }
                     c != null -> {
                         Text(texts.devices.cardTypeText)
-                        OutlinedTextField(value = typed, onValueChange = { typed = it; error = null }, singleLine = true, label = { Text(texts.devices.cardCode) })
+                        CardCodeField({ typed = it; error = null })
                     }
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -302,6 +334,7 @@ internal fun EmergencyCardDialog(controller: AppController, onDismiss: () -> Uni
         confirmButton = {
             val c = code
             when {
+                !looked -> Unit
                 c == null && needsOld -> AppButton(texts.common.next, ::create, kind = ButtonKind.Primary)
                 c != null && !typing -> AppButton(texts.devices.cardNext, { typing = true }, kind = ButtonKind.Primary)
                 c != null -> AppButton(texts.common.done, {
@@ -315,6 +348,38 @@ internal fun EmergencyCardDialog(controller: AppController, onDismiss: () -> Uni
     )
 }
 
+/**
+ * „Kopieren“ (e.g. into a password manager; marked as confidential like passwords) and „Drucken“ (one A4 page via the
+ * print dialog of the system) for the shown code of the emergency card.
+ */
+@Composable
+private fun CardCopyAndPrint(code: String) {
+    var copied by remember(code) { mutableStateOf(false) }
+    val print = rememberHtmlPrint()
+    val qr = rememberQrCodePainter(code)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppButton(
+            if (copied) texts.devices.cardCopied else texts.common.copy,
+            {
+                copySecret(code)
+                copied = true
+            },
+            kind = ButtonKind.Quiet,
+            icon = if (copied) AppIcons.Haken else AppIcons.Kopieren,
+        )
+        AppButton(
+            texts.devices.cardPrint,
+            {
+                val png = runCatching { qr.toByteArray(600, 600, ImageFormat.PNG) }.getOrNull()
+                val date = formatDateTime(Clock.System.now().toEpochMilliseconds()).substringBefore(",")
+                print(texts.devices.cardPrintTitle, emergencyCardHtml(code, png, texts.devices.cardPrintTitle, texts.devices.cardPrintText, texts.devices.cardPrintDate(date)))
+            },
+            kind = ButtonKind.Quiet,
+            icon = AppIcons.Drucken,
+        )
+    }
+}
+
 /** Scanned code of a new own device: confirm and add. */
 @Composable
 internal fun PendingPairingDialog(controller: AppController) {
@@ -323,28 +388,49 @@ internal fun PendingPairingDialog(controller: AppController) {
 }
 
 /**
- * After restoring a backup (ADR 0093): „Hast du dein altes Handy noch?“ Yes: nothing (it asks „Warst du das?“ itself).
- * Lost or broken: remove it, after the device lock. Stolen: lock it out right away, before a thief can act.
+ * After the emergency card or adding this phone (ADR 0106 §7): „Ersetzt dieses Handy eins deiner Geräte?“ The chosen
+ * device's settings come over and it leaves „Meine Geräte“, without a second question. Then the app restarts so that
+ * everything reads the settings.
  */
 @Composable
-internal fun PreviousDeviceDialog(controller: AppController) {
-    val previous by controller.previousDevice.collectAsState()
-    var lockingOut by remember { mutableStateOf<DeviceInfo?>(null) }
-    val remove = rememberLockCheck {
-        previous?.let { controller.removeDevice(it.deviceId) }
-        controller.answerPreviousDevice()
+internal fun ReplaceDeviceDialog(controller: AppController) {
+    val offer by controller.replaceOffer.collectAsState()
+    var busy by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val list = offer ?: return
+
+    fun choose(c: AppController.ReplaceCandidate?) {
+        scope.launch {
+            busy = true
+            failed = false
+            val ok = controller.replaceDevice(c?.deviceId)
+            busy = false
+            when {
+                !ok -> failed = true
+                c != null -> controller.finishReplace()
+            }
+        }
     }
-    lockingOut?.let { d -> LockOutDialog(controller, d) { lockingOut = null } }
-    val d = previous ?: return
-    AlertDialog(
+
+    AppDialog(
         onDismissRequest = {},
-        title = { Text(texts.devices.previousTitle) },
+        title = { Text(texts.devices.replaceTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(texts.devices.previousText(d.name.ifBlank { texts.devices.unnamed }))
-                AppRow(texts.devices.previousKept, onClick = controller::answerPreviousDevice)
-                AppRow(texts.devices.previousLost, onClick = { remove(texts.devices.removeReason) })
-                AppRow(texts.devices.previousStolen, onClick = { lockingOut = d; controller.answerPreviousDevice() })
+                Text(texts.devices.replaceText, style = MaterialTheme.typography.bodyMedium)
+                list.forEach { c ->
+                    AppRow(
+                        c.name.ifBlank { texts.devices.unnamed },
+                        subtitle = if (c.listed) null else texts.devices.replaceRemoved,
+                        icon = AppIcons.Person,
+                        chevron = true,
+                        onClick = { if (!busy) choose(c) },
+                    )
+                }
+                AppRow(texts.devices.replaceNone, onClick = { if (!busy) choose(null) })
+                if (busy) Text(texts.devices.replaceWorking, style = MaterialTheme.typography.bodyMedium)
+                if (failed) Text(texts.devices.replaceFailed, color = MaterialTheme.colorScheme.error)
             }
         },
         confirmButton = {},
@@ -359,7 +445,7 @@ internal fun UnknownDeviceDialog(controller: AppController) {
     val device by controller.unknownDevice.collectAsState()
     val notMine = rememberLockCheck { controller.answerUnknownDevice(false) }
     val d = device ?: return
-    AlertDialog(
+    AppDialog(
         onDismissRequest = {},
         title = { Text(texts.devices.unknownTitle(d.name.ifBlank { texts.devices.unnamed })) },
         text = { Text(texts.devices.unknownText) },
@@ -395,7 +481,7 @@ internal fun PasswordRequestDialog(controller: AppController) {
             false -> Unit
         }
     }
-    AlertDialog(
+    AppDialog(
         onDismissRequest = {},
         title = { Text(texts.devices.passwordRequestTitle(r.deviceName.ifBlank { texts.devices.unnamed })) },
         text = {
@@ -426,24 +512,36 @@ internal fun RevokedScreen(controller: AppController) {
     }
 }
 
+/** „Alle Daten löschen“ waits until every leave and revocation is at a relay (ADR 0046); no way around it. */
+@Composable
+internal fun EraseWaitingScreen() {
+    Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CircularProgressIndicator()
+        Text(texts.settings.eraseWaitingTitle, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+        Text(texts.settings.eraseWaitingText, textAlign = TextAlign.Center)
+    }
+}
+
 /**
- * „Ich hatte anynear schon“ during setup: with the other device (QR), with the emergency card or from a
- * backup file ([onBackupFile], only if there is one).
+ * „Ich habe anynear schon“ during setup: with the other device (QR) or with the emergency card.
  */
 @Composable
-internal fun ReturningDialog(controller: AppController, onBackupFile: (() -> Unit)?, onDismiss: () -> Unit) {
+internal fun ReturningDialog(controller: AppController, onDismiss: () -> Unit) {
     var page by remember { mutableStateOf(0) }
     when (page) {
         1 -> PairingDialog(controller, onDismiss)
         2 -> RecoverDialog(controller, onDismiss)
-        else -> AlertDialog(
+        else -> AppDialog(
             onDismissRequest = onDismiss,
             title = { Text(texts.devices.returningTitle) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     AppRow(texts.devices.returningOtherDevice, subtitle = texts.devices.returningOtherDeviceText, icon = AppIcons.QrCode, chevron = true, onClick = { page = 1 })
                     AppRow(texts.devices.returningCard, subtitle = texts.devices.returningCardText, icon = AppIcons.Schluessel, chevron = true, onClick = { page = 2 })
-                    onBackupFile?.let { AppRow(texts.devices.returningBackup, icon = AppIcons.Dokument, chevron = true, onClick = { onDismiss(); it() }) }
                 }
             },
             confirmButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
@@ -454,19 +552,27 @@ internal fun ReturningDialog(controller: AppController, onBackupFile: (() -> Uni
 /** New device: show the code and wait for the handover from the other device; afterwards the app restarts. */
 @Composable
 private fun PairingDialog(controller: AppController, onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf("") }
+    // Prefilled like the web app names itself; the same name is used when the field is left empty.
+    var name by remember { mutableStateOf(platformDeviceName()) }
     var link by remember { mutableStateOf<String?>(null) }
     var code by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.devices.pairingTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 val l = link
                 if (l == null) {
-                    OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text(texts.devices.newDeviceName) })
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        singleLine = true,
+                        label = { Text(texts.devices.newDeviceName, maxLines = 1) },
+                        placeholder = { Text(texts.devices.newDeviceNameHint) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 } else {
                     Text(texts.devices.pairingText)
                     QrCode(l)
@@ -505,13 +611,13 @@ private fun RecoverDialog(controller: AppController, onDismiss: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(texts.devices.recoverTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(texts.devices.recoverText)
-                OutlinedTextField(value = code, onValueChange = { code = it; error = null }, singleLine = true, label = { Text(texts.devices.cardCode) })
+                CardCodeField({ code = it; error = null })
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (busy) CircularProgressIndicator()
                 Spacer(Modifier.height(4.dp))

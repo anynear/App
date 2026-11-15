@@ -17,7 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import app.anynear.app.AboLimit
 import app.anynear.app.AboPreview
 import app.anynear.app.AboPreviews
@@ -45,7 +44,7 @@ internal fun AboLimitHint(limit: AboLimit?, modifier: Modifier = Modifier) {
         AppButton(texts.chat.aboSeePlans, { showing = true }, kind = ButtonKind.Quiet)
     }
     if (showing) {
-        Dialog(onDismissRequest = { showing = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Dialog(onDismissRequest = { showing = false }, properties = AppFullScreenDialogProperties) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 AboPreviewScreen(texts.chat.aboPlansTitle) { showing = false }
             }

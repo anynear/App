@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -84,7 +83,7 @@ private fun CrashReportDialog(
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val available = controller.supportAvailable
-    AlertDialog(
+    AppDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(texts.support.crashDialogTitle) },
         text = {

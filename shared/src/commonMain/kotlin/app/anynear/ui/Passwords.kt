@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,8 +32,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import app.anynear.app.AppController
 import app.anynear.i18n.texts
@@ -210,7 +207,7 @@ private fun HowPasswordsWork() {
         ExpandRow(texts.passwords.howItWorks, expanded = open, icon = AppIcons.Info) { open = !open }
         if (open) {
             SectionContent {
-                listOf(texts.passwords.moreUnlock, texts.passwords.morePasskeys, texts.passwords.moreOffline, texts.passwords.moreBackup, texts.passwords.moreOnlyYou)
+                listOf(texts.passwords.moreUnlock, texts.passwords.morePasskeys, texts.passwords.moreOffline, texts.passwords.moreOnlyYou)
                     .forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
             }
         }
@@ -377,7 +374,6 @@ internal fun PasswordEditScreen(controller: AppController, loginId: String?, onB
     var website by rememberSaveable { mutableStateOf(existing?.website.orEmpty()) }
     var username by rememberSaveable { mutableStateOf(existing?.username.orEmpty()) }
     var password by remember { mutableStateOf(existing?.password.orEmpty()) }
-    var shown by remember { mutableStateOf(false) }
     var missing by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         AppHeader(if (existing == null) texts.passwords.addLogin else texts.passwords.editLogin, leading = { HeaderBackButton(onBack) })
@@ -404,21 +400,10 @@ internal fun PasswordEditScreen(controller: AppController, loginId: String?, onB
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, autoCorrectEnabled = false),
                 modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(
+            PasswordField(
                 value = password,
                 onValueChange = { password = it; missing = false },
-                singleLine = true,
-                label = { Text(texts.passwords.password) },
-                visualTransformation = if (shown) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
-                trailingIcon = {
-                    Text(
-                        if (shown) texts.passwords.hide else texts.passwords.show,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable(role = Role.Button) { shown = !shown }.padding(12.dp),
-                    )
-                },
+                label = texts.passwords.password,
                 modifier = Modifier.fillMaxWidth(),
             )
             // A login with a passkey needs no password (ADR 0052).
@@ -438,7 +423,7 @@ internal fun PasswordEditScreen(controller: AppController, loginId: String?, onB
 /** Confirmation before something that cannot be undone (delete, start over). */
 @Composable
 internal fun ConfirmDialog(title: String, text: String, confirm: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(text) },

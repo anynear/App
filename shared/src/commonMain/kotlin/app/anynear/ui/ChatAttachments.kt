@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,7 +55,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import app.anynear.AppConfig
 import app.anynear.app.AppController
 import app.anynear.attachments.Attachment
@@ -257,7 +255,7 @@ internal fun PdfRow(controller: AppController, attachment: Attachment, onError: 
 /** Photos in full screen: swipe to the next, enlarge with two fingers, save at the top left. */
 @Composable
 internal fun ImageViewer(controller: AppController, images: List<Attachment>, start: Int, onClose: () -> Unit) {
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = onClose, properties = AppFullScreenDialogProperties) {
         val pager = rememberPagerState(initialPage = start) { images.size }
         val scope = rememberCoroutineScope()
         // Feedback after saving; the app's hint would be behind the full screen.
@@ -395,7 +393,7 @@ private fun ZoomableBitmap(image: ImageBitmap, contentDescription: String) {
 /** A single picture in full screen, e.g. the picture of a person or a circle. */
 @Composable
 internal fun PhotoViewer(image: ImageBitmap, contentDescription: String, onClose: () -> Unit) {
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = onClose, properties = AppFullScreenDialogProperties) {
         Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
             ZoomableBitmap(image, contentDescription)
             IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
@@ -493,7 +491,7 @@ internal fun FileActionDialog(controller: AppController, action: FileAction?, on
     val count = action?.attachments?.size ?: 0
     when (action) {
         null -> Unit
-        is FileAction.Download -> AlertDialog(
+        is FileAction.Download -> AppDialog(
             onDismissRequest = onDismiss,
             title = { Text(texts.chat.downloadTitle(count)) },
             text = { Text(texts.chat.downloadText(count)) },

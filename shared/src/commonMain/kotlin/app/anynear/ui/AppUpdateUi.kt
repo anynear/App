@@ -6,7 +6,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -77,7 +76,7 @@ internal fun AppUpdateDialog(controller: AppController) {
     // a second button for cancelling is then only confusing.
     val canPostpone = current is AppUpdateState.Available || (current is AppUpdateState.Failed && current.version != null)
 
-    AlertDialog(
+    AppDialog(
         onDismissRequest = { if (canPostpone || current is AppUpdateState.Failed) close() },
         title = { Text(texts.settings.newVersionTitle(version?.ifBlank { null })) },
         text = { UpdateProgress(current, intro = texts.settings.updateIntro) },
@@ -110,7 +109,7 @@ internal fun AppUpdateSection(controller: AppController) {
     val version = controller.appVersion?.let { texts.settings.version(it) }
     var showingLicense by rememberSaveable { mutableStateOf(false) }
     if (showingLicense) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { showingLicense = false },
             title = { Text(texts.settings.license) },
             text = { Text(texts.settings.licenseText, Modifier.verticalScroll(rememberScrollState())) },
@@ -130,11 +129,11 @@ internal fun AppUpdateSection(controller: AppController) {
             )
             AppUpdateState.Checking -> AppRow(title = texts.settings.checking, subtitle = version, icon = AppIcons.Kreis)
             is AppUpdateState.MovedToNewApp -> {
-                AppRow(title = texts.backup.movedRow, subtitle = version, icon = AppIcons.Aktualisieren)
+                AppRow(title = texts.appMove.movedRow, subtitle = version, icon = AppIcons.Aktualisieren)
                 SectionContent { MovedToNewAppContent() }
             }
             is AppUpdateState.ReinstallNeeded -> {
-                AppRow(title = texts.backup.reinstallRow, subtitle = version, icon = AppIcons.Aktualisieren)
+                AppRow(title = texts.appMove.reinstallRow, subtitle = version, icon = AppIcons.Aktualisieren)
                 SectionContent { ReinstallContent(controller) }
             }
             is AppUpdateState.Available, is AppUpdateState.NeedsPermission -> {
@@ -169,7 +168,7 @@ internal fun DarkModeRow(controller: AppController) {
     var choosing by rememberSaveable { mutableStateOf(false) }
     AppRow(title = texts.settings.lightOrDark, subtitle = mode.text(), icon = AppIcons.Bild, chevron = true, onClick = { choosing = true })
     if (choosing) {
-        AlertDialog(
+        AppDialog(
             onDismissRequest = { choosing = false },
             title = { Text(texts.settings.appearance) },
             text = {
@@ -229,9 +228,9 @@ private const val REINSTALL_KEY = "reinstall"
 /** Explains the reinstall because of the new signing key (ADR 0037). */
 @Composable
 private fun ReinstallDialog(controller: AppController, onDismiss: () -> Unit) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
-        title = { Text(texts.backup.reinstallTitle) },
+        title = { Text(texts.appMove.reinstallTitle) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) { ReinstallContent(controller) } },
         confirmButton = { AppButton(texts.common.later, onDismiss, kind = ButtonKind.Quiet) },
     )
@@ -242,24 +241,24 @@ private fun ReinstallDialog(controller: AppController, onDismiss: () -> Unit) {
 private fun ReinstallContent(controller: AppController) {
     val uriHandler = LocalUriHandler.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(texts.backup.reinstallText, style = MaterialTheme.typography.bodyMedium)
-        texts.backup.reinstallSteps.forEachIndexed { i, step ->
+        Text(texts.appMove.reinstallText, style = MaterialTheme.typography.bodyMedium)
+        texts.appMove.reinstallSteps.forEachIndexed { i, step ->
             Text("${i + 1}. $step", style = MaterialTheme.typography.bodyMedium)
         }
-        AppButton(texts.backup.loadNewVersion, { uriHandler.openUri(AppConfig.APP_PAGE_URL) }, Modifier.fillMaxWidth(), kind = ButtonKind.Main)
-        AppButton(texts.backup.deleteThisApp, controller::uninstallThisApp, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary)
+        AppButton(texts.appMove.loadNewVersion, { uriHandler.openUri(AppConfig.APP_PAGE_URL) }, Modifier.fillMaxWidth(), kind = ButtonKind.Main)
+        AppButton(texts.appMove.deleteThisApp, controller::uninstallThisApp, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary)
     }
 }
 
 /**
- * Explains the move to the new app `app.anynear` (ADR 0061, step 2.1). Because of the hard cut a backup cannot be
- * restored there; the new app starts empty.
+ * Explains the move to the new app `app.anynear` (ADR 0061, step 2.1). Because of the hard cut the new app starts
+ * empty.
  */
 @Composable
 private fun MovedToNewAppDialog(onDismiss: () -> Unit) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
-        title = { Text(texts.backup.movedTitle) },
+        title = { Text(texts.appMove.movedTitle) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) { MovedToNewAppContent() } },
         confirmButton = { AppButton(texts.common.later, onDismiss, kind = ButtonKind.Quiet) },
     )
@@ -270,11 +269,11 @@ private fun MovedToNewAppDialog(onDismiss: () -> Unit) {
 private fun MovedToNewAppContent() {
     val uriHandler = LocalUriHandler.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(texts.backup.movedText, style = MaterialTheme.typography.bodyMedium)
-        texts.backup.movedSteps.forEachIndexed { i, step ->
+        Text(texts.appMove.movedText, style = MaterialTheme.typography.bodyMedium)
+        texts.appMove.movedSteps.forEachIndexed { i, step ->
             Text("${i + 1}. $step", style = MaterialTheme.typography.bodyMedium)
         }
-        AppButton(texts.backup.loadNewApp, { uriHandler.openUri(AppConfig.APP_PAGE_URL) }, Modifier.fillMaxWidth(), kind = ButtonKind.Main)
+        AppButton(texts.appMove.loadNewApp, { uriHandler.openUri(AppConfig.APP_PAGE_URL) }, Modifier.fillMaxWidth(), kind = ButtonKind.Main)
     }
 }
 
@@ -288,9 +287,9 @@ internal fun OldAppDialog(controller: AppController) {
     val show by controller.oldAppToRemove.collectAsState()
     var dismissed by rememberSaveable { mutableStateOf(false) }
     if (!show || dismissed) return
-    AlertDialog(
+    AppDialog(
         onDismissRequest = { dismissed = true },
-        title = { Text(texts.backup.oldAppTitle) },
+        title = { Text(texts.appMove.oldAppTitle) },
         text = { OldAppContent(controller) },
         confirmButton = { AppButton(texts.common.later, { dismissed = true }, kind = ButtonKind.Quiet) },
     )
@@ -301,7 +300,7 @@ internal fun OldAppDialog(controller: AppController) {
 internal fun OldAppSection(controller: AppController) {
     val show by controller.oldAppToRemove.collectAsState()
     if (!show) return
-    AppSection(texts.backup.oldAppRow) {
+    AppSection(texts.appMove.oldAppRow) {
         SectionContent { OldAppContent(controller) }
     }
 }
@@ -309,9 +308,9 @@ internal fun OldAppSection(controller: AppController) {
 @Composable
 private fun OldAppContent(controller: AppController) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(texts.backup.oldAppText, style = MaterialTheme.typography.bodyMedium)
-        Text(texts.backup.oldAppHowTo, style = MaterialTheme.typography.bodyMedium)
-        AppButton(texts.backup.deleteOldApp, controller::uninstallOldApp, Modifier.fillMaxWidth(), kind = ButtonKind.Main)
+        Text(texts.appMove.oldAppText, style = MaterialTheme.typography.bodyMedium)
+        Text(texts.appMove.oldAppHowTo, style = MaterialTheme.typography.bodyMedium)
+        AppButton(texts.appMove.deleteOldApp, controller::uninstallOldApp, Modifier.fillMaxWidth(), kind = ButtonKind.Main)
     }
 }
 

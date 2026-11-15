@@ -41,7 +41,7 @@ class AlertNotifier(private val context: Context) {
         }
         ensureChannels()
         // An all-clear replaces the notification of the alert it cancels.
-        notification.replacesKey?.let { manager.cancel(it, NOTIFICATION_ID) }
+        notification.replacesKey?.let(::cancel)
         val loud = notification.loudness == AlertLoudness.Loud
         val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(AppBrand.notificationIcon)
@@ -57,6 +57,8 @@ class AlertNotifier(private val context: Context) {
             .setVisibility(if (loud) NotificationCompat.VISIBILITY_PUBLIC else NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(openIntent(notification.channelId))
             .setAutoCancel(true)
+            // Own group with a summary, apart from the background notification ([NotificationGroups]).
+            .setGroup(groupOf(notification.channelId))
         // Buttons of the app, e.g. „Alles gut“ for a check-in (ADR 0083); they work without opening the app.
         notification.actions.forEach { builder.addAction(0, it.label, LifeSignActionReceiver.intent(context, it.id, notification.key)) }
         if (loud) {
@@ -65,7 +67,7 @@ class AlertNotifier(private val context: Context) {
                 .addAction(0, texts.alerts.silence, stopIntent(notification.key))
         }
         try {
-            manager.notify(notification.key, NOTIFICATION_ID, builder.build())
+            NotificationGroups.notify(context, notification.key, NOTIFICATION_ID, builder.build())
         } catch (e: SecurityException) {
             // Notifications not allowed; the alert is in the app anyway, the test alarm says so.
         }
@@ -74,13 +76,18 @@ class AlertNotifier(private val context: Context) {
         if (loud && dndBlocksAlarms()) AlarmSound.play(context, notification.sound)
     }
 
-    fun cancel(key: String) = manager.cancel(key, NOTIFICATION_ID)
+    fun cancel(key: String) {
+        manager.cancel(key, NOTIFICATION_ID)
+        // The key does not tell the group; both summaries follow.
+        GROUPS.forEach { NotificationGroups.summarize(context, it, removed = NotificationGroups.Shown(key, NOTIFICATION_ID, null)) }
+    }
 
     /** All notifications of a channel (key `<channel>/<alert>`, see `notifiedKey`). */
     fun cancelChannel(channelId: String) {
         val system = context.getSystemService(android.app.NotificationManager::class.java) ?: return
         system.activeNotifications.filter { it.id == NOTIFICATION_ID && it.tag?.startsWith("$channelId/") == true }
-            .forEach { manager.cancel(it.tag, NOTIFICATION_ID) }
+            .mapNotNull { it.tag }
+            .forEach(::cancel)
     }
 
     /** What stands in the way of an alarm (the shared code checks the battery). */
@@ -190,6 +197,12 @@ class AlertNotifier(private val context: Context) {
 
         /** One notification per alert: tag = alert, ID always the same. */
         private const val NOTIFICATION_ID = 200
+
+        /** Life signs apart from other alerts, so that a missing check-in does not hide below a weather warning. */
+        private val GROUPS = listOf(NotificationGroups.ALERTS, NotificationGroups.LIFE_SIGNS)
+
+        private fun groupOf(channelId: String) =
+            if (channelId.startsWith(app.anynear.lifesigns.LifeSigns.CHANNEL_PREFIX)) NotificationGroups.LIFE_SIGNS else NotificationGroups.ALERTS
 
         const val ACTION_OPEN_ALERTS = "app.anynear.OPEN_ALERTS"
         const val EXTRA_CHANNEL = "channel"

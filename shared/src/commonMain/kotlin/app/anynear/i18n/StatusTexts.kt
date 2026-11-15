@@ -95,6 +95,7 @@ interface StatusTexts {
     fun lineRemoved(who: String, name: String): String
     fun lineResetInvites(who: String): String
     fun lineLeft(name: String): String
+    fun lineUnreachable(name: String): String
     fun lineRenamed(who: String, circle: String): String
     fun lineImageRemoved(who: String): String
     fun lineImageChanged(who: String): String
@@ -112,6 +113,9 @@ interface StatusTexts {
     // --- History ---
     val historyWaiting: String
     val historyLoading: String
+
+    /** Over the list of chats while a new device or one back from the emergency card still loads (ADR 0107 §8). */
+    val messagesLoading: String
 
     // --- Invitation and contact links ---
     val notAnInviteLink: String
@@ -199,6 +203,7 @@ internal object StatusTextsDe : StatusTexts {
     override fun lineRemoved(who: String, name: String) = "$who hat $name entfernt."
     override fun lineResetInvites(who: String) = "$who hat die alten Einladungslinks ungültig gemacht."
     override fun lineLeft(name: String) = "$name hat den Kreis verlassen."
+    override fun lineUnreachable(name: String) = "$name ist über anynear nicht mehr erreichbar."
     override fun lineRenamed(who: String, circle: String) = "$who hat den Kreis in „$circle“ umbenannt."
     override fun lineImageRemoved(who: String) = "$who hat das Kreisbild entfernt."
     override fun lineImageChanged(who: String) = "$who hat das Kreisbild geändert."
@@ -211,6 +216,7 @@ internal object StatusTextsDe : StatusTexts {
 
     override val historyWaiting = "Frühere Nachrichten kommen, sobald jemand aus dem Kreis online ist."
     override val historyLoading = "Frühere Nachrichten werden geladen …"
+    override val messagesLoading = "Deine Nachrichten werden geladen …"
 
     override val notAnInviteLink = "Das ist kein $APP-Einladungslink."
     override val inviteLinkBroken = "Der Einladungslink ist beschädigt oder unvollständig."
@@ -292,6 +298,7 @@ internal object StatusTextsEn : StatusTexts {
     override fun lineRemoved(who: String, name: String) = "$who removed $name."
     override fun lineResetInvites(who: String) = "$who turned off the old invite links."
     override fun lineLeft(name: String) = "$name left the circle."
+    override fun lineUnreachable(name: String) = "$name can no longer be reached on anynear."
     override fun lineRenamed(who: String, circle: String) = "$who renamed the circle to “$circle”."
     override fun lineImageRemoved(who: String) = "$who removed the circle picture."
     override fun lineImageChanged(who: String) = "$who changed the circle picture."
@@ -304,6 +311,7 @@ internal object StatusTextsEn : StatusTexts {
 
     override val historyWaiting = "Earlier messages will arrive as soon as someone from the circle is online."
     override val historyLoading = "Loading earlier messages …"
+    override val messagesLoading = "Loading your messages …"
 
     override val notAnInviteLink = "That's not a $APP invite link."
     override val inviteLinkBroken = "The invite link is damaged or incomplete."

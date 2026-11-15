@@ -1,6 +1,6 @@
 package app.anynear.i18n
 
-/** Passwords (ADR 0039): logins with the device lock, autofill, in the backup. */
+/** Passwords (ADR 0039): logins with the device lock, autofill, back with the emergency card. */
 interface PasswordTexts {
     val title: String
     val intro: String
@@ -54,7 +54,6 @@ interface PasswordTexts {
     val howItWorks: String
     val moreUnlock: String
     val moreOffline: String
-    val moreBackup: String
     val moreOnlyYou: String
     // Autofill (Android)
     val fillWithApp: String
@@ -115,7 +114,7 @@ internal object PasswordTextsDe : PasswordTexts {
     override val addIntro = "Mehr braucht ein Zugang nicht: Website, Nutzername oder E-Mail und Passwort."
     override val needWebsiteAndPassword = "Website und Passwort brauchen wir mindestens."
     override fun deleteQuestion(website: String) = "Zugang zu $website löschen?"
-    override val deleteText = "Er ist danach auf allen deinen Geräten weg. Sicherungen, die du vorher gemacht hast, enthalten ihn noch."
+    override val deleteText = "Er ist danach auf allen deinen Geräten weg."
     override val unlockReason = "Passwörter öffnen"
     override val unlock = "Entsperren"
     override val lockedText = "Deine Passwörter sind gesperrt. Öffne sie mit der Gerätesperre deines Handys."
@@ -128,7 +127,7 @@ internal object PasswordTextsDe : PasswordTexts {
     override val noDeviceLockText = "Passwörter öffnen sich nur mit der Sperre deines Handys. Richte dafür eine PIN, ein Muster oder einen Gerätecode ein."
     override val openDeviceLockSettings = "Gerätesperre einrichten"
     override val unreadableTitle = "Passwörter nicht mehr lesbar"
-    override val unreadableText = "Dieses Handy hat den Schlüssel zu deinen Passwörtern verloren, etwa weil die Gerätesperre ausgeschaltet war. Öffne sie einmal auf einem anderen deiner Geräte, dann kommen sie hierher zurück. Sonst hilft eine Sicherung unter Einstellungen → Sicherung."
+    override val unreadableText = "Dieses Handy hat den Schlüssel zu deinen Passwörtern verloren, etwa weil die Gerätesperre ausgeschaltet war. Öffne sie einmal auf einem anderen deiner Geräte, dann kommen sie hierher zurück. Sonst holt deine Notfallkarte sie zurück."
     override val waitingTitle = "Passwörter kommen von deinem anderen Gerät"
     override val waitingText = "Öffne die Passwörter einmal auf deinem anderen Gerät. Danach kannst du sie auch hier öffnen."
     override val startOver = "Neu anfangen"
@@ -142,8 +141,7 @@ internal object PasswordTextsDe : PasswordTexts {
     override val changeAutofill = "In den Einstellungen ändern"
     override val howItWorks = "So funktionieren Passwörter"
     override val moreUnlock = "Entsperren: nur mit der Gerätesperre deines Handys. $APP fragt den Gerätecode nie selbst ab."
-    override val moreOffline = "Offline: Deine Zugänge sind auch ohne Internet lesbar. Änderungen kommen auf deine anderen Geräte, sobald du wieder online bist."
-    override val moreBackup = "Sicherung: Deine Zugänge kommen verschlüsselt mit in deine Sicherung. Wer die Sicherungsdatei und ihr Passwort hat, kann sie lesen."
+    override val moreOffline = "Offline: Deine Zugänge sind auch ohne Internet lesbar. Änderungen kommen auf deinen anderen Geräten an, sobald du wieder online bist."
     override val moreOnlyYou = "Zugriff: Zugänge gehören nur dir. Online liegen sie doppelt verschlüsselt, öffnen können sie nur deine Geräte. In Kreise oder Ablagen kommen sie nie."
     override val fillWithApp = "Mit $APP ausfüllen"
     override val chooseLogin = "Zugang wählen"
@@ -202,7 +200,7 @@ internal object PasswordTextsEn : PasswordTexts {
     override val addIntro = "A login needs nothing more: website, username or email, and password."
     override val needWebsiteAndPassword = "We need at least the website and the password."
     override fun deleteQuestion(website: String) = "Delete the login for $website?"
-    override val deleteText = "It is then gone from all your devices. Backups you made earlier still contain it."
+    override val deleteText = "It is then gone from all your devices."
     override val unlockReason = "Open passwords"
     override val unlock = "Unlock"
     override val lockedText = "Your passwords are locked. Open them with your phone's screen lock."
@@ -215,7 +213,7 @@ internal object PasswordTextsEn : PasswordTexts {
     override val noDeviceLockText = "Passwords only open with your phone's lock. Set up a PIN, pattern or passcode for it."
     override val openDeviceLockSettings = "Set up screen lock"
     override val unreadableTitle = "Passwords can no longer be read"
-    override val unreadableText = "This phone lost the key to your passwords, for example because the screen lock was turned off. Open them once on another of your devices, and they come back here. Otherwise, a backup helps: Settings → Backup."
+    override val unreadableText = "This phone lost the key to your passwords, for example because the screen lock was turned off. Open them once on another of your devices, and they come back here. Otherwise, your emergency card brings them back."
     override val waitingTitle = "Your passwords are coming from your other device"
     override val waitingText = "Open the passwords once on your other device. After that, you can open them here too."
     override val startOver = "Start over"
@@ -230,7 +228,6 @@ internal object PasswordTextsEn : PasswordTexts {
     override val howItWorks = "How passwords work"
     override val moreUnlock = "Unlocking: only with your phone's screen lock. $APP never asks for the phone's code itself."
     override val moreOffline = "Offline: your logins can be read without internet. Changes reach your other devices as soon as you are online again."
-    override val moreBackup = "Backup: your logins are included in your backup, encrypted. Anyone with the backup file and its password can read them."
     override val moreOnlyYou = "Access: logins belong only to you. Online they are encrypted twice, and only your devices can open them. They never go into circles or files."
     override val fillWithApp = "Fill in with $APP"
     override val chooseLogin = "Choose login"

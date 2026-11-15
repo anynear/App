@@ -3,6 +3,7 @@ package app.anynear.circles
 import app.anynear.alerts.AlertAcks
 import app.anynear.alerts.AlertsSeen
 import app.anynear.app.DarkMode
+import app.anynear.chats.ReadUntil
 import app.anynear.data.KeyValueStore
 import app.anynear.images.ImageRef
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -151,6 +152,23 @@ class ProfileRepository(private val store: KeyValueStore) {
         _alertsSeen.value = seen
     }
 
+    private val _readUntil = MutableStateFlow(ReadUntil.decode(store.getString(ReadUntil.SETTING_KEY)))
+
+    /** Until when each conversation has been read, for the person on all own devices ([ReadUntil]). */
+    val readUntil: StateFlow<Map<String, Long>> = _readUntil.asStateFlow()
+
+    fun setReadUntil(marks: Map<String, Long>) {
+        if (marks == _readUntil.value) return
+        store.putString(ReadUntil.SETTING_KEY, ReadUntil.encode(marks))
+        _readUntil.value = marks
+    }
+
+    /** The conversation [key] has been read up to [sentAt]; an earlier time changes nothing. */
+    fun markReadUntil(key: String, sentAt: Long) {
+        if ((_readUntil.value[key] ?: 0L) >= sentAt) return
+        setReadUntil(_readUntil.value + (key to sentAt))
+    }
+
     private val _darkMode = MutableStateFlow(
         store.getString(DARK_MODE_KEY)?.let { name -> DarkMode.entries.firstOrNull { it.name == name } } ?: DarkMode.SYSTEM,
     )
@@ -178,11 +196,12 @@ class ProfileRepository(private val store: KeyValueStore) {
         USAGE_STATS_KEY to _usageStats.value.toString(),
         AlertAcks.SETTING_KEY to AlertAcks.encode(_alertAcks.value),
         AlertsSeen.SETTING_KEY to AlertsSeen.encode(_alertsSeen.value),
+        ReadUntil.SETTING_KEY to ReadUntil.encode(_readUntil.value),
     )
 
     /** If a setting of the person changes, the new state is here. */
     val personalSettingsChanged: kotlinx.coroutines.flow.Flow<Map<String, String>> =
-        kotlinx.coroutines.flow.combine(_darkMode, _usageStats, _alertAcks, _alertsSeen) { _, _, _, _ -> personalSettings() }
+        kotlinx.coroutines.flow.combine(_darkMode, _usageStats, _alertAcks, _alertsSeen, _readUntil) { _, _, _, _, _ -> personalSettings() }
 
     /**
      * Takes over settings of the person from another own device; unknown ones are left alone. Acknowledged
@@ -199,17 +218,16 @@ class ProfileRepository(private val store: KeyValueStore) {
             setAlertsSeen(merged)
             newer = merged != remote
         }
+        // Read conversations: per conversation the later time wins, like the seen channels.
+        values[ReadUntil.SETTING_KEY]?.let(ReadUntil::decode)?.let { remote ->
+            val merged = ReadUntil.merge(_readUntil.value, remote)
+            setReadUntil(merged)
+            newer = newer || merged != remote
+        }
         val remote = values[AlertAcks.SETTING_KEY]?.let(AlertAcks::decode) ?: return newer
         val merged = AlertAcks.prune(AlertAcks.merge(_alertAcks.value, remote), now)
         setAlertAcks(merged)
         return newer || merged != AlertAcks.prune(remote, now)
-    }
-
-    /** Does this state come from a restored backup (ADR 0027)? */
-    val restoredFromBackup: Boolean get() = store.getString(RESTORED_KEY) != null
-
-    fun markRestoredFromBackup(atMillis: Long) {
-        store.putString(RESTORED_KEY, atMillis.toString())
     }
 
     companion object {
@@ -217,7 +235,6 @@ class ProfileRepository(private val store: KeyValueStore) {
         const val MAX_OWN_NAME = 40
 
         private const val NAME_KEY = "own_name"
-        private const val RESTORED_KEY = "restored_from_backup_at"
         private const val NODE_KEY = "own_node_num"
         private const val RELAY_FOR_OTHERS_KEY = "radio_relay_for_others"
         private const val CHARGE_REMINDER_KEY = "radio_charge_reminder"

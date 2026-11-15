@@ -26,6 +26,7 @@ import app.anynear.app.UsbRescueStep
 import app.anynear.app.UsbPurpose
 import app.anynear.contacts.Contact
 import app.anynear.mesh.ChannelSetupResult
+import app.anynear.mesh.RadioWifiStatus
 import app.anynear.mesh.DeviceSetupCheck
 import app.anynear.mesh.DeviceSetupResult
 import app.anynear.mesh.IncomingText
@@ -92,6 +93,11 @@ class UsbRescueFlowTest {
             return true
         }
         override suspend fun enableWifi(radio: UsbRadio, ssid: String, password: String): Boolean = true.also { wifi += ssid to password }
+        /** Answers to „im WLAN?“ one after the other (the last one repeats); empty: the radio does not tell. */
+        var wifiAnswers: List<RadioWifiStatus?> = emptyList()
+        var wifiAsked = 0
+        override suspend fun wifiStatus(radio: UsbRadio): RadioWifiStatus? =
+            wifiAnswers.getOrNull(minOf(wifiAsked++, wifiAnswers.lastIndex))
         var touched = 0
         var touchWorks = true
         override suspend fun touchBootloader(radio: UsbRadio): Boolean = touchWorks.also { touched++ }
@@ -301,7 +307,7 @@ class UsbRescueFlowTest {
         flow.reset(purpose = null)
         flow.search()
         val choose = assertIs<UsbRescueState.Choose>(flow.state.value)
-        assertEquals(true, choose.canSetUp)
+        assertEquals(false, choose.alreadySetUp)
         flow.choose(UsbPurpose.SETUP, choose.radio)
         // First the choice of radio, only then into the bootloader.
         val pick = assertIs<UsbRescueState.PickRadio>(flow.state.value)
@@ -403,18 +409,33 @@ class UsbRescueFlowTest {
         flow.reset(purpose = null)
         flow.search()
         val choose = assertIs<UsbRescueState.Choose>(flow.state.value)
-        // Meshtastic runs, but the anynear profile is missing: set up yes, use no.
-        assertEquals(true, choose.canSetUp)
+        // Meshtastic runs, but the anynear profile is missing: set up as the main way, use no.
+        assertEquals(false, choose.alreadySetUp)
         assertEquals(false, choose.canUse)
         flow.choose(UsbPurpose.RESCUE, choose.radio)
         assertIs<UsbRescueState.Found>(flow.state.value)
 
         val ready = UsbRescueState.Choose(radio.copy(setUp = true))
-        assertEquals(false, ready.canSetUp)
+        assertEquals(true, ready.alreadySetUp)
         assertEquals(true, ready.canUse)
         val empty = UsbRescueState.Choose(UsbRadio("usb0", null, null, answered = false))
-        assertEquals(true, empty.canSetUp)
+        assertEquals(false, empty.alreadySetUp)
         assertEquals(false, empty.canUse)
+    }
+
+    @Test
+    fun radioSetUpBeforeAFreshInstallCanBeSetUpAgain() = runTest {
+        // The profile stays on the radio when the app is installed anew (FUT 14.11.2026): setting up is no dead end,
+        // it only asks again how the radio is used and installs nothing.
+        val usb = FakeUsb(radio.copy(setUp = true))
+        val flow = UsbRescueFlow(usb, software(), lastHwModel = { null })
+        flow.reset(purpose = null)
+        flow.search()
+        val choose = assertIs<UsbRescueState.Choose>(flow.state.value)
+        assertEquals(true, choose.alreadySetUp)
+        flow.choose(UsbPurpose.SETUP, choose.radio)
+        assertIs<UsbRescueState.ChooseMode>(flow.state.value)
+        assertNull(usb.flashed)
     }
 
     @Test
@@ -440,7 +461,7 @@ class UsbRescueFlowTest {
         assertIs<UsbRescueState.WifiCredentials>(flow.state.value)
         flow.enableWifi(mode.radio, " Zuhause ", "geheim123")
         assertEquals(listOf("Zuhause" to "geheim123"), usb.wifi)
-        assertEquals(UsbRescueState.Paired("Meshtastic_48ac", UsbConnection.WIFI), flow.state.value)
+        assertEquals(UsbRescueState.Paired("Meshtastic_48ac", UsbConnection.WIFI, ssid = "Zuhause"), flow.state.value)
         assertEquals(listOf(UsbConnection.WIFI), connected)
     }
 
@@ -491,7 +512,87 @@ class UsbRescueFlowTest {
         flow.chooseStationary(assertIs<UsbRescueState.Choose>(flow.state.value).radio)
         flow.enableWifi(onBluetooth, "Zuhause", "geheim123")
         assertEquals(listOf("Zuhause" to "geheim123"), usb.wifi)
-        assertEquals(UsbRescueState.Paired("Meshtastic_48ac", UsbConnection.WIFI), flow.state.value)
+        assertEquals(UsbRescueState.Paired("Meshtastic_48ac", UsbConnection.WIFI, ssid = "Zuhause"), flow.state.value)
+    }
+
+    // --- Joining the Wi-Fi with an answer over the cable (FUT 14.11.2026, B6) ---
+
+    private val wifiRadio = UsbRadio("usb0", "Meshtastic 48ac", RadioFirmware("2.7.26.54e0d8d", "HELTEC_V3", hasWifi = true, hasBluetooth = true), nodeNum = 0x1a2b48ac, setUp = true)
+
+    @Test
+    fun inTheWifiConnectsAtTheReportedAddressAndConfirms() = runTest {
+        // Restarting (no answer), still joining, then in: the app connects at the address and says which Wi-Fi.
+        val usb = FakeUsb(wifiRadio).apply { wifiAnswers = listOf(null, RadioWifiStatus(false), RadioWifiStatus(true, "192.168.1.50")) }
+        val asked = mutableListOf<UsbRadio>()
+        val flow = UsbRescueFlow(usb, software = null, lastHwModel = { null }, connect = { r, _ -> asked += r; "Meshtastic_48ac" }, wifiPollWait = {})
+        flow.enableWifi(wifiRadio, " Zuhause ", "geheim123")
+        assertEquals(3, usb.wifiAsked)
+        assertEquals("192.168.1.50", asked.single().wifiAddress)
+        assertEquals(true, asked.single().wifiOn)
+        assertEquals(UsbRescueState.Paired("Meshtastic_48ac", UsbConnection.WIFI, ssid = "Zuhause"), flow.state.value)
+    }
+
+    @Test
+    fun wrongPasswordEndsWithAMessageAndKeepsTheName() = runTest {
+        // The radio answers but never gets in: no endless waiting, back to the form with the name filled in.
+        val usb = FakeUsb(wifiRadio).apply { wifiAnswers = listOf(RadioWifiStatus(false)) }
+        var connects = 0
+        val flow = UsbRescueFlow(usb, software = null, lastHwModel = { null }, connect = { _, _ -> connects++; "x" }, wifiPollWait = {})
+        flow.enableWifi(wifiRadio, "Zuhause", "falsch")
+        assertEquals(UsbRescueState.WifiCredentials(wifiRadio, ssid = "Zuhause", notJoined = true), flow.state.value)
+        assertEquals(12, usb.wifiAsked, "fragt eine begrenzte Zeit lang")
+        assertEquals(0, connects, "sucht nicht im WLAN nach einem Gerät, das nicht drin ist")
+    }
+
+    @Test
+    fun radioThatDoesNotTellIsSearchedInTheWifiAsBefore() = runTest {
+        val usb = FakeUsb(wifiRadio)
+        val asked = mutableListOf<UsbRadio>()
+        val flow = UsbRescueFlow(usb, software = null, lastHwModel = { null }, connect = { r, _ -> asked += r; null }, wifiPollWait = {})
+        flow.enableWifi(wifiRadio, "Zuhause", "geheim123")
+        assertEquals(null, asked.single().wifiAddress)
+        assertIs<UsbRescueState.NotSeen>(flow.state.value)
+    }
+
+    @Test
+    fun showsJoiningWhileItWaits() = runTest {
+        val usb = FakeUsb(wifiRadio).apply { wifiAnswers = listOf(RadioWifiStatus(false)) }
+        val flow = UsbRescueFlow(usb, software = null, lastHwModel = { null }, wifiPollWait = { kotlinx.coroutines.delay(3_000) })
+        val job = launch { flow.enableWifi(wifiRadio, "Zuhause", "geheim123") }
+        testScheduler.advanceTimeBy(4_000)
+        testScheduler.runCurrent()
+        assertEquals(UsbRescueState.WifiJoining(wifiRadio, "Zuhause"), flow.state.value)
+        job.join()
+    }
+
+    @Test
+    fun writingFailsKeepsTheName() = runTest {
+        val usb = object : UsbRescue by FakeUsb(wifiRadio) {
+            override suspend fun enableWifi(radio: UsbRadio, ssid: String, password: String) = false
+        }
+        val flow = UsbRescueFlow(usb, software = null, lastHwModel = { null }, wifiPollWait = {})
+        flow.enableWifi(wifiRadio, "Zuhause", "geheim123")
+        assertEquals(UsbRescueState.WifiCredentials(wifiRadio, failed = true, ssid = "Zuhause"), flow.state.value)
+    }
+
+    @Test
+    fun aStepInTheBackgroundGoesOnWithoutTheDialog() = runTest {
+        // The dialog's own scope ended when it was closed by mistake; the app's scope keeps the step going.
+        val usb = FakeUsb(wifiRadio).apply { wifiAnswers = listOf(RadioWifiStatus(true, "10.0.0.7")) }
+        val flow = UsbRescueFlow(usb, software = null, lastHwModel = { null }, connect = { _, _ -> "Meshtastic_48ac" }, background = backgroundScope, wifiPollWait = {})
+        flow.inBackground { enableWifi(wifiRadio, "Zuhause", "geheim123") }
+        assertEquals(true, flow.runningInBackground)
+        // Work in backgroundScope does not count for advanceUntilIdle; the step has no pauses here, so run it now.
+        testScheduler.runCurrent()
+        assertEquals(UsbRescueState.Paired("Meshtastic_48ac", UsbConnection.WIFI, ssid = "Zuhause"), flow.state.value)
+        assertEquals(false, flow.runningInBackground)
+    }
+
+    @Test
+    fun meshtasticAddressBytesReadFirstPartLowest() {
+        // 192.168.1.50 as the ESP32 stores it: 0x3201A8C0.
+        assertEquals("192.168.1.50", RadioWifiStatus.ipOf(0x3201A8C0))
+        assertEquals(null, RadioWifiStatus.ipOf(0))
     }
 
     // --- Choice of radio after ADR 0095: recommended radios from radios.json, recognised one preselected ---

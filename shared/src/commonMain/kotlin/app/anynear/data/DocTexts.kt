@@ -5,7 +5,7 @@ import app.anynear.attachments.AttachmentFiles
 
 /**
  * Text that was read on this device from the files of the storages (ADR 0067 §3), per file ID, encrypted with the
- * device key. Not on the relays and not in the backup: every device can read it anew.
+ * device key. Not on the relays: every device can read it anew.
  * A file with empty text has been read, there was just nothing in it. Every text carries the version of the reader
  * that read it (ADR 0078 §3); older texts without it count as version 1.
  */
@@ -48,7 +48,7 @@ class DocTexts(private val files: AttachmentFiles) {
     }
 
     companion object {
-        /** Not in `APP_BINARY_DIRS`: not in the backup, but deleted on reset. */
+        /** Not in `APP_BINARY_DIRS`, but deleted on reset. */
         const val DIR_NAME = "file-texts"
 
         /** Before the text: `\u0000v<Version>\n`. A null character is in no text that was read. */

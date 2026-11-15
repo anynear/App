@@ -19,7 +19,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -326,7 +325,7 @@ internal fun matchesSearch(query: String, vararg text: String?): Boolean {
 /** Dialog with a selection of actions as rows, e.g. behind the plus in the header. */
 @Composable
 internal fun ActionsDialog(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Column(content = content) },

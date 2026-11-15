@@ -28,7 +28,9 @@ actual fun scanNetworkDevices(): Flow<FoundDevice> = callbackFlow {
 
     val discovery = object : NsdManager.DiscoveryListener {
         override fun onServiceFound(service: NsdServiceInfo) {
-            resolver.execute { resolveBlocking(nsd, service)?.let(::emit) }
+            // A failure here runs on the executor's own thread: uncaught, it ends the whole app. Since the
+            // suggestion search stops after the first radio, a second one still resolving is the normal case.
+            runCatching { resolver.execute { runCatching { resolveBlocking(nsd, service)?.let(::emit) } } }
         }
 
         override fun onServiceLost(service: NsdServiceInfo) = Unit
@@ -73,7 +75,13 @@ private fun resolveBlocking(nsd: NsdManager, service: NsdServiceInfo): NsdServic
         while (!done) {
             val remaining = deadline - System.currentTimeMillis()
             if (remaining <= 0) break
-            lock.wait(remaining)
+            try {
+                lock.wait(remaining)
+            } catch (e: InterruptedException) {
+                // Search stopped (shutdownNow): give up on this one instead of ending the app.
+                Thread.currentThread().interrupt()
+                return null
+            }
         }
     }
     return result

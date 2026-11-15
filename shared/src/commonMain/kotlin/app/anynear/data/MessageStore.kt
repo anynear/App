@@ -163,13 +163,16 @@ class MessageStore(
     fun arrivedVia(remoteId: String, fromPeer: String, via: Transport): Boolean =
         _messages.value.any { !it.outgoing && it.remoteId == remoteId && it.fromPeer == fromPeer && via in it.via }
 
-    /** Received over the internet. @return `false` if the message is already shown. */
-    fun addOnline(id: String, message: ChatMessage): Boolean {
+    /**
+     * Received over the internet. [read]: it comes back after the emergency card and was already read (ADR 0107 §8).
+     * @return `false` if the message is already shown.
+     */
+    fun addOnline(id: String, message: ChatMessage, read: Boolean = false): Boolean {
         if (id in seenOnlineIds) return false
         seenOnlineIds = (seenOnlineIds + id).keepLast(MAX_SEEN)
         // The same message already there over radio, or stored once more by the sender after a restart.
         if (mergeTwin(message, Transport.INTERNET)) return false
-        val added = add(if (message.outgoing) message else message.copy(unread = true), Transport.INTERNET)
+        val added = add(if (message.outgoing) message else message.copy(unread = !read), Transport.INTERNET)
         if (added && message.outgoing) replayEarly(message.localId)
         return added
     }
@@ -190,8 +193,11 @@ class MessageStore(
 
     /** [current] already came on another path; [other] is the same message via [via]. */
     private fun mergeVia(current: ChatMessage, other: ChatMessage, via: Transport): ChatMessage {
+        // The first radio copy tells whether it was heard directly or came from the radio inbox (relayed by another
+        // device); without this, an inbox copy after the internet one looked as if this device had heard it over radio.
+        val relayed = if (via == Transport.RADIO && Transport.RADIO !in current.via) other.relayed else current.relayed
         // Deleted stays deleted, even if the message later still arrives on some path (ADR 0068).
-        if (via != Transport.INTERNET || current.deleted) return current.copy(via = current.via + via)
+        if (via != Transport.INTERNET || current.deleted) return current.copy(via = current.via + via, relayed = relayed)
         // Over the internet, send time, message ID and attachments come along; the text
         // is then without the announcement of the attachments from the radio text.
         return current.copy(
@@ -250,31 +256,6 @@ class MessageStore(
             added = fresh.size
             if (fresh.isEmpty()) list else (list + fresh.map { it.copy(unread = false, fromHistory = true, arrivedAtMillis = now()) }).sortedBy { it.timestampMillis }
         }
-        return added
-    }
-
-    /**
-     * History from another own device (ADR 0042): own and foreign messages, read, sorted in by time.
-     * What is already there (same local ID or same sender and same message ID) stays.
-     * Attachments are reloaded where it is known where they are. @return number of newly taken-over messages.
-     */
-    fun addFromOwnDevice(items: List<ChatMessage>): Int {
-        var added = 0
-        _messages.update { list ->
-            val ids = list.map { it.localId }.toMutableSet()
-            val known = list.mapNotNull { m -> m.remoteId?.let { id -> m.fromPeer to id } }.toMutableSet<Pair<String?, String?>>()
-            val fresh = items.filter { m -> ids.add(m.localId) && (m.remoteId == null || known.add(m.fromPeer to m.remoteId)) }
-            added = fresh.size
-            if (fresh.isEmpty()) list else (list + fresh.map { m ->
-                m.copy(
-                    unread = false,
-                    // The other device has already sent own messages: never send them again here.
-                    via = if (m.outgoing) m.via + Transport.INTERNET else m.via,
-                    attachments = m.attachments.map { a -> if (m.space != null) a.copy(state = AttachmentState.DOWNLOADING) else a },
-                )
-            }).sortedBy { it.timestampMillis }
-        }
-        items.filter { it.outgoing }.forEach { replayEarly(it.localId) }
         return added
     }
 
@@ -513,6 +494,52 @@ class MessageStore(
             )
         }
     }
+
+    /**
+     * Own messages kept as someone else's: the circle history named a removed own device (e.g. the old phone after the
+     * emergency card) not as the person. They become own as if this device had got them as copies (ADR 0042), read, under
+     * their message ID; one that is already there as own stays and the wrong one goes. @return number of messages fixed.
+     */
+    fun claimOwn(devices: Set<String>, recipientsOf: (Conversation) -> Set<String>): Int {
+        if (devices.isEmpty()) return 0
+        var fixed = 0
+        _messages.update { list ->
+            val taken = list.filter { it.outgoing }.map { it.localId }.toMutableSet()
+            var changed = false
+            fixed = 0
+            val next = list.mapNotNull { m ->
+                if (m.outgoing || m.system != null || m.fromDevice !in devices) return@mapNotNull m
+                changed = true
+                fixed++
+                val id = m.remoteId ?: m.localId
+                if (!taken.add(id)) return@mapNotNull null
+                m.copy(
+                    localId = id, outgoing = true, status = MessageStatus.ONLINE, fromPeer = null, unread = false,
+                    via = setOf(Transport.INTERNET), recipients = recipientsOf(m.conversation),
+                )
+            }
+            if (changed) next else list
+        }
+        return fixed
+    }
+
+    /**
+     * Read up to [sentAt] on an own device (ADR 0107 §8, [app.anynear.chats.ReadUntil]): silently mark as read, without
+     * read receipt. @return `true` if something has changed.
+     */
+    fun markReadUntil(conversation: Conversation, sentAt: Long): Boolean {
+        var changed = false
+        _messages.update { list ->
+            list.map {
+                if (it.unread && it.conversation == conversation && it.timestampMillis <= sentAt) it.copy(unread = false).also { changed = true } else it
+            }
+        }
+        return changed
+    }
+
+    /** Send time of the newest message in [conversation], `null` if there is none. */
+    fun newestSentAt(conversation: Conversation): Long? =
+        _messages.value.filter { it.conversation == conversation && it.system == null }.maxOfOrNull { it.timestampMillis }
 
     /** Read on another own device (ADR 0042): silently mark as read, without read receipt. */
     fun markReadElsewhere(conversation: Conversation, remoteIds: Collection<String>): Boolean {

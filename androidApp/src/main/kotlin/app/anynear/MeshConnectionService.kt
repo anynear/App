@@ -29,6 +29,8 @@ class MeshConnectionService : Service() {
 
     override fun onDestroy() {
         if (running === this) running = null
+        // Android removes the notification with the service; then the summary goes too.
+        NotificationGroups.summarize(this, NotificationGroups.BACKGROUND, removed = NotificationGroups.Shown(null, NOTIFICATION_ID, null))
         log("Dienst beendet")
         super.onDestroy()
     }
@@ -60,7 +62,9 @@ class MeshConnectionService : Service() {
             else -> 0
         }
         try {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), type)
+            val notification = buildNotification()
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+            NotificationGroups.summarize(this, NotificationGroups.BACKGROUND, posted = NotificationGroups.Shown(null, NOTIFICATION_ID, notification))
         } catch (e: SecurityException) {
             // Bluetooth permission missing (connectedDevice): then at least receive messages.
             log("Dienst ohne Funkgerät: ${e.message.orEmpty()}")
@@ -84,8 +88,9 @@ class MeshConnectionService : Service() {
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
-            // Own group, so that Android does not bundle it with messages and put it on top of them.
-            .setGroup(CHANNEL_ID)
+            // Own group with a summary: never bundled with messages, alerts or life signs, where it would stand on
+            // top and hide them ([NotificationGroups]).
+            .setGroup(NotificationGroups.BACKGROUND)
             .build()
     }
 

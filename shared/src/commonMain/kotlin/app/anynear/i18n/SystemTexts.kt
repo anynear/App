@@ -43,8 +43,6 @@ interface SystemTexts {
     /** Block screen: title, one sentence why. */
     val updateBlockTitle: String
     val updateBlockText: String
-    /** On the block screen, so nobody is stuck without a way to update (ADR 0027). */
-    val saveBackup: String
 
     // Sharing
     /** Title of the chooser when sharing: „Einladen über …“ */
@@ -87,7 +85,6 @@ internal object SystemTextsDe : SystemTexts {
     override fun updateSoon(date: String) = "Ab $date geht $APP nur noch mit der neuen Version."
     override val updateBlockTitle = "Bitte aktualisiere $APP"
     override val updateBlockText = "Damit deine Nachrichten weiter ankommen, brauchst du die neue Version."
-    override val saveBackup = "Sicherung erstellen"
 
     override val shareVia = "Einladen über …"
 
@@ -124,7 +121,6 @@ internal object SystemTextsEn : SystemTexts {
     override fun updateSoon(date: String) = "From $date on, $APP only works with the new version."
     override val updateBlockTitle = "Please update $APP"
     override val updateBlockText = "You need the new version so your messages keep arriving."
-    override val saveBackup = "Create backup"
 
     override val shareVia = "Invite via …"
 
