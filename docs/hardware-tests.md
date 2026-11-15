@@ -328,6 +328,29 @@ above (MQTT stays off there).
 | M5 | `tls_enabled` with a wrong certificate on the broker | record whether the firmware rejects the connection | pending |
 | M6 | Wi-Fi and Bluetooth at the same time on Heltec V3 | record whether both work | pending |
 
+### Gateway on Wi-Fi (ADR 0054 §5b, H5 of the bridge plan, 15.11.2026) – none of it tested on hardware
+
+Every radio on Wi-Fi is a gateway; the app writes the values from the `gateway` block of the signed radio list
+(`mqtt.anynear.net`, port 1883, root `msh/EU_868`) silently on every connection: uplink on channel 0 and `anynear`
+(downlink off), `ok_to_mqtt` on and `ignore_mqtt` off after region and preset, the MQTT module last. Emulator with
+meshtasticd (`--sim`, Docker) on 15.11.2026: all four writes confirmed, read back with the Meshtastic CLI, the
+firmware connected with these values (G1, G2 in simulation only). With the simulated firmware, admin writes after a
+restart did not reach it (also the profile's own name write), so there was one unconfirmed extra write.
+
+Before the test: Relay ≥ v0.25.0 with `MQTT_GATEWAY_LOGIN` live, Network release with the `gateway` block, an app build
+with ANMP-Dev PR 138 and this change. Radio G: ESP32 with Wi-Fi (e.g. Heltec V3), set up for anynear. Radio S: a
+second radio with the radio profile, phone S without internet (flight mode, Bluetooth on), within radio range of G.
+
+| Nr | Test | Expected | Result |
+|---|---|---|---|
+| G1 | Switch G to “Stationary on Wi-Fi” (cable or Bluetooth), app connects over Wi-Fi | log `Brücke: Kanal 0`, `Kanal n`, `MQTT an` with `Success`; no question, no new text | pending |
+| G2 | Read G with the Meshtastic app or CLI | MQTT on, `mqtt.anynear.net`, root `msh/EU_868`, encryption on, JSON and map reports off; channel 0 and `anynear` uplink on, downlink off; `ignore_mqtt` off | pending |
+| G3 | Relay logs / metrics after a minute | one MQTT connection with client ID `!<node of G>` | pending |
+| G4 = H5 | Phone S writes into a circle (S asks with `ask` after the waiting time) | the `ask` is in `radio heard` with the node of G, the packet of S is in the `radio inbox` | pending |
+| G5 | Change the region of G with the Meshtastic app, reconnect the anynear app | `ignore_mqtt` is off again (profile), bridge values unchanged | pending |
+| G6 | Switch G back to “On the move” (Bluetooth) | MQTT off, uplink off on channel 0 and `anynear`; no MQTT connection at the relays | pending |
+| G7 | Radio with a foreign MQTT server, on Bluetooth | the app leaves it as it is | pending |
+
 ## Sharing from other apps and battery in the background (25.10.2026)
 
 | Nr | Test | Expected | Result |
@@ -372,6 +395,28 @@ with real radios (Android emulator, radio via Wi-Fi); F2, F5 and F7 are pending.
 | F6 | Target switched off | after 60 s “did not answer”; waiting time sufficient with three repetitions by the firmware? | passed (02.11.2026): after 60 s “did not answer”; the own radio already reported after 11.5 s via `ROUTING_APP` that it gives up (correctly does not count as an answer). 60 s are enough; idea: abort earlier on this message |
 | F7 | One byte versus an empty packet | record whether the firmware also sends and confirms an empty packet | pending |
 | F8 | anynear app open at the target | no entry in the chat, no passing on | passed (02.11.2026): nothing in the chat at the target, no notification |
+
+### Radio area (ADR 0054 §1b, 15.11.2026) – none of it tested on hardware
+
+The radio uses region, preset and frequency of the area of the signed radio list at the phone's approximate location
+(2 km hysteresis at borders), or of an area chosen under Radio → Advanced → Radio area. A radio of the app on the
+settings of another area (or the default) switches without a question; the app says so once. Emulator with
+meshtasticd (`--sim`, Docker) on 15.11.2026: setup in Frankfurt wrote the area of the live list (EU_868, ShortSlow,
+default slot); a fixed 869.525 MHz set with the CLI was switched back silently, read back with the CLI. The live list
+had only Hessen, so a change of preset or region was tested in unit tests only.
+
+Before the test: Network release with `lora` and `frequency` per area (Hessen, Europe, North America), an app build with
+ANMP-Dev and App-Dev PRs `feat/radio-areas`. Radio A set up for anynear; phone with location allowed.
+
+| Nr | Test | Expected | Result |
+|---|---|---|---|
+| R1 | Phone in Hessen (e.g. Frankfurt), radio set up before this change | no question, no restart; row shows “Automatic: Hessen · EU_868, ShortSlow” | pending |
+| R2 | Choose “Europa” by hand | radio restarts once on LongFast, message “now uses the settings of the radios in Europa”; circle messages to a radio still on ShortSlow do not arrive over radio (expected) | pending |
+| R3 | Back to “Automatic by location” in Hessen | ShortSlow again, one restart | pending |
+| R4 | Location 1 km outside Hessen (emulated or real), then 5 km | no change at 1 km, Europa at 5 km | pending |
+| R5 | Location not allowed | row says “Automatic, area not known yet”, radio keeps its settings; the dialog offers “Allow location” | pending |
+| R6 | Radio on Wi-Fi (gateway) in Europa | gateway values stay (root `msh/EU_868`); after “Nordamerika” by hand: region US, gateway off | pending |
+| R7 | Radio with a preset changed by hand (e.g. MediumFast) | the question “Set up radio” as before, no silent change | pending |
 
 ### Findings from the first hardware test (02.11.2026)
 
@@ -571,6 +616,24 @@ only (`UsbRescueFlowTest`).
 | A5 | Board not in `radios.json` (e.g. RAK4631), plug in | nothing preselected, “Install Meshtastic” grayed until a radio is chosen; “Other Meshtastic-compatible radio” shows the full list | pending |
 | A6 | Rescue “Stuck in the bootloader” without a known last model | same choice, only radios that go onto a drive | pending |
 | A7 | iPhone: “Radios” page and first setup | note “Set up with a USB cable on a computer”, “Open web app” opens the webapp setup page | pending |
+
+## Stationary on Wi-Fi in the web app (ADR 0095 §5, 15.11.2026) – none of it tested on hardware
+
+After installing Meshtastic over the ROM loader, `web.anynear.app/radio` opens the same cable at 115200 baud, waits for
+Meshtastic and, for a radio with Wi-Fi, asks “How will you use the radio?”. “Stationary on Wi-Fi” writes radio profile,
+name, Wi-Fi and the gateway values from the radio list in passes (core `RadioWifiSetup`, the same values as the app),
+then asks the radio whether it got into the Wi-Fi. Tested against `meshtasticd --sim` over TCP only (`MeshtasticdTest`
+in ANMP, and the JS facade from Node): profile, Wi-Fi, gateway, third pass without deviation.
+
+| Nr. | Step | Expected | Result |
+|---|---|---|---|
+| WW1 | Chrome on macOS, N35 (CP2102) with factory software, install, “Stationary on Wi-Fi”, right password | “Radio is restarting …”, then the question; after “Connect” “The radio is on your Wi-Fi”; the iPhone app finds it under “Connect a radio” on the same Wi-Fi | pending |
+| WW2 | WW1 with a wrong password | “Your radio can't get onto the Wi-Fi …” and the form again; with the right password it works without installing again | pending |
+| WW3 | WW1, then Meshtastic CLI or the app: MQTT and channels | MQTT on with address and login of the radio list, uplink on channel 0 (and `anynear` once the app added it), downlink off, `ignore_mqtt` off, region EU_868, Hessenmesh preset | pending |
+| WW4 | ESP32-S3 with its own USB (no USB-serial chip), install, “Stationary on Wi-Fi” | the port comes back after each restart, or a clear message; note what Chrome does | pending |
+| WW5 | WW1 on Windows with Edge (CH340 board) | as WW1 | pending |
+| WW6 | “On the move” instead | nothing written; the phone pairs over Bluetooth as before | pending |
+| WW7 | T1000-E (no Wi-Fi) | no question, the done page as before | pending |
 
 ## New versions and required update (ADR 0096, 13.11.2026) – none of it tested
 

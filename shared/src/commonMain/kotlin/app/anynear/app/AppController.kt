@@ -1,5 +1,7 @@
 package app.anynear.app
 
+import app.anynear.anmp.core.radio.DeviceName
+import app.anynear.anmp.core.radio.ProfileDeviation
 import app.anynear.data.FileSort
 import app.anynear.anmp.Anmp
 import app.anynear.anmp.AnmpArrived
@@ -31,6 +33,7 @@ import app.anynear.anmp.core.UpdateDemand
 import app.anynear.ui.daysBetween
 import app.anynear.anmp.core.RadioHost
 import app.anynear.mesh.MeshtasticRadioPort
+import app.anynear.anmp.core.radio.RadioTarget
 import app.anynear.mesh.toMessageStatus
 import app.anynear.mesh.ReplyRef
 import app.anynear.anmp.core.RecoverResult
@@ -106,7 +109,6 @@ import app.anynear.chats.LinkPreviews
 import app.anynear.chats.isPublicHost
 import app.anynear.mesh.ConnectionDrops
 import app.anynear.mesh.Conversation
-import app.anynear.mesh.DeviceName
 import app.anynear.mesh.DeviceSetupCheck
 import app.anynear.mesh.DeviceSetupResult
 import app.anynear.mesh.FoundDevice
@@ -122,7 +124,6 @@ import app.anynear.mesh.PairedDevice
 import app.anynear.mesh.PeerId
 import app.anynear.mesh.radioCheckChannel
 import app.anynear.mesh.replyChannel
-import app.anynear.mesh.ProfileDeviation
 import app.anynear.mesh.PublicChannel
 import app.anynear.mesh.RadioChannel
 import app.anynear.mesh.RadioSend
@@ -711,6 +712,7 @@ class AppController(
             core.radioForeground()
             // Official warnings: district from the approximate location, only in the foreground.
             alerts?.refreshRegion()
+            refreshRadioArea()
             scope.launch { pullVault() }
             scope.launch { runCatching { syncProfile() } }
         }
@@ -761,6 +763,11 @@ class AppController(
         val demand = core.radioList.value?.app?.demand(hooks.appBuild ?: 0, now) ?: UpdateDemand.None
         val laterToday = laterAt != null && daysBetween(laterAt, now) == 0L
         return updateNotice(demand, way, debug = hooks.testBuild, clientsBehind = behind).afterLater(thisRun, laterToday)
+    }
+
+    init {
+        // Gateway of the radio bridge (ADR 0054 §5b) from the signed radio list to the radio link.
+        scope.launch { core.radioList.map { it?.gateway }.distinctUntilChanged().collect { link.useGateway(it) } }
     }
 
     /**
@@ -1200,7 +1207,8 @@ class AppController(
      */
     val deviceSetupPrompt: StateFlow<DeviceSetupPrompt?> =
         combine(deviceSetupNeeded, pairedDevices.skippedSetup, _setupRequested, otherDeviceNames, link.ownDevice) { check, skipped, requested, taken, own ->
-            check?.takeIf { requested || it.signature != skipped }?.let {
+            // A mere change of radio area is applied without asking (below); from the settings it can still be asked for.
+            check?.takeIf { requested || (it.signature != skipped && !it.areaChange) }?.let {
                 // An existing name stays (shared device; a name with an older prefix becomes „anynear.app | …“), otherwise derived from the node number.
                 val suggestion = DeviceName.suffixOf(it.currentName)
                     ?: own?.let { device -> DeviceName.derived(device.nodeNum, taken) }
@@ -1297,6 +1305,61 @@ class AppController(
                 _notice.value = finished(task())
             } finally {
                 _deviceChange.value = null
+            }
+        }
+    }
+
+    // --- Radio area (ADR 0054 §1b): radio settings of the region the radio is in ---------------
+
+    /** Area of the radio list whose settings the own radio uses; automatic by location or chosen by hand. */
+    val radioAreas = RadioAreas(scope, store, core.radioList, hooks.locationAllowed, hooks::approximateLocation, log)
+
+    /** Choose an area by name, or `null` for automatic; automatic looks up the location at once. */
+    fun chooseRadioArea(area: String?) {
+        radioAreas.choose(area)
+        refreshRadioArea()
+    }
+
+    /** „Standort erlauben“ in the choice of the radio area. */
+    fun allowLocationForRadioArea() = hooks.requestLocation()
+
+    private fun refreshRadioArea() {
+        scope.launch { runCatching { radioAreas.refresh() }.onFailure { if (it is CancellationException) throw it } }
+    }
+
+    /** Last area change tried silently (signature and area), so that a radio that does not take it is not written in a loop. */
+    private var lastAreaChange: String? = null
+
+    init {
+        scope.launch {
+            combine(radioAreas.target, radioAreas.areas) { target, areas -> target to areas.mapNotNull(RadioTarget::of) }
+                .distinctUntilChanged()
+                .collect { (target, known) -> link.useRadioTarget(target, known) }
+        }
+        // Look up the area again when the list changes, a radio connects or the permission comes.
+        scope.launch {
+            combine(core.radioList, linkState, radioAreas.locationAllowed) { list, state, allowed ->
+                Triple(list?.issued, state == LinkState.Connected, allowed)
+            }.distinctUntilChanged().collect { refreshRadioArea() }
+        }
+        // A radio of the app on another area's settings switches without asking and says so once (ADR 0054 §1).
+        scope.launch {
+            combine(deviceSetupNeeded, radioAreas.target, _deviceChange) { check, target, change ->
+                check?.takeIf { it.areaChange && change == null }?.let { it to target }
+            }.collect { pair ->
+                val (check, target) = pair ?: return@collect
+                val key = "${check.signature}|${target.area}"
+                if (key == lastAreaChange) return@collect
+                lastAreaChange = key
+                val area = target.area ?: texts.settings.radioAreaStandard
+                val suffix = DeviceName.suffixOf(check.currentName) ?: deviceNameSuggestion.value ?: randomNameSuffix
+                runDeviceTask(texts.status.radioAreaChanging(area), name = null, { link.applyRadioProfile(suffix) }) { result ->
+                    when (result) {
+                        DeviceSetupResult.Done -> texts.status.radioAreaChanged(area)
+                        DeviceSetupResult.NotConnected -> texts.status.deviceNotConnected
+                        is DeviceSetupResult.Failed -> texts.status.updateFailed(result.reason)
+                    }
+                }
             }
         }
     }

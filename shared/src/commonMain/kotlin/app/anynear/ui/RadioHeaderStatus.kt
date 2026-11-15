@@ -23,9 +23,9 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.anynear.anmp.core.radio.DeviceName
 import app.anynear.app.AppController
 import app.anynear.i18n.texts
-import app.anynear.mesh.DeviceName
 import app.anynear.mesh.LinkState
 
 /**

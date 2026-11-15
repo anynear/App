@@ -1,7 +1,13 @@
 package app.anynear.mesh
 
+import app.anynear.anmp.core.radio.RadioTarget
 import app.anynear.anmp.core.firmware.FirmwarePath
 import app.anynear.AppConfig
+import app.anynear.anmp.core.radio.DeviceName
+import app.anynear.anmp.core.radio.GatewaySetup
+import app.anynear.anmp.core.radio.ProfileDeviation
+import app.anynear.anmp.core.radio.RadioProfile
+import app.anynear.anmp.core.radio.RadioWrite
 import app.anynear.app.AppLog
 import app.anynear.core.sha256
 import app.anynear.contacts.Contact
@@ -28,6 +34,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
@@ -94,6 +103,16 @@ class SdkMeshLink(
     /** Transfers new software to the radio (ADR 0056); `null` where the platform cannot do it. */
     private val flasher: FirmwareFlasher? = platformFirmwareFlasher { appLog.log(app.anynear.app.LogLevel.INFO, "App", "Aktualisierung: $it", null) },
 ) : MeshLink {
+
+    /** Gateway from the radio list (ADR 0054 §5b), set by [useGateway]. */
+    private val gateway = MutableStateFlow<app.anynear.anmp.core.RadioGateway?>(null)
+
+    /** Radio settings of the region (ADR 0054 §1b), set by [useRadioTarget]. */
+    private val target = MutableStateFlow(RadioTarget.DEFAULT)
+    private val knownTargets = MutableStateFlow<List<RadioTarget>>(emptyList())
+
+    /** Profile and gateway writes never run at the same time. */
+    private val writeLock = Mutex()
 
     private val logSink = LogSink { level, tag, message, cause ->
         val appLevel = when (level) {
@@ -396,12 +415,28 @@ class SdkMeshLink(
                     .toMap()
             }
         }
+        // Every radio on Wi-Fi is a gateway (ADR 0054 §5b): keep it in line silently, after every change of state.
+        launch {
+            var attempts = 0
+            combine(rc.configBundle, rc.channels, gateway, target) { _, _, gw, t -> gw to t }.conflate().collect { (gw, t) ->
+                delay(GATEWAY_SETTLE)
+                val snapshot = snapshotOf(rc) ?: return@collect
+                val steps = GatewaySetup.plan(snapshot, gw, t)
+                if (steps.isEmpty()) {
+                    attempts = 0
+                    return@collect
+                }
+                if (attempts >= GATEWAY_ATTEMPTS) return@collect
+                attempts++
+                writeGateway(rc, steps)
+            }
+        }
         // Profile check only with a complete state: configuration read and primary channel known.
         launch {
-            combine(rc.configBundle, rc.channels, rc.ownNode) { bundle, channels, node ->
+            combine(rc.configBundle, rc.channels, rc.ownNode, target, knownTargets) { bundle, channels, node, t, known ->
                 if (bundle == null || channels.isNullOrEmpty() || channels.none { it.role == Channel.Role.PRIMARY }) return@combine null
                 if (bundle.configs.none { it.lora != null }) return@combine null
-                RadioProfile.check(RadioProfile.DeviceConfigSnapshot(bundle.configs, bundle.moduleConfigs, channels, node?.user))
+                RadioProfile.check(RadioProfile.DeviceConfigSnapshot(bundle.configs, bundle.moduleConfigs, channels, node?.user), t, known)
             }.collect { check -> if (check != null) _setupCheck.value = check }
         }
         launch {
@@ -829,7 +864,10 @@ class SdkMeshLink(
      * Writes, checks against the freshly read state and repeats until everything fits. [force]: in the first
      * pass write everything, even what is already right. [onlyName]: only name and short name.
      */
-    private suspend fun writeUntilDone(nameSuffix: String, onlyName: Boolean, force: Boolean): DeviceSetupResult {
+    private suspend fun writeUntilDone(nameSuffix: String, onlyName: Boolean, force: Boolean): DeviceSetupResult =
+        writeLock.withLock { writeUntilDoneLocked(nameSuffix, onlyName, force) }
+
+    private suspend fun writeUntilDoneLocked(nameSuffix: String, onlyName: Boolean, force: Boolean): DeviceSetupResult {
         if (!DeviceName.isValidSuffix(nameSuffix)) return DeviceSetupResult.Failed(texts.status.deviceNameInvalid)
         val expectedLong = DeviceName.longName(nameSuffix)
         fun nameDone(owner: User?) = owner?.long_name == expectedLong && owner.short_name == DeviceName.shortName(nameSuffix, owner.id)
@@ -841,7 +879,7 @@ class SdkMeshLink(
             val deviations = when {
                 onlyName -> emptySet()
                 forcePending -> ProfileDeviation.entries.toSet()
-                else -> RadioProfile.deviations(snapshot) - ProfileDeviation.NAME
+                else -> RadioProfile.deviations(snapshot, target.value) - ProfileDeviation.NAME
             }
             val nameOk = nameDone(snapshot.owner) && !forcePending
             forcePending = false
@@ -866,6 +904,56 @@ class SdkMeshLink(
         return unfinished(remaining)
     }
 
+    private suspend fun writeChannelChecked(rc: RadioClient, channel: Channel): AdminResult<Unit> {
+        val written = rc.admin.setChannel(channel)
+        val readBack = (rc.admin.getChannel(ChannelIndex(channel.index)) as? AdminResult.Success)?.value
+        return if (readBack?.settings?.uplink_enabled == channel.settings?.uplink_enabled &&
+            readBack?.settings?.downlink_enabled == channel.settings?.downlink_enabled
+        ) AdminResult.Success(Unit) else written
+    }
+
+    override fun useGateway(gateway: app.anynear.anmp.core.RadioGateway?) {
+        this.gateway.value = gateway
+    }
+
+    override fun useRadioTarget(target: RadioTarget, known: List<RadioTarget>) {
+        knownTargets.value = known
+        this.target.value = target
+    }
+
+    /**
+     * Writes the gateway values (ADR 0054 §5b) in the order of [GatewaySetup.plan]; the MQTT module last, the radio
+     * restarts after it. Skipped while the radio profile is being written; the next state change plans again.
+     */
+    private suspend fun writeGateway(rc: RadioClient, steps: List<GatewaySetup.Step>) {
+        if (!writeLock.tryLock()) return
+        try {
+            for (step in steps) {
+                if (rc.connection.value != ConnectionState.Connected) return
+                val (what, write) = when (step) {
+                    // Like circle channels: over TCP the firmware does not confirm setChannel, reading back decides.
+                    is GatewaySetup.Step.Uplink -> "Kanal ${step.channel.index}" to suspend { writeChannelChecked(rc, step.channel) }
+                    is GatewaySetup.Step.LoraMqtt -> "MQTT im Funk" to suspend { rc.admin.setConfig(Config.Builder().also { it.lora = step.lora }.build()) }
+                    is GatewaySetup.Step.Mqtt -> "MQTT ${if (step.mqtt.enabled) "an" else "aus"}" to suspend {
+                        rc.admin.setModuleConfig(ModuleConfig.Builder().also { it.mqtt = step.mqtt }.build())
+                    }
+                }
+                val result = try {
+                    withTimeoutOrNull(WRITE_TIMEOUT) { write() }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log("Brücke: $what abgebrochen", e)
+                    return
+                }
+                log("Brücke: $what -> ${result ?: "keine Bestätigung"}")
+                if (result !is AdminResult.Success) return
+            }
+        } finally {
+            writeLock.unlock()
+        }
+    }
+
     private fun unfinished(remaining: Set<ProfileDeviation>?): DeviceSetupResult =
         DeviceSetupResult.Failed(texts.status.radioSettingsIncomplete).also { log("Geräteprofil: offen $remaining") }
 
@@ -887,31 +975,18 @@ class SdkMeshLink(
         nameSuffix: String,
         writeName: Boolean,
     ): Boolean {
-        val steps = buildList<Pair<String, suspend () -> AdminResult<Unit>>> {
-            if (writeName) {
-                add("Name" to { rc.admin.setOwner(RadioProfile.owner(snapshot.owner, nameSuffix)) })
-            }
-            if (ProfileDeviation.TELEMETRY in deviations || ProfileDeviation.SENSORS in deviations) {
-                add("Telemetrie" to { rc.admin.setModuleConfig(ModuleConfig.Builder().also { it.telemetry = RadioProfile.telemetry(snapshot.telemetry) }.build()) })
-            }
-            if (ProfileDeviation.ALERTS in deviations) {
-                add("Signale" to { rc.admin.setModuleConfig(ModuleConfig.Builder().also { it.external_notification = RadioProfile.notification(snapshot.notification) }.build()) })
-            }
-            if (ProfileDeviation.POSITION in deviations) {
-                RadioProfile.channelsSharingPosition(snapshot.channels).forEach { ch ->
-                    add("Kanal ${ch.index}" to { rc.admin.setChannel(RadioProfile.withoutPosition(ch)) })
-                }
-                add("Standort" to { rc.admin.setConfig(Config.Builder().also { it.position = RadioProfile.position(snapshot.position) }.build()) })
-            }
-            if (ProfileDeviation.ROLE in deviations) {
-                add("Rolle" to { rc.admin.setConfig(Config.Builder().also { it.device = RadioProfile.device(snapshot.device) }.build()) })
-            }
-            when (RadioProfile.loraWrite(deviations)) {
-                RadioProfile.LoraWrite.PROFILE ->
-                    add("Funk" to { rc.admin.setConfig(Config.Builder().also { it.lora = RadioProfile.lora(snapshot.lora) }.build()) })
-                RadioProfile.LoraWrite.MQTT ->
-                    add("MQTT" to { rc.admin.setConfig(Config.Builder().also { it.lora = RadioProfile.mqtt(snapshot.lora) }.build()) })
-                null -> Unit
+        // The same writes as the web app (ADR 0095 §5): name, telemetry, signals, location, role, radio profile last.
+        val writes = RadioProfile.writes(snapshot, deviations, nameSuffix.takeIf { writeName }, target.value)
+        val steps = writes.map<RadioWrite, Pair<String, suspend () -> AdminResult<Unit>>> { w ->
+            when (w) {
+                is RadioWrite.Owner -> "Name" to { rc.admin.setOwner(w.user) }
+                is RadioWrite.SetChannel -> "Kanal ${w.channel.index}" to { rc.admin.setChannel(w.channel) }
+                is RadioWrite.SetModule -> (if (w.module.telemetry != null) "Telemetrie" else "Signale") to { rc.admin.setModuleConfig(w.module) }
+                is RadioWrite.SetConfig -> when {
+                    w.config.lora != null -> if (ProfileDeviation.MQTT in deviations && RadioProfile.loraWrite(deviations) == RadioProfile.LoraWrite.MQTT) "MQTT" else "Funk"
+                    w.config.position != null -> "Standort"
+                    else -> "Rolle"
+                } to { rc.admin.setConfig(w.config) }
             }
         }
         for ((what, write) in steps) {
@@ -962,6 +1037,10 @@ class SdkMeshLink(
         private val RETRY_PAUSE = 3.seconds
         private val RECONNECT_WAIT = 90.seconds
         private const val PROFILE_ATTEMPTS = 6
+        /** Wait for the state to settle after a change before planning the gateway values. */
+        private val GATEWAY_SETTLE = 3.seconds
+        /** Gateway writes per connection while something still deviates; then it waits for the next connection. */
+        private const val GATEWAY_ATTEMPTS = 3
         private val WRITE_TIMEOUT = 15.seconds
         /** After the radio profile the device only restarts after a good 20 s (emulator test 19.10.2026). */
         private val REBOOT_WAIT = 45.seconds

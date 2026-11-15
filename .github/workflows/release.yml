@@ -17,7 +17,9 @@
 #   ios      upload to TestFlight (closed beta, invited testers only), with the release notes as “What to Test”
 #   publish  attaches ios.json to the release and redeploys the website, which shows the newest release
 #
-# Version without "v" is the versionName; iOS gets only X.Y.Z of it (Apple allows only numbers). versionCode and iOS
+# Version without "v" is the versionName; iOS gets only X.Y.Z of it (Apple allows only numbers), or the input
+# ios_version: a version already approved for TestFlight (e.g. 0.8.0 while 0.9.0 waits for beta review), so that the
+# build reaches the testers at once; it carries the code of the release and the release notes of X.Y.Z. versionCode and iOS
 # build number: VERSION_CODE_BASE + 2n for a pre-release, + 2n+1 for a tag vX.Y.Z on the same commit (n = number of
 # commits), so that the tag build installs as an update and App Store Connect gets no number twice. The pre-release
 # carries the same number in its name.
@@ -34,6 +36,13 @@ name: Release
 # By hand only: merges and tags no longer start a release.
 on:
   workflow_dispatch:
+    inputs:
+      ios_version:
+        description: >-
+          Version X.Y.Z that Apple sees, only if a version already approved for TestFlight is to carry this build
+          (e.g. 0.8.0 while 0.9.0 is still in beta review). Empty = X.Y.Z of the release.
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -456,9 +465,17 @@ jobs:
       - name: Version
         if: steps.check.outputs.ready == 'true'
         id: version
+        env:
+          IOS_VERSION: ${{ inputs.ios_version }}
         run: |
           set -euo pipefail
-          scripts/version.sh | tee -a "$GITHUB_OUTPUT"
+          scripts/version.sh | tee "$RUNNER_TEMP/version" | tee -a "$GITHUB_OUTPUT"
+          # Version for Apple: X.Y.Z of the release, or the input ios_version (a version already approved for
+          # TestFlight, so that this build reaches the testers without waiting for the beta review of the new one).
+          apple="$IOS_VERSION"
+          [ -n "$apple" ] || apple=$(sed -n 's/^marketing=//p' "$RUNNER_TEMP/version")
+          [[ "$apple" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::ios_version must be X.Y.Z: $apple" >&2; exit 1; }
+          echo "apple=$apple" | tee -a "$GITHUB_OUTPUT"
 
       - name: Embed the network list
         # Signed network list unchanged (ADR 0015, 0035 §6): release asset net.json of the latest
@@ -520,7 +537,7 @@ jobs:
           xcodebuild archive -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Release \
             -destination generic/platform=iOS -archivePath "$RUNNER_TEMP/anynear.xcarchive" \
             CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="$team" AppIdentifierPrefix="$team." \
-            MARKETING_VERSION="${{ steps.version.outputs.marketing }}" \
+            MARKETING_VERSION="${{ steps.version.outputs.apple }}" \
             CURRENT_PROJECT_VERSION="${{ steps.version.outputs.code }}" \
             APP_VERSION_NAME="${{ steps.version.outputs.name }}"
           app=$(echo "$RUNNER_TEMP"/anynear.xcarchive/Products/Applications/*.app)
@@ -595,6 +612,7 @@ jobs:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
           NAME: ${{ steps.version.outputs.name }}
           MARKETING: ${{ steps.version.outputs.marketing }}
+          APPLE: ${{ steps.version.outputs.apple }}
           BUILD: ${{ steps.version.outputs.code }}
           PRE: ${{ steps.version.outputs.pre }}
         run: |
@@ -625,7 +643,7 @@ jobs:
           app=$(api "$base/apps?filter%5BbundleId%5D=app.anynear&fields%5Bapps%5D=bundleId" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')
           build=""
           for _ in $(seq 1 40); do
-            build=$(api "$base/builds?filter%5Bapp%5D=$app&filter%5Bversion%5D=$BUILD&filter%5BpreReleaseVersion.version%5D=$MARKETING&fields%5Bbuilds%5D=version" \
+            build=$(api "$base/builds?filter%5Bapp%5D=$app&filter%5Bversion%5D=$BUILD&filter%5BpreReleaseVersion.version%5D=$APPLE&fields%5Bbuilds%5D=version" \
               | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; print(d[0]["id"] if d else "")')
             [ -n "$build" ] && break
             sleep 30
@@ -702,7 +720,7 @@ jobs:
           cat > "$RUNNER_TEMP/ios.json" <<EOF
           {
             "version": "${{ steps.version.outputs.name }}",
-            "marketingVersion": "${{ steps.version.outputs.marketing }}",
+            "marketingVersion": "${{ steps.version.outputs.apple }}",
             "build": ${{ steps.version.outputs.code }},
             "commit": "${{ steps.version.outputs.commit }}",
             "date": "${{ steps.version.outputs.date }}"

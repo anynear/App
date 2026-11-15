@@ -168,28 +168,9 @@ internal fun DarkModeRow(controller: AppController) {
     var choosing by rememberSaveable { mutableStateOf(false) }
     AppRow(title = texts.settings.lightOrDark, subtitle = mode.text(), icon = AppIcons.Bild, chevron = true, onClick = { choosing = true })
     if (choosing) {
-        AppDialog(
-            onDismissRequest = { choosing = false },
-            title = { Text(texts.settings.appearance) },
-            text = {
-                Column {
-                    DarkMode.entries.forEach { option ->
-                        val pick = {
-                            controller.setDarkMode(option)
-                            choosing = false
-                        }
-                        Row(
-                            Modifier.fillMaxWidth().clickable(onClick = pick).padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(selected = option == mode, onClick = pick)
-                            Text(option.text(), style = MaterialTheme.typography.bodyLarge)
-                        }
-                    }
-                }
-            },
-            confirmButton = { AppButton(texts.common.done, { choosing = false }, kind = ButtonKind.Quiet) },
-        )
+        ChoiceDialog(texts.settings.appearance, DarkMode.entries.map { it to it.text() }, mode, onDismiss = { choosing = false }) {
+            controller.setDarkMode(it)
+        }
     }
 }
 
