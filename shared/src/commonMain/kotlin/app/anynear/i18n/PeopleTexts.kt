@@ -133,6 +133,19 @@ interface PeopleTexts {
     val viewPerson: String
     val leaveCircleContactsNote: String
     val editNameAndPicture: String
+
+    // Own name for a person, only for oneself (person page)
+    val changeName: String
+    val contactNameLabel: String
+
+    /** Below the field: who sees the name. */
+    val contactNameHint: String
+
+    /** Back to the name from the person's profile. */
+    val resetName: String
+
+    /** Small below an own name: „Im Profil: Hans“. */
+    fun profileNameLine(name: String): String
     val removeMember: String
     val whoToRemove: String
     val circleExplained: String
@@ -200,6 +213,28 @@ interface PeopleTexts {
     fun answerAfter(seconds: Long): String
     fun checkedAt(time: String): String
     fun radioNumber(id: String): String
+    // Contact requests and introductions (ADR 0116)
+    fun requestTitle(name: String): String
+    fun introducedBy(name: String): String
+    val viaYourContactLink: String
+    val requestAgree: String
+    val requestDecline: String
+    fun requestAccepted(name: String): String
+    fun requestSent(name: String): String
+    val requestPending: String
+    val shareContact: String
+    fun shareContactWho(name: String): String
+    fun shareContactHint(name: String): String
+    val noOtherContacts: String
+    fun introSent(name: String, to: String): String
+    val introFailed: String
+    val introExpired: String
+    fun introAcceptedLine(to: String, name: String): String
+    fun introCardIncoming(by: String, name: String): String
+    fun introCardOwn(name: String): String
+    val introAdd: String
+    fun introConfirmText(name: String): String
+    val alreadyContact: String
 }
 
 internal object PeopleTextsDe : PeopleTexts {
@@ -295,7 +330,7 @@ internal object PeopleTextsDe : PeopleTexts {
     override val qrInviteHelp =
         "Die Person öffnet die Kamera ihres Handys und richtet sie auf den Code. " +
             "Ist $APP installiert, öffnet sich direkt die Einladung."
-    override val inviteWarning = "Wer den Link oder Code bekommt, ist im Kreis. Gib ihn nur an Menschen, die dazugehören sollen."
+    override val inviteWarning = "Wer den Link oder Code bekommt, kann dem Kreis beitreten. Gib ihn nur an Menschen, die dazugehören sollen."
     override val shareLinkHint = "Per WhatsApp, Signal, SMS … wenn die Person nicht da ist."
     override val showQrCode = "QR-Code zeigen"
     override val showQrCodeHint = "Wenn die Person neben dir ist."
@@ -308,6 +343,11 @@ internal object PeopleTextsDe : PeopleTexts {
     override val viewPerson = "Person ansehen"
     override val leaveCircleContactsNote = "Personen bleiben in deinen Kontakten, wenn sie direkt gespeichert sind, ihr euch bereits direkt geschrieben habt oder ihr einen weiteren gemeinsamen Kreis habt."
     override val editNameAndPicture = "Name und Bild ändern"
+    override val changeName = "Namen ändern"
+    override val contactNameLabel = "Name"
+    override val contactNameHint = "Nur du siehst diesen Namen, auf allen deinen Geräten. Die Person merkt davon nichts."
+    override val resetName = "Zurücksetzen"
+    override fun profileNameLine(name: String) = "Im Profil: $name"
     override val removeMember = "Mitglied entfernen"
     override val whoToRemove = "Wen entfernen?"
     override val circleExplained = "Ein Kreis ist eine feste Gruppe, zum Beispiel deine Familie oder deine Nachbarn. Alle im Kreis lesen mit."
@@ -378,6 +418,27 @@ internal object PeopleTextsDe : PeopleTexts {
     override fun answerAfter(seconds: Long) = "Antwort nach $seconds s"
     override fun checkedAt(time: String) = "Geprüft: $time"
     override fun radioNumber(id: String) = "Funkgerät $id"
+    override fun requestTitle(name: String) = "$name möchte dein Kontakt sein"
+    override fun introducedBy(name: String) = "Vorgestellt von $name"
+    override val viaYourContactLink = "Über deinen Kontaktlink"
+    override val requestAgree = "Zustimmen"
+    override val requestDecline = "Ablehnen"
+    override fun requestAccepted(name: String) = "$name ist jetzt in deinen Kontakten."
+    override fun requestSent(name: String) = "Anfrage an $name gesendet. Ihr könnt euch schreiben, sobald $name zustimmt."
+    override val requestPending = "Anfrage gesendet"
+    override val shareContact = "Kontakt teilen"
+    override fun shareContactWho(name: String) = "Wem möchtest du $name vorstellen?"
+    override fun shareContactHint(name: String) = "$name wird gefragt, bevor ihr euch schreiben könnt."
+    override val noOtherContacts = "Du hast noch keine anderen Kontakte."
+    override fun introSent(name: String, to: String) = "Du hast $name an $to weitergegeben."
+    override val introFailed = "Das hat nicht geklappt. Versuch es später noch einmal."
+    override val introExpired = "Diese Vorstellung gilt nicht mehr."
+    override fun introAcceptedLine(to: String, name: String) = "$to möchte $name hinzufügen. $name muss noch zustimmen."
+    override fun introCardIncoming(by: String, name: String) = "$by stellt dir $name vor"
+    override fun introCardOwn(name: String) = "Du hast $name vorgestellt"
+    override val introAdd = "Hinzufügen"
+    override fun introConfirmText(name: String) = "$name sieht deinen Namen und dein Bild. Ihr könnt euch schreiben, sobald $name zustimmt."
+    override val alreadyContact = "Schon in deinen Kontakten"
 }
 
 internal object PeopleTextsEn : PeopleTexts {
@@ -473,7 +534,7 @@ internal object PeopleTextsEn : PeopleTexts {
     override val qrInviteHelp =
         "The person opens their phone's camera and points it at the code. " +
             "If $APP is installed, the invite opens right away."
-    override val inviteWarning = "Anyone who gets the link or code is in the circle. Only give it to people who should be part of it."
+    override val inviteWarning = "Anyone who gets the link or code can join the circle. Only give it to people who should be part of it."
     override val shareLinkHint = "By WhatsApp, Signal, SMS … if the person isn't with you."
     override val showQrCode = "Show QR code"
     override val showQrCodeHint = "If the person is right next to you."
@@ -486,6 +547,11 @@ internal object PeopleTextsEn : PeopleTexts {
     override val viewPerson = "View person"
     override val leaveCircleContactsNote = "People stay in your contacts if they are saved directly, you have already messaged each other directly, or you share another circle."
     override val editNameAndPicture = "Change name and picture"
+    override val changeName = "Change name"
+    override val contactNameLabel = "Name"
+    override val contactNameHint = "Only you see this name, on all your devices. The person won't notice."
+    override val resetName = "Reset"
+    override fun profileNameLine(name: String) = "In profile: $name"
     override val removeMember = "Remove member"
     override val whoToRemove = "Remove whom?"
     override val circleExplained = "A circle is a fixed group, for example your family or your neighbors. Everyone in the circle can read along."
@@ -556,4 +622,25 @@ internal object PeopleTextsEn : PeopleTexts {
     override fun answerAfter(seconds: Long) = "Answer after $seconds s"
     override fun checkedAt(time: String) = "Checked: $time"
     override fun radioNumber(id: String) = "Radio $id"
+    override fun requestTitle(name: String) = "$name would like to be your contact"
+    override fun introducedBy(name: String) = "Introduced by $name"
+    override val viaYourContactLink = "Through your contact link"
+    override val requestAgree = "Accept"
+    override val requestDecline = "Decline"
+    override fun requestAccepted(name: String) = "$name is now in your contacts."
+    override fun requestSent(name: String) = "Request sent to $name. You can message each other once $name accepts."
+    override val requestPending = "Request sent"
+    override val shareContact = "Share contact"
+    override fun shareContactWho(name: String) = "Who would you like to introduce $name to?"
+    override fun shareContactHint(name: String) = "$name will be asked before you can message each other."
+    override val noOtherContacts = "You have no other contacts yet."
+    override fun introSent(name: String, to: String) = "You passed $name on to $to."
+    override val introFailed = "That didn't work. Please try again later."
+    override val introExpired = "This introduction is no longer valid."
+    override fun introAcceptedLine(to: String, name: String) = "$to would like to add $name. $name still has to accept."
+    override fun introCardIncoming(by: String, name: String) = "$by is introducing $name to you"
+    override fun introCardOwn(name: String) = "You introduced $name"
+    override val introAdd = "Add"
+    override fun introConfirmText(name: String) = "$name will see your name and picture. You can message each other once $name accepts."
+    override val alreadyContact = "Already in your contacts"
 }

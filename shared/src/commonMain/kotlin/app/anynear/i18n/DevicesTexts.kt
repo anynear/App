@@ -83,7 +83,9 @@ interface DevicesTexts {
     val returningCard: String
     val returningCardText: String
     val pairingTitle: String
+    val pairingNameTitle: String
     val pairingText: String
+    val pairingFallback: String
     val pairingWaiting: String
     val pairingTimeout: String
     val recoverTitle: String
@@ -175,10 +177,12 @@ internal object DevicesTextsDe : DevicesTexts {
     override val returningTitle = "Wie holst du $APP hierher?"
     override val returningOtherDevice = "Als weiteres Gerät einrichten"
     override val returningOtherDeviceText = "Handy oder Tablet mit $APP in der Nähe"
-    override val returningCard = "Mit der Notfallkarte"
-    override val returningCardText = "Wenn kein Gerät mit deinen Daten mehr da ist"
+    override val returningCard = "Notfallkarte benutzen"
+    override val returningCardText = "Kein anderes Gerät mehr da?"
     override val pairingTitle = "Dieses Gerät hinzufügen"
-    override val pairingText = "Öffne $APP auf deinem anderen Gerät: „Mehr“ → „Meine Geräte“ → „Gerät hinzufügen“. Scanne dann diesen Code."
+    override val pairingNameTitle = "Wie möchtest du dieses Gerät nennen?"
+    override val pairingText = "Öffne die Kamera auf deinem anderen Gerät und scanne diesen Code."
+    override val pairingFallback = "Öffnet sich $APP nicht? Tippe auf dem anderen Gerät in $APP auf „Mehr“ → „Meine Geräte“ → „Gerät hinzufügen“ und scanne den Code dort."
     override val pairingWaiting = "Warte auf dein anderes Gerät …"
     override val pairingTimeout = "Das hat zu lange gedauert. Versuch es noch einmal."
     override val recoverTitle = "Notfallkarte"
@@ -270,10 +274,12 @@ internal object DevicesTextsEn : DevicesTexts {
     override val returningTitle = "How do you bring $APP here?"
     override val returningOtherDevice = "Set up as an additional device"
     override val returningOtherDeviceText = "Phone or tablet with $APP nearby"
-    override val returningCard = "With the emergency card"
-    override val returningCardText = "If no device with your data is left"
+    override val returningCard = "Use emergency card"
+    override val returningCardText = "No other device left?"
     override val pairingTitle = "Add this device"
-    override val pairingText = "Open $APP on your other device: “More” → “My devices” → “Add a device”. Then scan this code."
+    override val pairingNameTitle = "What do you want to call this device?"
+    override val pairingText = "Open the camera on your other device and scan this code."
+    override val pairingFallback = "$APP does not open? On the other device, tap “More” → “My devices” → “Add a device” in $APP and scan the code there."
     override val pairingWaiting = "Waiting for your other device …"
     override val pairingTimeout = "That took too long. Please try again."
     override val recoverTitle = "Emergency card"

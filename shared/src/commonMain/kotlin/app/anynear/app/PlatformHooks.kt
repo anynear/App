@@ -15,6 +15,19 @@ interface PlatformHooks {
     fun requestBluetoothPermission()
 
     /**
+     * May the app search the local network (Wi-Fi) without the system stepping in? Android 17+ (target SDK 37):
+     * only with the runtime permission `ACCESS_LOCAL_NETWORK`; without it every search opens the system dialog
+     * „Gerät zum Verbinden auswählen“. Older Android and iOS (asks once by itself) report `true`.
+     */
+    val localNetworkAllowed: StateFlow<Boolean> get() = AlwaysAllowed
+
+    /**
+     * Ask once for the local network permission (Android 17+) and return whether it is granted afterwards.
+     * Without a visible screen that can ask, returns the current state.
+     */
+    suspend fun requestLocalNetworkPermission(): Boolean = localNetworkAllowed.value
+
+    /**
      * Does the phone have internet right now (Wi-Fi or mobile data)? Distinguishes “kein Internet” from
      * “anynear-Dienst nicht erreichbar”. Platforms without detection report `true`.
      */
@@ -196,6 +209,8 @@ private val NoPushToken:StateFlow<PushToken?> = MutableStateFlow(null)
 
 private val NoPermissionNeeded: StateFlow<Boolean> = MutableStateFlow(false)
 
+private val AlwaysAllowed: StateFlow<Boolean> = MutableStateFlow(true)
+
 private val NoLocation: StateFlow<Boolean> = MutableStateFlow(false)
 
 /** Ongoing notification of the own check-in; [okAction], [endAction] go to `LifeSigns.onAction`. */
@@ -243,6 +258,10 @@ data class MessageNotification(
     val unreadCount: Int,
     /** Uploaded image of the circle or the person, `null` = none on the phone. */
     val image: ByteArray? = null,
+    /** Offer „Antworten“ with ready-made replies (circle chats and direct messages, not public chats or alerts). */
+    val canReply: Boolean = false,
+    /** A reply from this notification was not sent, with the reason; shown in the notification. */
+    val replyError: String? = null,
 ) {
     /** [senderKey] tells apart senders with the same name; [senderImage] is their uploaded image. */
     data class Line(

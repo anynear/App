@@ -605,7 +605,7 @@ class SdkMeshLink(
 
     override suspend fun sendData(payload: ByteArray, to: Int?, channelIndex: Int): RadioSend {
         val rc = client.value ?: throw NotReadyException("Funkgerät ist nicht verbunden.")
-        // ANMP to everyone may also go on an open channel 0 (ADR 0054 §1, AppConfig.RADIO_CHANNEL0).
+        // ANMP to everyone may also go on an open channel 0 (ADR 0054 §1, `channel0` of the radio area).
         if (!isAnmpChannel(channelIndex, _channels.value, _channel0Slot.value.takeIf { to == null })) {
             log("Funk: Senden abgelehnt, Kanal $channelIndex ist weder `anynear` noch ein offener Kanal 0")
             throw NotReadyException("Dein Kreis ist auf dem Funkgerät noch nicht eingerichtet.")

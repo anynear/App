@@ -25,7 +25,18 @@ data class Person(
     val image: ImageRef? = null,
     /** The person's devices with anynear (device IDs), e.g. phone and tablet. */
     val devices: List<String> = listOfNotNull(deviceId),
+    /** Name from the person's own profile; differs from [name] if one gave them an own name ([ContactNames]). */
+    val profileName: String = name,
 ) {
+    /** One gave the person an own name; [profileName] is shown small below it. */
+    val hasOwnName: Boolean get() = name != profileName
+
+    /**
+     * Whether the person is in [circleId] (or, with [MemberDirectory.DIRECT_CONTACTS], a contact one added): by any of
+     * its devices. [deviceId] is the person ID (ADR 0042), the entries of [members] carry device IDs.
+     */
+    fun isIn(members: List<Member>, circleId: String): Boolean =
+        deviceId != null && members.any { it.circleId == circleId && (it.personId == deviceId || it.deviceId in devices) }
     companion object {
         /**
          * Person for [peer], also via one of their device IDs: a contact that was just scanned first has its device ID
@@ -40,17 +51,24 @@ data class Person(
          * one person (ADR 0042), also in several circles; one's own further devices ([ownPerson]) are left out. If a member reports a radio that is also
          * stored as a contact, that is the same person. The name from the app applies: nobody
          * chooses the name of the radio deliberately, and a radio can (e.g. after being passed on)
-         * be reported by several devices.
+         * be reported by several devices. An own name ([ownNames], person ID → name) covers the name from the profile.
          */
-        fun merge(members: List<Member>, contacts: List<Contact>, circleOrder: List<String>, ownPerson: String? = null): List<Person> {
+        fun merge(
+            members: List<Member>,
+            contacts: List<Contact>,
+            circleOrder: List<String>,
+            ownPerson: String? = null,
+            ownNames: Map<String, String> = emptyMap(),
+        ): List<Person> {
             val byNode = contacts.associateBy { it.nodeNum }
             val fromMembers = members.filter { it.personId != ownPerson }.groupBy { it.personId }.map { (personId, entries) ->
                 val latest = entries.last()
                 val node = entries.map { it.nodeNum }.firstOrNull { it != 0 }
                 val contact = node?.let(byNode::get)
+                val profileName = latest.name.ifBlank { contact?.displayName.orEmpty() }
                 Person(
                     peer = PeerId.device(personId),
-                    name = latest.name.ifBlank { contact?.displayName.orEmpty() },
+                    name = ownNames[personId] ?: profileName,
                     deviceId = personId,
                     publicKey = latest.publicKey,
                     circleIds = entries.map { it.circleId }.filter { it != MemberDirectory.DIRECT_CONTACTS }.distinct().sortedBy { circleOrder.indexOf(it) },
@@ -58,6 +76,7 @@ data class Person(
                     radioContact = contact,
                     image = entries.maxByOrNull { it.imageTs }?.takeIf { it.imageTs > 0 }?.image,
                     devices = entries.map { it.deviceId }.distinct(),
+                    profileName = profileName,
                 )
             }
             val linkedNodes = fromMembers.mapNotNull { it.nodeNum }.toSet()

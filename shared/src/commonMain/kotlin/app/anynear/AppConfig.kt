@@ -32,6 +32,9 @@ object AppConfig {
     /** Opens the app TestFlight on iOS (ADR 0096 §6). */
     const val TESTFLIGHT_URL = "itms-beta://"
 
+    /** „Was ist neu“ of the version offered as an update ([app.anynear.app.ReleaseNotes]), from the website. */
+    const val APP_NOTES_URL = "https://anynear.app/v1/app/notes.json"
+
     /** Subscription plans with expected prices (ADR 0076), from the website; prices are never in the app. */
     const val ABO_PREVIEW_URL = "https://anynear.app/v1/abo.json"
 
@@ -73,17 +76,17 @@ object AppConfig {
      */
     const val CRITICAL_ALERTS = true
 
+    /**
+     * iOS: the notification extension swallows wake-ups with nothing to show (an own message from another device, an
+     * alert outside the region or already shown, a duplicate wake-up), ADR 0117. Needs the entitlement
+     * `com.apple.developer.usernotifications.filtering` (requested from Apple, not granted yet): turn on together with
+     * the entitlement in `iosApp/NotificationService/NotificationService.entitlements`. Off, such wake-ups stay as a
+     * quiet notice without sound („anynear · Neue Nachricht“), the app clears them once it fetches itself.
+     */
+    const val FILTER_EMPTY_WAKES = false
+
     /** Former app ID (until the cut-over, ADR 0061). As long as it is installed, the app offers to delete it (ADR 0061). */
     const val OLD_APP_ID = "com.pyrsa.pyrsa"
-
-    /**
-     * Send ANMP on channel 0 (ADR 0054 §1, implementation plan radio bridge phase 1), always on `PRIVATE_APP`: when
-     * channel 0 is open (default key, no own name), packets go there, otherwise in the radio channel `anynear`;
-     * receiving works on both. On since 11.11.2026, before the store release, so that community gateways can uplink
-     * our packets. The switch is meant to come from the relays later (`channel0` in the `radio list`, phase 6) so
-     * that it can be flipped without an app update.
-     */
-    const val RADIO_CHANNEL0 = true
 
     /**
      * Channels of earlier versions that the app clears away when connecting: the former radio channel (ADR 0051,

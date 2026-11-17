@@ -17,11 +17,14 @@ import app.anynear.lifesigns.LifeSignLoudness
 import app.anynear.lifesigns.LifeSignSource
 import app.anynear.lifesigns.LifeSignTemplate
 import app.anynear.lifesigns.LifeSigns
+import app.anynear.lifesigns.lifeSignWake
+import app.anynear.anmp.AnmpAlive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Check-ins in the app (ADR 0083 §5): templates, notifications per phase, buttons, alarm. */
@@ -222,5 +225,37 @@ class LifeSignsTest {
         assertEquals(listOf("ben", "carla"), all)
         assertEquals(listOf("ben"), heard)
         assertTrue(signs.meAway(status(plan().copy(care = listOf(AliveCare("ich", AnmpCareState.AWAY, t0))), false, t0)))
+    }
+
+    /** The iOS notification extension shows what a packet says, with the marks of the app (ADR 0117). */
+    @Test
+    fun theExtensionShowsAStartOnceAndTheAppDoesNotRepeatIt() = runTest {
+        val store = InMemoryStore()
+        fun wire(state: Int, due: Long = t0 + 20 * min) = AnmpAlive(
+            ByteArray(16), state, t0 / 1000, (t0 + 8 * 60 * min) / 1000, due / 1000, 300, 600, 1200, label = "Allein arbeiten",
+        )
+        val start = assertNotNull(lifeSignWake(store, "p1", "c1", "Anna", "Familie", wire(AnmpAliveState.START), t0, t0))
+        assertEquals("alive:p1", start.channelId)
+        assertEquals(AlertLoudness.Normal, start.loudness)
+        assertTrue("Anna" in start.title)
+        // Twice the same wake-up: nothing new.
+        assertNull(lifeSignWake(store, "p1", "c1", "Anna", "Familie", wire(AnmpAliveState.START), t0, t0))
+        // The app later evaluates with the same store and does not show the start again.
+        val hooks = Hooks()
+        val source = FakeSource().apply { list = listOf(status(plan(), false, t0)) }
+        val signs = LifeSigns(
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined), source, store, hooks, { t0 },
+            nameOf = { "Anna" }, circleName = { "Familie" }, helpersOf = { listOf("ich") }, me = { "ich" },
+        )
+        signs.evaluate()
+        assertTrue(hooks.shown.isEmpty())
+        // No confirmation: loud alarm, unless the circle is set to off.
+        val missed = assertNotNull(lifeSignWake(store, "p1", "c1", "Anna", "Familie", wire(AnmpAliveState.MISSED), t0 + 30 * min, t0 + 30 * min))
+        assertEquals(AlertPriority.Alarm, missed.priority)
+        assertEquals(AlertLoudness.Loud, missed.loudness)
+        signs.setLoudness("c1", LifeSignLoudness.Off)
+        assertNull(lifeSignWake(store, "p1", "c1", "Anna", "Familie", wire(AnmpAliveState.MISSED, due = t0 + 60 * min), t0 + 70 * min, t0 + 70 * min))
+        // A confirmation without an earlier warning shows nothing.
+        assertNull(lifeSignWake(InMemoryStore(), "p2", "c1", "Anna", "Familie", wire(AnmpAliveState.OK), t0, t0))
     }
 }

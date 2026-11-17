@@ -55,7 +55,7 @@ internal fun NewMessageScreen(
     val shownCircles = circles.filter { !it.removed && it.id != invitedCircle && matchesSearch(query, it.name) }
     val supportPeer by controller.supportPeer.collectAsState()
     // The support identity is not a contact to write to; questions go through the form (ADR 0065).
-    val shownPeople = people.filter { person -> person.peer != supportPeer && matchesSearch(query, person.name, *person.circleIds.map(circleNames::get).toTypedArray()) }
+    val shownPeople = people.filter { person -> person.peer != supportPeer && matchesSearch(query, person.name, person.profileName, *person.circleIds.map(circleNames::get).toTypedArray()) }
         .sortedBy { invitedCircle in it.circleIds }
     val invitedName = invitedCircle?.let(circleNames::get)
 

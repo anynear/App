@@ -18,6 +18,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.layout.heightIn
+import app.anynear.app.ReleaseNotes
 import app.anynear.AppConfig
 import androidx.compose.ui.unit.dp
 import app.anynear.app.AppController
@@ -75,11 +78,23 @@ internal fun AppUpdateDialog(controller: AppController) {
     // „Später“ only as long as one can really choose. Afterwards Android takes over with its own dialog,
     // a second button for cancelling is then only confusing.
     val canPostpone = current is AppUpdateState.Available || (current is AppUpdateState.Failed && current.version != null)
+    // „Was ist neu“ of the offered version; Google Play names no version, then the notes bring it along.
+    val notes by produceState<ReleaseNotes?>(null, version) { value = controller.updateNotes(version) }
 
     AppDialog(
         onDismissRequest = { if (canPostpone || current is AppUpdateState.Failed) close() },
-        title = { Text(texts.settings.newVersionTitle(version?.ifBlank { null })) },
-        text = { UpdateProgress(current, intro = texts.settings.updateIntro) },
+        title = { Text(texts.settings.newVersionTitle(version?.ifBlank { null } ?: notes?.version)) },
+        text = {
+            val shown = notes
+            if (current is AppUpdateState.Available && shown != null) {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    UpdateProgress(current, intro = texts.settings.updateIntro)
+                    WhatsNew(shown)
+                }
+            } else {
+                UpdateProgress(current, intro = texts.settings.updateIntro)
+            }
+        },
         confirmButton = {
             when (current) {
                 is AppUpdateState.Available, is AppUpdateState.NeedsPermission ->
@@ -100,6 +115,26 @@ internal fun AppUpdateDialog(controller: AppController) {
             if (canPostpone) AppButton(texts.common.later, close, kind = ButtonKind.Quiet)
         },
     )
+}
+
+/** „Was ist neu“: intro and the entries under their headings, as plain text. */
+@Composable
+private fun WhatsNew(notes: ReleaseNotes) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(texts.settings.whatsNew, style = MaterialTheme.typography.titleMedium)
+        notes.intro.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        notes.sections.forEach { section ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (section.title.isNotEmpty()) Text(section.title, style = MaterialTheme.typography.titleSmall)
+                section.items.forEach { item ->
+                    Row {
+                        Text("•  ", style = MaterialTheme.typography.bodyMedium)
+                        Text(item, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** „Über anynear“ section in the settings: version and update. */

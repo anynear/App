@@ -65,10 +65,18 @@ private object UserDefaultsRawAccess : RawKeyValueAccess {
 
 actual fun platformRawKeyValueAccess(): RawKeyValueAccess = UserDefaultsRawAccess
 
-/** iOS cannot restart itself: quit, the restore happens on the next opening. */
+/** Set by the MainViewController: replaces the controller within the process. */
+internal var restartHandler: (() -> Unit)? = null
+
+/**
+ * iOS cannot start itself anew, and quitting looks like a crash to the person (tester report: after the emergency card
+ * code the app closed although the phone was added). So the MainViewController builds a new controller that reads
+ * the stored state, as a new start would. Only without it (no UI, e.g. in an extension) quit as before.
+ */
 actual fun restartApp() {
-    // Write settings before quitting; the keychain writes immediately anyway (ADR 0042).
+    // Write settings first; the keychain writes immediately anyway (ADR 0042).
     sharedDefaults.synchronize()
+    restartHandler?.let { return it() }
     platform.posix.exit(0)
 }
 

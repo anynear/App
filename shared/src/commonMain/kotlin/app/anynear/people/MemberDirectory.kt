@@ -70,22 +70,31 @@ data class CircleMember(
     val image: ImageRef?,
     /** Their devices in this circle. */
     val devices: List<String>,
+    /** Name from the person's own profile; differs from [name] if one gave them an own name ([ContactNames]). */
+    val profileName: String = name,
 )
 
 /**
  * The others in [circleId], one entry per person (ADR 0042): all devices of a person count once, one's own
  * devices ([ownPerson], [ownDevice]) are left out, since they are already the own line „(du)“. Name and picture as in
- * [Person.merge]: the name of the last entry, the picture changed last.
+ * [Person.merge]: the name of the last entry (covered by an own name from [ownNames]), the picture changed last.
  */
-fun circleMembers(members: List<Member>, circleId: String, ownPerson: String?, ownDevice: String?): List<CircleMember> =
+fun circleMembers(
+    members: List<Member>,
+    circleId: String,
+    ownPerson: String?,
+    ownDevice: String?,
+    ownNames: Map<String, String> = emptyMap(),
+): List<CircleMember> =
     members.filter { it.circleId == circleId && !isOwn(it, ownPerson, ownDevice) }
         .groupBy { it.personId }
         .map { (personId, entries) ->
             CircleMember(
                 personId = personId,
-                name = entries.last().name,
+                name = ownNames[personId] ?: entries.last().name,
                 image = entries.maxByOrNull { it.imageTs }?.takeIf { it.imageTs > 0 }?.image,
                 devices = entries.map { it.deviceId }.distinct(),
+                profileName = entries.last().name,
             )
         }
         .sortedBy { it.name.lowercase() }

@@ -60,6 +60,7 @@ import app.anynear.app.AppController
 import app.anynear.attachments.Attachment
 import app.anynear.attachments.AttachmentKind
 import app.anynear.attachments.mimeTypeOf
+import app.anynear.mesh.ChatMessage
 import app.anynear.attachments.AttachmentState
 import app.anynear.attachments.DraftAttachment
 import app.anynear.data.PersonalFiles
@@ -454,14 +455,36 @@ private class SaveFeedback(val text: String, val ok: Boolean)
  */
 private suspend fun saveAttachment(controller: AppController, attachment: Attachment): SaveFeedback? {
     val bytes = controller.attachmentBytes(attachment.blobId) ?: return SaveFeedback(texts.chat.attachmentGone, ok = false)
-    val name = attachment.name.ifEmpty {
-        if (attachment.kind == AttachmentKind.IMAGE) "${AppConfig.APP_NAME}-${attachment.blobId.take(8)}.jpg" else fallbackName(attachment)
-    }
+    val name = handOutName(attachment)
     return when (val result = saveToDevice(bytes, name, mimeTypeOf(attachment.kind, name))) {
         is SaveResult.Saved -> SaveFeedback(texts.chat.savedIn(result.where), ok = true)
         SaveResult.Handed -> null
         SaveResult.Failed -> SaveFeedback(texts.chat.saveFailed, ok = false)
     }
+}
+
+/** File name when an attachment leaves the app: its own, otherwise „anynear-….jpg“, „Dokument.pdf“ or „Datei“. */
+private fun handOutName(attachment: Attachment): String = attachment.name.ifEmpty {
+    when (attachment.kind) {
+        AttachmentKind.IMAGE -> "${AppConfig.APP_NAME}-${attachment.blobId.take(8)}.jpg"
+        AttachmentKind.AUDIO -> "${AppConfig.APP_NAME}-${attachment.blobId.take(8)}.m4a"
+        else -> fallbackName(attachment)
+    }
+}
+
+/**
+ * „Teilen…“ under a message: its text and attachments into the system's share menu (Android sharesheet, iOS share
+ * menu), only on this explicit request. The automatic text preview of a voice message stays behind. `null` if the
+ * menu opened, otherwise what is to be said.
+ */
+internal suspend fun shareMessage(controller: AppController, message: ChatMessage): String? {
+    val files = message.attachments.map { a ->
+        val bytes = controller.attachmentBytes(a.blobId) ?: return texts.chat.attachmentGone
+        val name = handOutName(a)
+        HandedFile(bytes, name, mimeTypeOf(a.kind, name))
+    }
+    val text = if (message.attachments.any { it.transcribed }) "" else message.text.trim()
+    return if (shareContent(text, files)) null else texts.files.cantOpen
 }
 
 /** Put an attachment into a storage (ADR 0040, 0049); `null` if it worked, otherwise what is to be said. */

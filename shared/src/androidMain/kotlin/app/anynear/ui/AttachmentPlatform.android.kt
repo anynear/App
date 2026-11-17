@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import app.anynear.AppConfig
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Intent
@@ -332,6 +333,47 @@ internal actual fun shareFile(bytes: ByteArray, name: String, mimeType: String):
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
     val send = Intent(Intent.ACTION_SEND).setType(mimeType).putExtra(Intent.EXTRA_STREAM, uri)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    return try {
+        context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    } catch (e: ActivityNotFoundException) {
+        false
+    }
+}
+
+/**
+ * Sharesheet with a whole message: text as EXTRA_TEXT, files as briefly decrypted copies in the cache (directory
+ * `open`, emptied each time, as with [shareFile]). One file ACTION_SEND, several ACTION_SEND_MULTIPLE.
+ */
+internal actual fun shareContent(text: String, files: List<HandedFile>): Boolean {
+    val context = AndroidPlatform.requireContext()
+    val dir = File(context.cacheDir, "open").apply { mkdirs() }
+    if (files.isNotEmpty()) dir.listFiles()?.forEach { it.delete() }
+    val uris = files.mapIndexed { i, f ->
+        // Own subdirectory per file, so that two files of the same name do not overwrite each other.
+        val file = File(File(dir, i.toString()).apply { mkdirs() }, handOverName(f.name, f.mimeType))
+        file.writeBytes(f.bytes)
+        FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+    }
+    val types = files.map { it.mimeType }.distinct()
+    val type = when {
+        files.isEmpty() -> "text/plain"
+        types.size == 1 -> types.single()
+        types.all { it.startsWith("image/") } -> "image/*"
+        else -> "*/*"
+    }
+    val send = when (uris.size) {
+        0 -> Intent(Intent.ACTION_SEND)
+        1 -> Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris.single())
+        else -> Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+    }.setType(type).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    if (text.isNotEmpty()) send.putExtra(Intent.EXTRA_TEXT, text)
+    // The read permission reaches the chosen app only via ClipData.
+    if (uris.isNotEmpty()) {
+        val clip = ClipData.newRawUri(null, uris.first())
+        uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
+        send.clipData = clip
+    }
     return try {
         context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         true

@@ -83,13 +83,14 @@ internal fun CirclesScreen(controller: AppController, onOpenCircle: (String) -> 
         CircleAction.Create -> CreateCircleDialog(controller, onDismiss = close, onCreated = { onOpenChat(Conversation.Circle(it)) })
         CircleAction.Join -> CircleInputDialog(
             title = texts.people.joinCircle,
-            confirm = texts.people.joinCircle,
+            confirm = texts.common.next,
             limit = null,
             singleLine = false,
             label = texts.people.inviteLink,
             placeholder = "https://anynear.app/k#…",
             onDismiss = close,
-            onConfirm = { controller.joinCircle(it) },
+            // As when opening or scanning the link: first „Dem Kreis … beitreten?“, nothing is joined before.
+            onConfirm = { controller.offerInvite(it) },
         )
         null -> Unit
     }

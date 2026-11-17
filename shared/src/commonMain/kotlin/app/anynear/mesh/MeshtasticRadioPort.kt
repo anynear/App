@@ -18,7 +18,8 @@ import kotlinx.coroutines.flow.stateIn
 
 /**
  * Radio for the ANMP core (ADR 0057): ANMP packets always on `PRIVATE_APP` ([MeshLink.sendData]) and always to all,
- * on channel 0 if it is suitable and the relays allow it ([channel0Allowed], ADR 0054 §1, implementation plan phase 1),
+ * on channel 0 if it is suitable and the radio list allows it in the current area ([channel0Allowed], `channel0`,
+ * ADR 0054 §1),
  * otherwise in the radio channel `anynear` (ADR 0051, 0061). [onSent] receives the packet ID of every transmission.
  */
 class MeshtasticRadioPort(

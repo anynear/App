@@ -43,6 +43,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -410,7 +411,15 @@ private fun MainScreen(controller: AppController) {
                     } else {
                         null
                     }
-                    Column(Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()) {
+                    Column(
+                        Modifier.padding(padding).consumeWindowInsets(padding).imePadding().fillMaxSize()
+                            // Swipe from the left edge (iOS): the screen follows the finger to the right.
+                            .graphicsLayer {
+                                val pulled = BackSwipe.progress.floatValue
+                                translationX = pulled * size.width
+                                alpha = 1f - 0.4f * pulled
+                            },
+                    ) {
                         CompositionLocalProvider(
                             LocalBelowHeader provides banner,
                             LocalHeaderStatus provides { RadioHeaderStatus(controller, onClick = { if (details.lastOrNull() !is Detail.Connections) showDetail(Detail.Connections()) }) },
@@ -431,9 +440,11 @@ private fun MainScreen(controller: AppController) {
                                             openChat(conversation)
                                         }
                                     },
-                                    title = texts.chat.shareTitle,
-                                    question = texts.chat.shareQuestion,
-                                    preview = sharedNow.text.trim().ifEmpty { sharedNow.files.joinToString(", ") { it.name } },
+                                    title = if (sharedNow.forward) texts.chat.forwardTitle else texts.chat.shareTitle,
+                                    question = if (sharedNow.forward) texts.chat.forwardQuestion else texts.chat.shareQuestion,
+                                    preview = sharedNow.text.trim().ifEmpty {
+                                        sharedNow.files.joinToString(", ") { it.name }.ifEmpty { sharedNow.drafts.joinToString(", ") { draftLabel(it) } }
+                                    },
                                     invitedCircle = remember(sharedNow) { controller.invitedOwnCircle(sharedNow.text) },
                                 )
                             } else when (val detail = details.lastOrNull()) {
@@ -596,7 +607,7 @@ private fun MainScreen(controller: AppController) {
     UnknownDeviceDialog(controller)
     ReplaceDeviceDialog(controller)
     PasswordRequestDialog(controller)
-    pending?.let { PendingInviteDialog(controller, it.circleName) }
+    pending?.let { PendingInviteDialog(controller, it) }
     pendingContact?.let { PendingContactDialog(controller, it.name) }
     pendingChannel?.let { if (alerts != null) PendingChannelDialog(alerts, it) }
     val linkOpen = pending != null || pendingContact != null || pendingChannel != null
@@ -764,11 +775,16 @@ private fun BackgroundHintDialog(controller: AppController, restriction: Backgro
 
 /** Opened invitation link: only after „Beitreten“ does one become a member. */
 @Composable
-private fun PendingInviteDialog(controller: AppController, circleName: String) {
+private fun PendingInviteDialog(controller: AppController, invite: AppController.InviteOffer) {
     AppDialog(
         onDismissRequest = controller::dismissPendingInvite,
-        title = { Text(texts.setup.joinCircleConfirmTitle(circleName)) },
-        text = { Text(texts.setup.joinCircleConfirmText, Modifier.verticalScroll(rememberScrollState())) },
+        title = { Text(texts.setup.joinCircleConfirmTitle(invite.circleName)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (invite.inviter.isNotEmpty()) Text(texts.setup.invitedBy(invite.inviter), fontWeight = FontWeight.SemiBold)
+                Text(texts.setup.joinCircleConfirmText)
+            }
+        },
         confirmButton = { AppButton(texts.setup.join, { controller.acceptPendingInvite(controller.ownName.value.ifBlank { texts.common.me }) }) },
         dismissButton = { AppButton(texts.setup.dontJoin, controller::dismissPendingInvite, kind = ButtonKind.Quiet) },
     )

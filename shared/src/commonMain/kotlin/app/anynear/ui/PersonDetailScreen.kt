@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,16 +66,22 @@ internal fun PersonDetailScreen(
     var confirmRemove by remember(peer, askRemove) { mutableStateOf(askRemove) }
     var confirmDeleteHistory by remember { mutableStateOf(false) }
     var choosingCircle by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    // Own name only for people with anynear (person ID), not for support (ADR 0065).
+    val supportPeer by controller.supportPeer.collectAsState()
+    val renamable = person?.deviceId != null && person.peer != supportPeer
     // Removing exists for contacts you saved yourself: radio contacts without the app and app contacts from a
     // contact link or from direct messages (~direct). Whoever is known only through a circle stays as long as
     // this circle exists.
     val radioContact = person?.radioContact?.takeIf { person.deviceId == null }
     val deviceId = person?.deviceId
-    val directContact = deviceId != null && members.any { it.deviceId == deviceId && it.circleId == MemberDirectory.DIRECT_CONTACTS }
+    // By person (ADR 0042): [deviceId] is the person ID, the entries carry device IDs.
+    val directContact = person?.isIn(members, MemberDirectory.DIRECT_CONTACTS) == true
     // Own circles in which the person is still missing; inviting means: passing on their invitation link.
     // The conversation can always be deleted, even if the person is no longer a contact and nothing else is left here.
     val hasHistory = messages.any { it.conversation == Conversation.Direct(peer) }
-    val inviteCircles = circles.filter { c -> !c.removed && (deviceId == null || members.none { it.circleId == c.id && it.deviceId == deviceId }) }
+    val inviteCircles = circles.filter { c -> !c.removed && (deviceId == null || person?.isIn(members, c.id) != true) }
 
     AppHeader(title = name, leading = { HeaderBackButton(onBack) })
     Column(
@@ -84,6 +91,15 @@ internal fun PersonDetailScreen(
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             PersonAvatar(controller, peer, person?.image, 112.dp, enlargeable = true)
             Text(name, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
+            // Own name: the name from the person's profile stays visible, small below it.
+            if (person != null && person.hasOwnName && person.profileName.isNotBlank()) {
+                Text(
+                    texts.people.profileNameLine(person.profileName),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
             Text(
                 when {
                     // Radio without anynear (e.g. the Meshtastic app): say clearly that only radio works.
@@ -97,6 +113,13 @@ internal fun PersonDetailScreen(
             )
         }
         AppButton(texts.chat.writeMessage, onWrite, Modifier.fillMaxWidth(), kind = ButtonKind.Main, icon = AppIcons.Nachrichten)
+        if (renamable) {
+            AppButton(texts.people.changeName, { renaming = true }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary, icon = AppIcons.Stift)
+        }
+        // Pass this contact on to another contact (ADR 0116); both are asked before they can write to each other.
+        if (directContact) {
+            AppButton(texts.people.shareContact, { sharing = true }, Modifier.fillMaxWidth(), kind = ButtonKind.Quiet, icon = AppIcons.Teilen)
+        }
 
         // Only when something last came from the person, and by which route; no statement about now.
         AppSection(texts.people.lastReached, footer = texts.people.lastReachedFooter) {
@@ -168,6 +191,10 @@ internal fun PersonDetailScreen(
         }
     }
 
+    if (renaming && person != null) {
+        ContactNameDialog(controller, person, onDismiss = { renaming = false })
+    }
+
     if (choosingCircle) {
         ActionsDialog(texts.people.inviteWhichCircle(name), onDismiss = { choosingCircle = false }) {
             inviteCircles.forEach { circle ->
@@ -181,6 +208,10 @@ internal fun PersonDetailScreen(
                 )
             }
         }
+    }
+
+    if (sharing) {
+        ShareContactDialog(controller, peer, name, onDismiss = { sharing = false })
     }
 
     if (confirmRemove && (radioContact != null || directContact)) {
@@ -221,6 +252,48 @@ internal fun PersonDetailScreen(
     }
 }
 
+/**
+ * „Namen ändern“: an own name for [person] that only applies to oneself (on all own devices) and covers the name from
+ * their profile everywhere. „Zurücksetzen“ shows the profile name again.
+ */
+@Composable
+private fun ContactNameDialog(controller: AppController, person: app.anynear.people.Person, onDismiss: () -> Unit) {
+    var name by remember(person.peer) { mutableStateOf(person.name) }
+    AppDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(texts.people.changeName) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = ContactNameLimit.accept(name, it) },
+                    singleLine = true,
+                    label = { Text(texts.people.contactNameLabel) },
+                    placeholder = person.profileName.takeIf { it.isNotBlank() }?.let { { Text(it) } },
+                    supportingText = ContactNameLimit.hint(name)?.let { { TextLimitHint(it) } },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(texts.people.contactNameHint, style = MaterialTheme.typography.bodySmall)
+                if (person.hasOwnName) {
+                    Text(texts.people.profileNameLine(person.profileName), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AppButton(texts.people.resetName, {
+                        controller.setContactName(person.peer, "")
+                        onDismiss()
+                    }, kind = ButtonKind.Quiet)
+                }
+            }
+        },
+        confirmButton = {
+            AppButton(texts.common.done, onClick = {
+                // Empty or the profile name again: no own name.
+                controller.setContactName(person.peer, if (name.trim() == person.profileName.trim()) "" else name)
+                onDismiss()
+            })
+        },
+        dismissButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
+    )
+}
+
 /** Delete the conversation with [peer] on this device, from the person page and from „Chats“ (long press). */
 @Composable
 internal fun DeleteHistoryDialog(controller: AppController, peer: String, name: String, onDismiss: () -> Unit, onDeleted: () -> Unit = {}) {
@@ -256,3 +329,37 @@ internal fun rememberLastSeen(controller: AppController, peer: String): String? 
 /** „Zuletzt erreichbar heute, 14:05“, „… gestern, 14:05“, „… Montag, 14:05“, otherwise with the date. */
 internal fun lastSeenLabel(atMillis: Long, nowMillis: Long = Clock.System.now().toEpochMilliseconds()): String =
     texts.people.lastSeen(formatDayAndTime(atMillis, nowMillis))
+
+/**
+ * „Kontakt teilen“ (ADR 0116): choose who gets [name] introduced. Only own app contacts, not circles or other apps; the
+ * introduced person is asked before anything is passed on.
+ */
+@Composable
+private fun ShareContactDialog(controller: AppController, peer: String, name: String, onDismiss: () -> Unit) {
+    val people by controller.people.collectAsState()
+    val members by controller.members.collectAsState()
+    val others = people.filter { p ->
+        p.peer != peer && p.isIn(members, MemberDirectory.DIRECT_CONTACTS)
+    }
+    ActionsDialog(texts.people.shareContactWho(name), onDismiss = onDismiss) {
+        Text(
+            texts.people.shareContactHint(name),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        if (others.isEmpty()) {
+            Text(texts.people.noOtherContacts, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        }
+        others.forEach { other ->
+            AppRow(
+                title = other.name,
+                leading = { PersonAvatar(controller, other.peer, other.image, 40.dp) },
+                onClick = {
+                    onDismiss()
+                    controller.introduce(peer, other.peer)
+                },
+            )
+        }
+    }
+}

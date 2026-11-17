@@ -53,6 +53,14 @@ class RadioAreas(
         combine(radioList, _choice, _located) { list, chosen, found -> targetOf(list, chosen, found) }
             .stateIn(scope, SharingStarted.Eagerly, targetOf(radioList.value, _choice.value, _located.value))
 
+    /**
+     * Whether ANMP may go out on channel 0 in the current area (`channel0` of the radio list, ADR 0054 §1): the chosen
+     * area, else the located one. Without list or area, channel 0 stays allowed; `false` means only `anynear`.
+     */
+    val channel0: StateFlow<Boolean> =
+        combine(radioList, _choice, _located) { list, chosen, found -> channel0Of(list, chosen, found) }
+            .stateIn(scope, SharingStarted.Eagerly, channel0Of(radioList.value, _choice.value, _located.value))
+
     /** Is an area set, chosen or located? Without one the app writes no radio settings (ADR 0054 §1b). */
     val known: StateFlow<Boolean> =
         target.map { it.area != null }.stateIn(scope, SharingStarted.Eagerly, target.value.area != null)
@@ -109,6 +117,13 @@ class RadioAreas(
             list ?: return RadioTarget.DEFAULT
             val area = chosen?.let(list::region) ?: located?.let(list::region) ?: return RadioTarget.DEFAULT
             return RadioTarget.of(area) ?: RadioTarget.DEFAULT
+        }
+
+        /** `channel0` of the area [targetOf] picks; `true` without list or area. */
+        fun channel0Of(list: RadioList?, chosen: String?, located: String?): Boolean {
+            list ?: return true
+            val area = chosen?.let(list::region) ?: located?.let(list::region) ?: return true
+            return area.channel0
         }
     }
 }

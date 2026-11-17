@@ -210,6 +210,8 @@ class MessageStore(
             radioPacketId = if (current.radioPacketId != 0) current.radioPacketId else other.radioPacketId,
             senderName = current.senderName ?: other.senderName,
             replyTo = other.replyTo ?: current.replyTo,
+            // Not over radio (ADR 0118): the mark comes with the internet copy.
+            passedOn = other.passedOn || current.passedOn,
         )
     }
 

@@ -97,6 +97,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import app.anynear.app.AboLimit
 import app.anynear.app.AboPreview
@@ -168,6 +169,12 @@ internal fun ChatScreen(
         }
     }
     var draftsLoaded by remember(conversation) { mutableStateOf(false) }
+    // The draft came from „Weiterleiten“ (ADR 0118); gone once it is sent or emptied.
+    var passedOn by remember(conversation) { mutableStateOf(controller.draftPassedOn(conversation)) }
+    LaunchedEffect(conversation, draft, drafts, draftsLoaded) {
+        if (draftsLoaded && passedOn && draft.isBlank() && drafts.isEmpty()) passedOn = false
+    }
+    LaunchedEffect(conversation, passedOn) { controller.saveDraftPassedOn(conversation, passedOn) }
     LaunchedEffect(conversation) {
         // Do not displace attachments already selected if loading takes longer.
         drafts = (controller.draftAttachments(conversation) + drafts).take(AttachmentLimits.MAX_PER_MESSAGE)
@@ -291,9 +298,7 @@ internal fun ChatScreen(
     }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
-    }
+    StickToEnd(listState, conversation, messages.lastOrNull { it.outgoing }?.localId)
     // Search in the conversation: list of hits instead of history; a hit jumps to its place and lights up briefly.
     var searching by remember(conversation) { mutableStateOf(false) }
     var query by remember(conversation) { mutableStateOf("") }
@@ -406,26 +411,30 @@ internal fun ChatScreen(
                     }
                     val sender = if (message.outgoing || isDirect) null else message.fromPeer ?: PeerId.node(message.fromNodeNum)
                     val answered = message.replyTo?.let { ref -> answeredMessage(messages, ref) }
-                    MessageBubble(
-                        controller = controller,
-                        message = message,
-                        quote = message.replyTo?.let { quoteOf(controller, answered) },
-                        onQuoteClick = {
-                            // Jump to the answered message and let it light up briefly; gone: say so (ADR 0092).
-                            if (answered != null) highlighted = answered.localId
-                            else controller.showNotice(texts.chat.answeredMessageGone)
-                        },
-                        onReply = controller.replyRefOf(message)?.let { { replyTo = message } },
-                        senderName = if (message.outgoing) null else controller.senderLabel(message),
-                        isDirect = isDirect,
-                        highlighted = message.localId == highlighted,
-                        open = message.localId == openMessage,
-                        onOpen = { opened -> openMessage = if (opened) message.localId else openMessage.takeIf { it != message.localId } },
-                        onError = { error = it },
-                        avatar = sender?.let { peer ->
-                            { PersonAvatar(controller, peer, people.firstOrNull { it.peer == peer }?.image, 32.dp, enlargeable = true) }
-                        },
-                    )
+                    val reply = controller.replyRefOf(message)?.takeIf { !message.deleted }?.let { { replyTo = message } }
+                    // Pull to the right to answer, like the „Antworten“ in the details.
+                    SwipeToReply(reply) {
+                        MessageBubble(
+                            controller = controller,
+                            message = message,
+                            quote = message.replyTo?.let { quoteOf(controller, answered) },
+                            onQuoteClick = {
+                                // Jump to the answered message and let it light up briefly; gone: say so (ADR 0092).
+                                if (answered != null) highlighted = answered.localId
+                                else controller.showNotice(texts.chat.answeredMessageGone)
+                            },
+                            onReply = reply,
+                            senderName = if (message.outgoing) null else controller.senderLabel(message),
+                            isDirect = isDirect,
+                            highlighted = message.localId == highlighted,
+                            open = message.localId == openMessage,
+                            onOpen = { opened -> openMessage = if (opened) message.localId else openMessage.takeIf { it != message.localId } },
+                            onError = { error = it },
+                            avatar = sender?.let { peer ->
+                                { PersonAvatar(controller, peer, people.firstOrNull { it.peer == peer }?.image, 32.dp, enlargeable = true) }
+                            },
+                        )
+                    }
                     if (message.localId == replySoonAfter) SystemLine(texts.support.replySoon, onReinvite = null)
                 }
             }
@@ -460,6 +469,7 @@ internal fun ChatScreen(
                     linkDraft = null
                 }
             }
+            if (passedOn) PassedOnLabel(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp))
             replyTo?.let { answered ->
                 ReplyBar(
                     title = if (answered.outgoing) texts.chat.replyToYou else texts.chat.replyTo(controller.senderLabel(answered)),
@@ -553,9 +563,10 @@ internal fun ChatScreen(
                         // A voice message has no text of its own, only the automatic text preview.
                         val link = linkDraft?.takeIf { voiceDraft == null && draft.contains(it.url) }
                         val reply = replyTo?.let(controller::replyRefOf)
-                        when (val result = controller.send(conversation, if (voiceDraft != null) "" else draft, drafts, heard, link, reply)) {
+                        when (val result = controller.send(conversation, if (voiceDraft != null) "" else draft, drafts, heard, link, reply, passedOn)) {
                             AppController.SendResult.Sent -> {
                                 replyTo = null
+                                passedOn = false
                                 linkDraft = null
                                 linkDismissed = null
                                 draft = ""
@@ -724,6 +735,7 @@ private fun MessageBubble(
         onOpen(details)
     }
     var deleting by remember(message.localId) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var fileAction by remember(message.localId) { mutableStateOf<FileAction?>(null) }
     FileActionDialog(controller, fileAction, onDismiss = { fileAction = null }) { text, ok ->
         show(false)
@@ -765,6 +777,9 @@ private fun MessageBubble(
                     if (senderName != null) {
                         Text(senderName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    if (message.passedOn) {
+                        PassedOnLabel(color = if (outgoing && !failed) colors.onOutgoingBubble.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     quote?.let {
                         // In the own dark bubble the signal colour carries the accent, in others the primary colour.
                         val own = outgoing && !failed
@@ -779,7 +794,8 @@ private fun MessageBubble(
                     val textColor = if (outgoing && !failed) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface
                     // Invitations as a card instead of as a link; the stored text keeps the link.
                     val invites = remember(message.text) { findInviteLinks(message.text) }
-                    val visibleText = remember(message.text, invites) { withoutInviteLinks(message.text, invites) }
+                    // With an introduction (ADR 0116) the card says it all; the text is only the stand-in for older apps.
+                    val visibleText = remember(message.text, invites, message.intro) { if (message.intro != null) "" else withoutInviteLinks(message.text, invites) }
                     if (visibleText.isNotEmpty()) {
                         if (message.attachments.any { it.transcribed }) TextPreviewLabel(visibleText, textColor.copy(alpha = 0.75f))
                         Text(linkified(visibleText, textColor), style = MaterialTheme.typography.bodyLarge, color = textColor)
@@ -788,6 +804,8 @@ private fun MessageBubble(
                         val sender = senderName ?: controller.senderLabel(message)
                         invites.forEach { InviteCardBox(controller, it, sender, own = outgoing) }
                     }
+                    // Introduced contact (ADR 0116): a card with „Hinzufügen“ instead of the stand-in text alone.
+                    message.intro?.let { IntroCardBox(controller, it, senderName ?: controller.senderLabel(message), own = outgoing) }
                     // Preview from the sender (ADR 0069), only for a link that is in the text.
                     message.link?.takeIf { message.text.contains(it.url) }?.let { LinkPreviewCard(controller, it, textColor) }
                     if (message.awaitsAttachments) {
@@ -830,6 +848,19 @@ private fun MessageBubble(
                             reply()
                         }
                     }
+                    // Forward and share take the whole message: only once every attachment is on the phone.
+                    if (files.size == message.attachments.size) {
+                        MessageAction(texts.chat.forward, AppIcons.Weiterleiten) {
+                            scope.launch {
+                                val problem = controller.forward(message)
+                                if (problem == null) show(false) else onError(problem)
+                            }
+                        }
+                        // Into the system's share menu only via this explicit button (files are otherwise viewed in the app).
+                        MessageAction(texts.chat.shareMessage, AppIcons.Teilen) {
+                            scope.launch { shareMessage(controller, message)?.let(onError) }
+                        }
+                    }
                     if (files.isNotEmpty()) {
                         MessageAction(texts.chat.download, AppIcons.Speichern) { fileAction = FileAction.Download(files) }
                         MessageAction(texts.chat.toFiles, AppIcons.Schloss) { fileAction = FileAction.ToFiles(files) }
@@ -867,6 +898,16 @@ private fun MessageBubble(
     }
 }
 
+/** „Weitergeleitet“ with an arrow (ADR 0118): above the content of a passed on message and above the input of such a draft. */
+@Composable
+private fun PassedOnLabel(modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Row(modifier.padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(AppIcons.Weiterleiten, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(texts.chat.passedOn, style = MaterialTheme.typography.labelMedium, color = color, fontStyle = FontStyle.Italic)
+    }
+}
+
 /** Action below an opened message: icon and word without a frame, a little smaller than a button; still 40 dp high to hit. */
 @Composable
 private fun MessageAction(text: String, icon: ImageVector, color: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) {
@@ -901,6 +942,15 @@ internal fun replySnippet(m: ChatMessage): String = when {
     m.attachments.any { it.kind == AttachmentKind.AUDIO } -> texts.chat.voiceMessage
     m.attachments.any { it.kind == AttachmentKind.IMAGE } -> texts.chat.photo
     else -> texts.chat.file
+}
+
+/** Name of a draft attachment for a preview line: the file name, otherwise „Foto“, „Sprachnachricht“ or „Datei“. */
+internal fun draftLabel(d: DraftAttachment): String = d.name.ifEmpty {
+    when (d.kind) {
+        AttachmentKind.AUDIO -> texts.chat.voiceMessage
+        AttachmentKind.IMAGE -> texts.chat.photo
+        else -> texts.chat.file
+    }
 }
 
 @Composable

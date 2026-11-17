@@ -393,6 +393,20 @@ internal object AppIcons {
         }
     }
 
+    /** Forward a message: [Antworten] mirrored, the arrow points away. */
+    val Weiterleiten: ImageVector = icon("Weiterleiten") {
+        line {
+            moveTo(15f, 7f)
+            lineTo(20f, 12f)
+            lineTo(15f, 17f)
+        }
+        line {
+            moveTo(20f, 12f)
+            horizontalLineTo(10f)
+            curveTo(6.7f, 12f, 4f, 14.7f, 4f, 18f)
+        }
+    }
+
     /** Back: arrow to the left. */
     val Zurueck: ImageVector = icon("Zurueck") {
         line {

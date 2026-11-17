@@ -119,6 +119,17 @@ class ContactFlowAppTest {
         info.deviceId to core.ownContactLink()
     }
 
+    /** Another test device founds [circle]: its invitation link, created by [inviter]. */
+    private fun App.otherInvite(inviter: String, circle: String): String = runBlocking {
+        val core = AnmpCore(
+            scope, LocalNet.offlineConfig(),
+            AnmpPlatform(MemorySecretStore(), MemoryKeyValueStore(), MemoryBlobStore(), connector = LocalNet.offlineConnector),
+        )
+        core.open()
+        core.setProfile(inviter)
+        core.inviteLink(core.createCircle(circle).id)!!
+    }
+
     private fun withApp(hooks: PlatformHooks = NoOpPlatformHooks(), block: (App) -> Unit) {
         // Errors in the background of this app stay here and do not reach other tests.
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, _ -> })
@@ -150,12 +161,55 @@ class ContactFlowAppTest {
     }
 
     @Test
+    fun pastedInviteLinkAsksWithCircleAndInviterAndCancelLeavesNothing() = withApp { a ->
+        val link = a.otherInvite("Testperson Ben", "Testkreis")
+        // Pasted under „Kreise“ like opened or scanned: nothing joined before „Beitreten“.
+        assertNull(a.controller.offerInvite("Tritt bei: $link"))
+        val offer = assertNotNull(a.controller.pendingInvite.value)
+        assertEquals("Testkreis", offer.circleName)
+        assertEquals("Testperson Ben", offer.inviter)
+        assertTrue(a.controller.circles.value.none { it.name == "Testkreis" }, "vor der Bestätigung nicht beigetreten")
+        a.controller.dismissPendingInvite()
+        assertNull(a.controller.pendingInvite.value)
+        Thread.sleep(300)
+        assertTrue(a.controller.circles.value.none { it.name == "Testkreis" })
+        assertNull(a.controller.openRequest.value)
+    }
+
+    @Test
+    fun openedInviteLinkJoinsOnlyAfterJoin() = withApp { a ->
+        val link = a.otherInvite("Testperson Ben", "Testkreis")
+        assertNull(runBlocking { a.controller.receiveLink(link) })
+        assertEquals("Testperson Ben", a.controller.pendingInvite.value?.inviter)
+        assertTrue(a.controller.circles.value.none { it.name == "Testkreis" })
+        assertNull(a.controller.acceptPendingInvite("Testperson Anna"))
+        assertNull(a.controller.pendingInvite.value)
+        eventually { a.controller.circles.value.any { it.name == "Testkreis" } }
+    }
+
+    @Test
+    fun brokenOrForeignInviteIsRefusedWithoutAsking() = withApp { a ->
+        assertEquals(texts.status.inviteLinkBroken, a.controller.offerInvite("https://anynear.app/k#kaputt"))
+        assertEquals(texts.status.notAnInviteLink, a.controller.offerInvite("Hallo"))
+        assertNull(a.controller.pendingInvite.value)
+    }
+
+    @Test
     fun onlyAddSavesContactWithoutOpeningChat() = withApp { a ->
         val (ben, link) = a.otherDevice("Testperson Ben")
         runBlocking { a.controller.receiveLink(link) }
         assertNull(a.controller.acceptPendingContact(openChat = false))
         eventually { a.controller.isDirectContact(ben) }
         assertNull(a.controller.openRequest.value)
+    }
+
+    @Test
+    fun addingThroughALinkSaysTheRequestWasSent() = withApp { a ->
+        // ADR 0116 §7: the other person decides; the notice says so instead of „ist jetzt in deinen Kontakten“.
+        val (_, link) = a.otherDevice("Testperson Ben")
+        runBlocking { a.controller.receiveLink(link) }
+        assertNull(a.controller.acceptPendingContact(openChat = false))
+        assertEquals(texts.people.requestSent("Testperson Ben"), a.controller.notice.value)
     }
 
     @Test
@@ -285,6 +339,52 @@ class ContactFlowAppTest {
         override fun share(text: String) {
             shared += text
         }
+    }
+
+    private class NotificationHooks : NoOpPlatformHooks() {
+        val shown = mutableListOf<app.anynear.app.MessageNotification>()
+        val cancelled = mutableListOf<String>()
+        override fun showMessageNotification(notification: app.anynear.app.MessageNotification) {
+            shown += notification
+        }
+        override fun cancelMessageNotification(key: String) {
+            cancelled += key
+        }
+    }
+
+    @Test
+    fun replyFromNotificationSendsLikeTheChat() {
+        val hooks = NotificationHooks()
+        withApp(hooks) { a ->
+            val (ben, link) = a.otherDevice("Testperson Ben")
+            runBlocking { a.controller.receiveLink(link) }
+            a.controller.acceptPendingContact(openChat = false)
+            eventually { a.controller.isDirectContact(ben) }
+            val chat = Conversation.Direct(PeerId.device(ben))
+            val key = "p:" + chat.peer
+            assertTrue(runBlocking { a.controller.replyFromNotification(key, "Okay", wait = 1.seconds) })
+            assertTrue(a.controller.messages.value.any { it.conversation == chat && it.outgoing && it.text == "Okay" })
+            assertTrue(key in hooks.cancelled, "Benachrichtigung ist weg")
+        }
+    }
+
+    @Test
+    fun replyFromNotificationThatCannotGoShowsTheReason() {
+        val hooks = NotificationHooks()
+        withApp(hooks) { a ->
+            // Nobody known under this ID: no path, the notification comes back with the reason.
+            val key = "p:" + PeerId.device(b64.encode(ByteArray(32) { 7 }))
+            assertFalse(runBlocking { a.controller.replyFromNotification(key, "Ja", wait = 1.seconds) })
+            val shown = hooks.shown.single()
+            assertEquals(texts.status.personUnreachable, shown.replyError)
+            assertTrue(shown.canReply)
+        }
+    }
+
+    @Test
+    fun noReplyFromNotificationOfPublicChats() = withApp { a ->
+        assertFalse(runBlocking { a.controller.replyFromNotification("o:nearby", "Ja", wait = 1.seconds) })
+        assertTrue(a.controller.messages.value.none { it.outgoing })
     }
 
     @Test

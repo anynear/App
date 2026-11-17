@@ -17,12 +17,22 @@ import app.anynear.attachments.RadioAnnouncement
 import app.anynear.chats.key
 import app.anynear.data.KeyValueStore
 import app.anynear.i18n.texts
+import app.anynear.lifesigns.lifeSignWake
 import app.anynear.mesh.Conversation
+import app.anynear.andp.B64
+import kotlin.time.Clock
 import app.anynear.mesh.PeerId
+import app.anynear.people.ContactNames
 import kotlinx.coroutines.delay
 import kotlinx.serialization.builtins.ListSerializer
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.json.Json
+
+/**
+ * Result of a wake-up: [found] is the notification to show; without it, [nothingToShow] says that the fetch was
+ * complete and found nothing for this device. `false` with nothing found: no answer or no time, a message may wait.
+ */
+class WakeOutcome(val found: WakeNotification?, val nothingToShow: Boolean)
 
 /**
  * Work of the iOS Notification Service Extension after a wake-up (ADR 0009): the ANMP core fetches all spaces
@@ -34,23 +44,39 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
      * Content for the wake-up for the object [objectId] (field `o` of the push message, ANDP §10): preferably exactly
      * this message, otherwise the newest newly found one. `null`: nothing new, the fixed text stays.
      */
-    suspend fun contentFor(objectId: String?): WakeNotification? {
-        shown().firstOrNull { it.objectId == objectId }?.let { return it }
+    suspend fun contentFor(objectId: String?): WakeNotification? = outcomeFor(objectId).found
+
+    /**
+     * Like [contentFor], and says whether there was nothing to show ([WakeOutcome.nothingToShow]): every space
+     * answered and nothing new for this device (an own message from another device, an alert outside the region or
+     * already shown, a duplicate wake-up of another holder). Then the extension may swallow the wake-up (ADR 0117).
+     */
+    suspend fun outcomeFor(objectId: String?): WakeOutcome {
+        var complete = false
         // A person with several devices gets one entry per device, waking happens only once (ANMP postPerson).
         // If the wake-up arrives before the entry for this device, retry briefly instead of staying with the fixed text.
         repeat(RETRIES) { attempt ->
-            fetchOnce(objectId)?.let { return it }
+            // Each holder of the space wakes for the same object (up to three, same collapse-id). The extension may run
+            // for them at the same time: what a parallel run has shown in the meantime counts as found, otherwise this
+            // run would find nothing and its fixed text would replace the right one.
+            shown().firstOrNull { it.objectId == objectId }?.let { return WakeOutcome(it, nothingToShow = false) }
+            val (found, done) = fetchOnce(objectId)
+            found?.let { return WakeOutcome(it, nothingToShow = false) }
+            complete = done
             if (attempt < RETRIES - 1) delay(RETRY_PAUSE)
         }
-        return null
+        shown().firstOrNull { it.objectId == objectId }?.let { return WakeOutcome(it, nothingToShow = false) }
+        return WakeOutcome(null, nothingToShow = complete)
     }
 
-    private suspend fun fetchOnce(objectId: String?): WakeNotification? {
-        val found = core.wakeFetch().mapNotNull { event ->
+    private suspend fun fetchOnce(objectId: String?): Pair<WakeNotification?, Boolean> {
+        val result = core.wakeFetchResult()
+        val found = result.events.mapNotNull { event ->
             when (event) {
                 is CoreEvent.Message -> notificationOf(event)
                 is CoreEvent.Reaction -> notificationOf(event)
                 is CoreEvent.Alert -> notificationOf(event)
+                is CoreEvent.AliveWake -> notificationOf(event)
                 else -> null
             }
         }
@@ -61,7 +87,7 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
             ?: found.maxByOrNull { it.timestampMillis }
         // Only the shown alert counts as notified; the others are reported by the app as soon as it fetches itself.
         chosen?.alertKey?.let(AlertSettingsStore(store)::markNotified)
-        return chosen
+        return chosen to result.complete
     }
 
     /**
@@ -81,6 +107,24 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
         val n = notificationOf(alert, channel, channelSettings.copy(notify = true)) ?: return null
         if (!channelSettings.notify) return wakeOf(n, key, sound = null, level = WakeLevel.PASSIVE)
         return wakeOf(n, key, sound = n.sound.file.takeIf { n.loudness == AlertLoudness.Loud }, level = wakeLevelOf(n.loudness))
+    }
+
+    /** Sign of life of another person (ADR 0083): as the app shows it to helpers ([lifeSignWake]). */
+    private fun notificationOf(e: CoreEvent.AliveWake): WakeNotification? {
+        val circle = core.circle(e.circleId) ?: return null
+        val who = core.membersOf(e.circleId).lastOrNull { (it.personId ?: it.deviceId) == e.owner }?.name?.ifBlank { null } ?: texts.status.someone
+        val planId = B64.encode(e.alive.plan)
+        val n = lifeSignWake(store, planId, e.circleId, who, circle.name, e.alive, e.timestampMillis, Clock.System.now().toEpochMilliseconds()) ?: return null
+        return WakeNotification(
+            objectId = e.objectId,
+            key = n.key,
+            title = n.title,
+            body = n.text,
+            timestampMillis = n.timestampMillis,
+            alertChannel = n.channelId,
+            sound = n.sound.file.takeIf { n.loudness == AlertLoudness.Loud },
+            level = wakeLevelOf(n.loudness),
+        )
     }
 
     private fun wakeOf(n: AlertNotification, key: String, sound: String?, level: String) = WakeNotification(
@@ -103,7 +147,7 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
 
     private fun notificationOf(m: CoreEvent.Message): WakeNotification? {
         val known = (m.conversation as? CoreConversation.Circle)?.let { core.membersOf(it.circleId) }.orEmpty() + core.membersOf(MemberState.CONTACTS)
-        val sender = known.lastOrNull { it.deviceId == m.fromDevice }?.name?.ifBlank { null } ?: m.fromName
+        val sender = known.lastOrNull { it.deviceId == m.fromDevice }?.let(::nameOf) ?: m.fromName
         val text = m.text.ifEmpty { RadioAnnouncement.radioText("", m.attachments.mapNotNull { AttachmentKind.fromWire(it.type) }) }
         return when (val c = m.conversation) {
             is CoreConversation.Circle -> {
@@ -118,7 +162,7 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
     private fun notificationOf(r: CoreEvent.Reaction): WakeNotification? {
         if (r.emoji.isEmpty() || r.targetTag != core.identity.value?.tag) return null
         val known = (r.conversation as? CoreConversation.Circle)?.let { core.membersOf(it.circleId) }.orEmpty() + core.membersOf(MemberState.CONTACTS)
-        val sender = known.lastOrNull { it.deviceId == r.fromDevice }?.name?.ifBlank { null } ?: texts.status.someone
+        val sender = known.lastOrNull { it.deviceId == r.fromDevice }?.let(::nameOf) ?: texts.status.someone
         val text = texts.chat.reactedToYours(r.emoji)
         return when (val c = r.conversation) {
             is CoreConversation.Circle -> {
@@ -128,6 +172,14 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
             is CoreConversation.Direct -> WakeNotification(r.objectId, Conversation.Direct(PeerId.device(c.personId)).key(), sender, text, r.timestampMillis)
         }
     }
+
+    /**
+     * Name of [member]: an own name for the person ([ContactNames], in the shared store like in the app) covers the
+     * name from their profile; `null` if neither is known.
+     */
+    private fun nameOf(member: MemberState): String? =
+        ContactNames.active(ContactNames.decode(store.getString(ContactNames.SETTING_KEY)))[member.person]
+            ?: member.name.ifBlank { null }
 
     private fun shown(): List<WakeNotification> =
         store.getString(SHOWN_KEY)?.let { runCatching { json.decodeFromString(serializer, it) }.getOrNull() }.orEmpty()

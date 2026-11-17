@@ -250,6 +250,16 @@ internal actual fun openWithOtherApp(bytes: ByteArray, name: String, mimeType: S
 internal actual fun shareFile(bytes: ByteArray, name: String, mimeType: String): Boolean =
     openWithOtherApp(bytes, name, mimeType)
 
+/** Share menu with a whole message: the text and the files as briefly decrypted copies (as [openWithOtherApp]). */
+internal actual fun shareContent(text: String, files: List<HandedFile>): Boolean {
+    val urls = files.mapIndexed { i, f -> tempFile("share-$i", f.bytes, f.name, f.mimeType) ?: return false }
+    val items: List<Any> = listOfNotNull(text.takeIf { it.isNotEmpty() }) + urls
+    if (items.isEmpty()) return false
+    val top = topViewController() ?: return false
+    top.presentViewController(UIActivityViewController(items, null), animated = true, completion = null)
+    return true
+}
+
 /**
  * iOS: share menu with the file, containing „Bild sichern“ (Photos) or „In Dateien sichern“. That way
  * anynear needs no access to the photo library.

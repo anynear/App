@@ -118,6 +118,8 @@ interface SetupTexts {
     val dontAdd: String
     fun inviteToCircle(circle: String): String
     val inviteStartText: String
+    fun inviteStartTextFrom(name: String): String
+    fun invitedBy(name: String): String
     fun contactFrom(name: String): String
     fun contactStartText(name: String): String
     fun joinPointName(ownName: String): String
@@ -294,6 +296,8 @@ internal object SetupTextsDe : SetupTexts {
     override val dontAdd = "Nicht hinzufügen"
     override fun inviteToCircle(circle: String) = "Einladung in den Kreis „$circle“"
     override val inviteStartText = "Im Kreis schreibt ihr zusammen. Erst stellst du dich kurz vor, dann entscheidest du, ob du beitrittst."
+    override fun inviteStartTextFrom(name: String) = "$name lädt dich ein. Im Kreis schreibt ihr zusammen. Erst stellst du dich kurz vor, dann entscheidest du, ob du beitrittst."
+    override fun invitedBy(name: String) = "Eingeladen von $name"
     override fun contactFrom(name: String) = "Kontakt von $name"
     override fun contactStartText(name: String) = "Mit diesem Link kannst du $name zu deinen Kontakten hinzufügen. Erst stellst du dich kurz vor, dann entscheidest du."
     override fun joinPointName(ownName: String) = "Alle im Kreis sehen deinen Namen „$ownName“ und dein Bild."
@@ -464,6 +468,8 @@ internal object SetupTextsEn : SetupTexts {
     override val dontAdd = "Don't add"
     override fun inviteToCircle(circle: String) = "Invitation to the circle “$circle”"
     override val inviteStartText = "In a circle you write together. First you introduce yourself, then you decide whether to join."
+    override fun inviteStartTextFrom(name: String) = "$name invited you. In a circle you write together. First you introduce yourself, then you decide whether to join."
+    override fun invitedBy(name: String) = "Invited by $name"
     override fun contactFrom(name: String) = "Contact from $name"
     override fun contactStartText(name: String) = "With this link you can add $name to your contacts. First you introduce yourself, then you decide."
     override fun joinPointName(ownName: String) = "Everyone in the circle sees your name “$ownName” and your picture."

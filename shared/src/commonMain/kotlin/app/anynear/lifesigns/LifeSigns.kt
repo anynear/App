@@ -5,6 +5,7 @@ import app.anynear.alerts.AlertNotification
 import app.anynear.alerts.AlertPriority
 import app.anynear.alerts.AlertSound
 import app.anynear.alerts.NotificationAction
+import app.anynear.anmp.AnmpAlive
 import app.anynear.anmp.AnmpAliveState
 import app.anynear.anmp.AnmpCareState
 import app.anynear.anmp.core.AliveLogic
@@ -346,10 +347,77 @@ class LifeSigns(
         const val ACTION_LOOKING = "looking"
         const val ACTION_END = "end"
         private const val KEY_CIRCLE = "lifesigns.circle"
-        private const val KEY_SHOWN = "lifesigns.shown"
-        private const val KEY_LOUDNESS = "lifesigns.loudness"
+        internal const val KEY_SHOWN = "lifesigns.shown"
+        internal const val KEY_LOUDNESS = "lifesigns.loudness"
         private const val KEY_SINGLE = "lifesigns.single"
 
         fun channelOf(planId: String) = CHANNEL_PREFIX + planId
     }
 }
+
+/**
+ * Notification of the iOS notification extension for a sign of life of another person (ADR 0117, ADR 0083): the same
+ * texts, loudness and „shown“ marks as [LifeSigns] uses for helpers, so that the app does not show it again once it
+ * runs. Only what a packet itself says: start, battery, no confirmation, a late confirmation after a warning, end.
+ * Warnings by time (hint, „nicht erreichbar“) need the running app. `null`: nothing to show.
+ */
+fun lifeSignWake(
+    store: KeyValueStore,
+    planId: String,
+    circleId: String,
+    who: String,
+    circleName: String,
+    alive: AnmpAlive,
+    atMillis: Long,
+    now: Long,
+): AlertNotification? {
+    val json = Json { ignoreUnknownKeys = true }
+    val map = MapSerializer(String.serializer(), String.serializer())
+    fun read(key: String) = store.getString(key)?.let { runCatching { json.decodeFromString(map, it) }.getOrNull() }.orEmpty()
+    val shown = read(LifeSigns.KEY_SHOWN)[planId].orEmpty()
+    fun mark(v: String) = store.putString(
+        LifeSigns.KEY_SHOWN,
+        json.encodeToString(map, (read(LifeSigns.KEY_SHOWN) + (planId to v)).entries.toList().takeLast(50).associate { it.key to it.value }),
+    )
+    val volume = read(LifeSigns.KEY_LOUDNESS)[circleId]?.let { v -> LifeSignLoudness.entries.firstOrNull { it.name == v } } ?: LifeSignLoudness.Loud
+    val lt = texts.lifeSigns
+    val due = alive.due * 1000
+    val (title, text, priority, loud) = when (alive.state) {
+        AnmpAliveState.START -> {
+            if (shown.isNotEmpty()) return null
+            mark("start")
+            // Older check-ins are taken over quietly, as in the app.
+            if (now - alive.start * 1000 >= 3_600_000L) return null
+            Quad(lt.started(who), lt.startedText(alive.label.orEmpty(), formatTime(alive.until * 1000)), AlertPriority.Info, false)
+        }
+        AnmpAliveState.MISSED -> {
+            if (shown == "alarm:$due") return null
+            mark("alarm:$due")
+            Quad(lt.missedTitle(who), lt.missedText, AlertPriority.Alarm, volume == LifeSignLoudness.Loud)
+        }
+        AnmpAliveState.BATTERY -> {
+            if (shown == "battery:$atMillis") return null
+            mark("battery:$atMillis")
+            Quad(lt.battery(who, (alive.battery ?: 0).coerceIn(0, 100)), "", AlertPriority.Info, false)
+        }
+        AnmpAliveState.END, AnmpAliveState.TIMEOUT -> {
+            if (shown.isEmpty() || shown == "ended") return null
+            mark("ended")
+            Quad(if (alive.state == AnmpAliveState.TIMEOUT) lt.timedOut(who) else lt.ended(who), lt.endedText, AlertPriority.Info, false)
+        }
+        else -> {
+            // A confirmation only matters to someone who was warned.
+            if (!shown.startsWith("hint") && !shown.startsWith("alarm")) return null
+            mark("ok:$due")
+            Quad(lt.confirmedAgain(who), "", AlertPriority.Info, false)
+        }
+    }
+    if (volume == LifeSignLoudness.Off) return null
+    val loudness = if (loud) AlertLoudness.Loud else AlertLoudness.Normal
+    return AlertNotification(
+        key = LifeSigns.channelOf(planId) + "/n", channelId = LifeSigns.channelOf(planId), channelName = circleName, title = title, text = text,
+        priority = priority, loudness = loudness, sound = if (loud) AlertSound.Alarm else AlertSound.Hint, timestampMillis = atMillis,
+    )
+}
+
+private data class Quad(val title: String, val text: String, val priority: AlertPriority, val loud: Boolean)

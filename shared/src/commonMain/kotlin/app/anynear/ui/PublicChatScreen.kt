@@ -107,8 +107,8 @@ internal fun PublicChatScreen(controller: AppController, publicRadio: PublicRadi
             publicRadio.markRead(channel)
             controller.cancelPublicNotification(channel)
         }
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1 + if (showIntro) 1 else 0)
     }
+    StickToEnd(listState, channel, messages.lastOrNull { it.outgoing }?.id)
 
     fun send() {
         notice = when (val result = publicRadio.send(channel, draft)) {

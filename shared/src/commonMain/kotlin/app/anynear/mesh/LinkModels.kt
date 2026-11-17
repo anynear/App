@@ -197,8 +197,12 @@ data class ChatMessage(
     val deleted: Boolean = false,
     /** Preview of the first web link in the text, loaded by the sender (ADR 0069). */
     val link: LinkPreview? = null,
+    /** A contact introduced in this message (ADR 0116); [text] is only the stand-in for older apps. */
+    val intro: ContactIntro? = null,
     /** The message this one answers (ADR 0092); looked up by its ID in the same conversation. */
     val replyTo: ReplyRef? = null,
+    /** The sender passed on a message it got („Weitergeleitet“, ADR 0118); no origin. */
+    val passedOn: Boolean = false,
 )
 
 /**
@@ -207,6 +211,13 @@ data class ChatMessage(
  */
 @Serializable
 data class ReplyRef(val mid: String, val tag: String)
+
+/**
+ * A contact introduced in a message (ADR 0116): the person [person] (person ID) named [name], introduced by
+ * [byPerson], valid until [until] (ms). [card]: the signed card the core needs to ask for the contact.
+ */
+@Serializable
+data class ContactIntro(val id: String, val person: String, val name: String, val byPerson: String, val until: Long, val card: String)
 
 /**
  * Preview of a web link (ADR 0069): [url] is in the text of the message; [image] is a small photo that is loaded

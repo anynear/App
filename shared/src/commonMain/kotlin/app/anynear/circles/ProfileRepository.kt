@@ -6,6 +6,7 @@ import app.anynear.app.DarkMode
 import app.anynear.chats.ReadUntil
 import app.anynear.data.KeyValueStore
 import app.anynear.images.ImageRef
+import app.anynear.people.ContactNames
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -169,6 +170,27 @@ class ProfileRepository(private val store: KeyValueStore) {
         setReadUntil(_readUntil.value + (key to sentAt))
     }
 
+    private val _contactNames = MutableStateFlow(ContactNames.decode(store.getString(ContactNames.SETTING_KEY)))
+
+    /** Own names for other people with their change time, for the person on all own devices ([ContactNames]). */
+    val contactNameEntries: StateFlow<Map<String, ContactNames.Entry>> = _contactNames.asStateFlow()
+
+    private fun setContactNameEntries(names: Map<String, ContactNames.Entry>) {
+        if (names == _contactNames.value) return
+        store.putString(ContactNames.SETTING_KEY, ContactNames.encode(names))
+        _contactNames.value = names
+    }
+
+    /** Gives the person [personId] the own [name]; blank: back to the name from their profile („Zurücksetzen“). */
+    fun setContactName(personId: String, name: String, now: Long = kotlin.time.Clock.System.now().toEpochMilliseconds()) {
+        val cleaned = ContactNames.clean(name)
+        val current = _contactNames.value[personId]
+        if ((current?.n ?: "") == cleaned) return
+        // Strictly later than the stored change, so that it also wins with a clock that is slightly behind.
+        val at = maxOf(now, (current?.t ?: 0L) + 1)
+        setContactNameEntries(_contactNames.value + (personId to ContactNames.Entry(cleaned, at)))
+    }
+
     private val _darkMode = MutableStateFlow(
         store.getString(DARK_MODE_KEY)?.let { name -> DarkMode.entries.firstOrNull { it.name == name } } ?: DarkMode.SYSTEM,
     )
@@ -197,11 +219,12 @@ class ProfileRepository(private val store: KeyValueStore) {
         AlertAcks.SETTING_KEY to AlertAcks.encode(_alertAcks.value),
         AlertsSeen.SETTING_KEY to AlertsSeen.encode(_alertsSeen.value),
         ReadUntil.SETTING_KEY to ReadUntil.encode(_readUntil.value),
+        ContactNames.SETTING_KEY to ContactNames.encode(_contactNames.value),
     )
 
     /** If a setting of the person changes, the new state is here. */
     val personalSettingsChanged: kotlinx.coroutines.flow.Flow<Map<String, String>> =
-        kotlinx.coroutines.flow.combine(_darkMode, _usageStats, _alertAcks, _alertsSeen, _readUntil) { _, _, _, _, _ -> personalSettings() }
+        kotlinx.coroutines.flow.combine(listOf(_darkMode, _usageStats, _alertAcks, _alertsSeen, _readUntil, _contactNames)) { personalSettings() }
 
     /**
      * Takes over settings of the person from another own device; unknown ones are left alone. Acknowledged
@@ -222,6 +245,12 @@ class ProfileRepository(private val store: KeyValueStore) {
         values[ReadUntil.SETTING_KEY]?.let(ReadUntil::decode)?.let { remote ->
             val merged = ReadUntil.merge(_readUntil.value, remote)
             setReadUntil(merged)
+            newer = newer || merged != remote
+        }
+        // Own names for other people: per person the later change wins.
+        values[ContactNames.SETTING_KEY]?.let(ContactNames::decode)?.let { remote ->
+            val merged = ContactNames.merge(_contactNames.value, remote)
+            setContactNameEntries(merged)
             newer = newer || merged != remote
         }
         val remote = values[AlertAcks.SETTING_KEY]?.let(AlertAcks::decode) ?: return newer

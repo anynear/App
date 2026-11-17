@@ -29,6 +29,11 @@ class DraftStore(private val store: KeyValueStore, private val files: Attachment
 
     fun setText(conversation: Conversation, text: String) = store.putString(textKey(conversation), text.ifEmpty { null })
 
+    /** The draft came from „Weiterleiten“ (ADR 0118): it goes out marked „Weitergeleitet“. */
+    fun passedOn(conversation: Conversation): Boolean = store.getString(passedOnKey(conversation)) == "1"
+
+    fun setPassedOn(conversation: Conversation, passedOn: Boolean) = store.putString(passedOnKey(conversation), "1".takeIf { passedOn })
+
     /** Reads the attachments from the device; missing or unreadable ones are left out. */
     fun attachments(conversation: Conversation): List<DraftAttachment> = saved(conversation).mapNotNull { a ->
         val kind = AttachmentKind.entries.firstOrNull { it.name == a.kind } ?: return@mapNotNull null
@@ -52,10 +57,13 @@ class DraftStore(private val store: KeyValueStore, private val files: Attachment
     /** The conversation got a new key (a device became a person, ADR 0042): its draft moves along, unless [to] has one. */
     fun move(from: Conversation, to: Conversation) {
         if (from == to) return
+        // The mark belongs to the draft it came with: only along if [to] had nothing yet.
+        if (text(to).isEmpty() && saved(to).isEmpty()) store.putString(passedOnKey(to), store.getString(passedOnKey(from)))
         if (text(to).isEmpty()) store.putString(textKey(to), store.getString(textKey(from)))
         if (saved(to).isEmpty()) store.putString(filesKey(to), store.getString(filesKey(from)))
         store.putString(textKey(from), null)
         store.putString(filesKey(from), null)
+        store.putString(passedOnKey(from), null)
     }
 
     private fun saved(conversation: Conversation): List<SavedAttachment> =
@@ -64,6 +72,8 @@ class DraftStore(private val store: KeyValueStore, private val files: Attachment
     private fun textKey(conversation: Conversation) = "draft.text." + conversation.key()
 
     private fun filesKey(conversation: Conversation) = "draft.files." + conversation.key()
+
+    private fun passedOnKey(conversation: Conversation) = "draft.passedOn." + conversation.key()
 
     companion object {
         const val DIR_NAME = "drafts"

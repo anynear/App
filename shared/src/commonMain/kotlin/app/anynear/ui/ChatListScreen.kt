@@ -72,6 +72,7 @@ internal fun ChatListScreen(
     val bluetoothHint by controller.bluetoothHint.collectAsState()
     val suggestedDevice by controller.suggestedDevice.collectAsState()
     val loading by controller.historyLoading.collectAsState()
+    val requests by controller.contactRequests.collectAsState()
     val publicRadio = controller.publicRadio
     val publicChannels by (publicRadio?.available ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }).collectAsState()
     val communityOffer by (publicRadio?.offer ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) }).collectAsState()
@@ -111,6 +112,19 @@ internal fun ChatListScreen(
                     // In the list, so that both scroll along with large font and the button covers nothing.
                     // After a crash ask once whether we get a report (ADR 0082).
                     item(key = "crash-report") { CrashCard(controller, onOpen) }
+                    // Persons asking to become a contact (ADR 0116): agree or decline; what they wrote waits until then.
+                    requests.forEach { r ->
+                        item(key = "request-${r.person}") {
+                            PermissionCard(
+                                texts.people.requestTitle(r.name),
+                                controller.requestOrigin(r),
+                                onAllow = { controller.acceptContactRequest(r.person) },
+                                onLater = { controller.declineContactRequest(r.person) },
+                                allowLabel = texts.people.requestAgree,
+                                laterLabel = texts.people.requestDecline,
+                            )
+                        }
+                    }
                     item(key = "emergency-card") { EmergencyCardReminder(controller) }
                     if (bluetoothHint) {
                         item(key = "bluetooth-hint") {

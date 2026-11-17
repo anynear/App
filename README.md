@@ -161,7 +161,8 @@ versions.
 Over radio, circle and direct messages go as ANMP packets on `PRIVATE_APP` to everyone on channel 0 when it is open
 (default key, no own name), otherwise in the channel `anynear`; only the ANMP content is confidential (ADR 0051, 0054,
 0057). Receiving works on both. With `ok_to_mqtt` in the radio profile, community gateways upload these packets to
-their brokers. The switch `AppConfig.RADIO_CHANNEL0` is meant to come from the relays later (ADR 0054).
+their brokers. Whether channel 0 is used comes from `channel0` of the radio area in the signed radio list (ADR 0054
+§1), so it can be switched per area without an app update; `false` means only `anynear`.
 
 ## What the app can do
 

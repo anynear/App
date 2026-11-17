@@ -142,9 +142,9 @@ internal fun FamilySetupScreen(controller: AppController, modifier: Modifier = M
             pendingInvite != null || pendingContact != null -> when (linkStep) {
                 LinkStep.Start -> if (pendingInvite != null) {
                     Welcome(
-                        // The link names only the circle, not reliably who invites.
                         title = texts.setup.inviteToCircle(pendingInvite.circleName),
-                        text = texts.setup.inviteStartText,
+                        // Links of older apps do not name who invites.
+                        text = pendingInvite.inviter.takeIf { it.isNotEmpty() }?.let(texts.setup::inviteStartTextFrom) ?: texts.setup.inviteStartText,
                         top = { CircleAvatar(controller, pendingInvite.circleId, image = null, size = 96.dp) },
                         action = texts.common.next,
                         onAction = { linkStep = LinkStep.Name },
@@ -183,6 +183,7 @@ internal fun FamilySetupScreen(controller: AppController, modifier: Modifier = M
                     Confirm(
                         top = { CircleAvatar(controller, pendingInvite.circleId, image = null, size = 72.dp) },
                         title = texts.setup.joinCircleConfirmTitle(pendingInvite.circleName),
+                        subtitle = pendingInvite.inviter.takeIf { it.isNotEmpty() }?.let(texts.setup::invitedBy),
                         points = listOf(
                             texts.setup.joinPointName(savedName),
                             texts.setup.joinPointChat,
@@ -369,6 +370,7 @@ private fun Confirm(
     title: String,
     points: List<String>,
     action: String,
+    subtitle: String? = null,
     onAction: () -> Unit,
     dismiss: String,
     onDismiss: () -> Unit,
@@ -379,6 +381,7 @@ private fun Confirm(
 ) {
     top()
     Text(title, style = MaterialTheme.typography.headlineMedium)
+    subtitle?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     AppSection {
         points.forEach { point ->
             Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -527,7 +527,9 @@ internal fun EraseWaitingScreen() {
 }
 
 /**
- * „Ich habe anynear schon“ during setup: with the other device (QR) or with the emergency card.
+ * „Ich habe anynear schon“ during setup: with the other device (QR) as the one clear way, the emergency card only as
+ * a small link below for when no other device is left (tester report: the card was taken although the other phone
+ * was at hand).
  */
 @Composable
 internal fun ReturningDialog(controller: AppController, onDismiss: () -> Unit) {
@@ -541,7 +543,9 @@ internal fun ReturningDialog(controller: AppController, onDismiss: () -> Unit) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     AppRow(texts.devices.returningOtherDevice, subtitle = texts.devices.returningOtherDeviceText, icon = AppIcons.QrCode, chevron = true, onClick = { page = 1 })
-                    AppRow(texts.devices.returningCard, subtitle = texts.devices.returningCardText, icon = AppIcons.Schluessel, chevron = true, onClick = { page = 2 })
+                    Spacer(Modifier.height(12.dp))
+                    Text(texts.devices.returningCardText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AppButton(texts.devices.returningCard, { page = 2 }, kind = ButtonKind.Quiet, icon = AppIcons.Schluessel)
                 }
             },
             confirmButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
@@ -560,7 +564,8 @@ private fun PairingDialog(controller: AppController, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     AppDialog(
         onDismissRequest = onDismiss,
-        title = { Text(texts.devices.pairingTitle) },
+        // First the name, then the code to scan.
+        title = { Text(if (link == null) texts.devices.pairingNameTitle else texts.devices.pairingTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 val l = link
@@ -582,6 +587,8 @@ private fun PairingDialog(controller: AppController, onDismiss: () -> Unit) {
                     }
                     Text(texts.devices.pairingWaiting, style = MaterialTheme.typography.bodySmall)
                     CircularProgressIndicator()
+                    // The system camera opens the link in anynear; the way through the app only if that does not work.
+                    Text(texts.devices.pairingFallback, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
