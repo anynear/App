@@ -20,6 +20,8 @@ interface ChatTexts {
     /** Shared from another app: header and question of the selection of who it goes to. */
     val shareTitle: String
     val shareQuestion: String
+    val forwardTitle: String
+    val forwardQuestion: String
     val searchName: String
     val circles: String
     val contacts: String
@@ -93,6 +95,15 @@ interface ChatTexts {
     val saveFile: String
     val download: String
     val toFiles: String
+
+    /** Forward a message inside anynear to another person or circle. */
+    val forward: String
+
+    /** Hand a message to the system's share menu, only via this explicit button. */
+    val shareMessage: String
+
+    /** Mark of a passed on message and of such a draft (ADR 0118). */
+    val passedOn: String
     fun downloadTitle(count: Int): String
     fun downloadText(count: Int): String
     val savePhoto: String
@@ -275,6 +286,8 @@ interface ChatTexts {
     val showAnsweredMessage: String
     val replyUnavailable: String
     val answeredMessageGone: String
+    /** Text of an introduction for apps that do not know introductions yet (ADR 0116). */
+    fun introStandIn(name: String): String
 }
 
 internal object ChatTextsDe : ChatTexts {
@@ -290,6 +303,8 @@ internal object ChatTextsDe : ChatTexts {
     override val whoToMessage = "Wem möchtest du schreiben?"
     override val shareTitle = "Teilen"
     override val shareQuestion = "An wen soll das gehen?"
+    override val forwardTitle = "Weiterleiten"
+    override val forwardQuestion = "An wen weiterleiten?"
     override val searchName = "Name suchen"
     override val circles = "Kreise"
     override val contacts = "Kontakte"
@@ -333,7 +348,7 @@ internal object ChatTextsDe : ChatTexts {
 
     override val inviteSomeoneTitle = "Lade jemanden ein"
     override val inviteSomeoneText =
-        "Noch bist nur du in diesem Kreis. Schick den Einladungslink, z. B. per WhatsApp. Wer darauf tippt, ist sofort dabei."
+        "Noch bist nur du in diesem Kreis. Schick den Einladungslink, z. B. per WhatsApp. Wer darauf tippt, kann dann beitreten."
     override val invite = "Einladen"
 
     override val reactionYou = "dir"
@@ -352,6 +367,9 @@ internal object ChatTextsDe : ChatTexts {
     override val saveFile = "Datei auf dem Handy speichern"
     override val download = "Herunterladen"
     override val toFiles = "In Ablage speichern"
+    override val forward = "Weiterleiten"
+    override val shareMessage = "Teilen…"
+    override val passedOn = "Weitergeleitet"
     override fun downloadTitle(count: Int) = if (count == 1) "Möchtest du die Datei herunterladen?" else "Möchtest du die $count Dateien herunterladen?"
     override fun downloadText(count: Int) = if (count == 1) "Sie wird auf deinem Handy gespeichert." else "Sie werden auf deinem Handy gespeichert."
     override val savePhoto = "Foto auf dem Handy speichern"
@@ -501,6 +519,7 @@ internal object ChatTextsDe : ChatTexts {
     override val showAnsweredMessage = "Zur Nachricht springen"
     override val replyUnavailable = "Nachricht nicht verfügbar"
     override val answeredMessageGone = "Die Nachricht ist auf diesem Gerät nicht mehr da."
+    override fun introStandIn(name: String) = "Kontakt: $name"
 }
 
 internal object ChatTextsEn : ChatTexts {
@@ -516,6 +535,8 @@ internal object ChatTextsEn : ChatTexts {
     override val whoToMessage = "Who do you want to message?"
     override val shareTitle = "Share"
     override val shareQuestion = "Who should get this?"
+    override val forwardTitle = "Forward"
+    override val forwardQuestion = "Forward to whom?"
     override val searchName = "Search by name"
     override val circles = "Circles"
     override val contacts = "Contacts"
@@ -559,7 +580,7 @@ internal object ChatTextsEn : ChatTexts {
 
     override val inviteSomeoneTitle = "Invite someone"
     override val inviteSomeoneText =
-        "So far it's just you in this circle. Send the invite link, for example by WhatsApp. Anyone who taps it is in right away."
+        "So far it's just you in this circle. Send the invite link, for example by WhatsApp. Anyone who taps it can then join."
     override val invite = "Invite"
 
     override val reactionYou = "you"
@@ -578,6 +599,9 @@ internal object ChatTextsEn : ChatTexts {
     override val saveFile = "Save file to phone"
     override val download = "Download"
     override val toFiles = "Save to files"
+    override val forward = "Forward"
+    override val shareMessage = "Share…"
+    override val passedOn = "Forwarded"
     override fun downloadTitle(count: Int) = if (count == 1) "Do you want to download the file?" else "Do you want to download the $count files?"
     override fun downloadText(count: Int) = if (count == 1) "It will be saved on your phone." else "They will be saved on your phone."
     override val savePhoto = "Save photo to phone"
@@ -727,6 +751,7 @@ internal object ChatTextsEn : ChatTexts {
     override val showAnsweredMessage = "Go to message"
     override val replyUnavailable = "Message not available"
     override val answeredMessageGone = "This message is no longer on this device."
+    override fun introStandIn(name: String) = "Contact: $name"
 }
 
 /** 10000 → „10 000“ or „10,000“, as in the building blocks of the subscription preview. */

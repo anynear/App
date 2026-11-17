@@ -56,6 +56,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    // Local network (Android 17+): asked only when searching for a radio on purpose; declined, Android shows its own
+    // device picker instead, so no detour to the settings.
+    private val localNetworkPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { app.hooks.onLocalNetworkResult() }
+
     // Dialogs of Google Play for an update (flavor `play`, ADR 0096).
     private val storeUpdateLauncher =
         registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
@@ -73,6 +78,13 @@ class MainActivity : ComponentActivity() {
         app.hooks.notificationPermissionRequester = {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        app.hooks.localNetworkPermissionRequester = {
+            if (Build.VERSION.SDK_INT >= AndroidPlatformHooks.LOCAL_NETWORK_SDK) {
+                localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+            } else {
+                app.hooks.onLocalNetworkResult()
             }
         }
         app.hooks.locationPermissionRequester = {
@@ -185,6 +197,8 @@ class MainActivity : ComponentActivity() {
         app.hooks.permissionRequester = null
         app.hooks.notificationPermissionRequester = null
         app.hooks.locationPermissionRequester = null
+        app.hooks.localNetworkPermissionRequester = null
+        app.hooks.onLocalNetworkResult()
         app.hooks.store?.let { if (it.launcher === storeUpdateLauncher) it.launcher = null }
         super.onDestroy()
     }

@@ -133,6 +133,8 @@ kotlin {
             implementation(libs.ktor.client.darwin)
             implementation(libs.cryptography.provider.optimal)
             implementation(libs.multiplatform.settings)
+            // Swipe from the left edge = back (SystemBackHandler).
+            implementation(libs.navigationevent.compose)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

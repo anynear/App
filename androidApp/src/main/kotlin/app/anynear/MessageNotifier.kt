@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
+import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.IconCompat
 import app.anynear.app.MessageNotification
@@ -40,6 +41,8 @@ class MessageNotifier(private val context: Context) {
                 .build()
             style.addMessage(line.text, line.timestampMillis, sender)
         }
+        // A reply from the notification did not go: say so below the messages, as from oneself.
+        notification.replyError?.let { style.addMessage(texts.system.replyNotSent(it), System.currentTimeMillis(), null as Person?) }
         // Image of the circle or the person large next to the notification, as in the overview.
         val largeIcon = AvatarBitmaps.square(notification.image)
         // Only reactions are new: no „0 neuen Nachrichten“.
@@ -50,7 +53,7 @@ class MessageNotifier(private val context: Context) {
             .setContentTitle(AppBrand.name)
             .setContentText(newCount)
             .build()
-        val built = NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(AppBrand.notificationIcon)
             .setContentTitle(notification.title)
             .setContentText(notification.lines.lastOrNull()?.text ?: newCount)
@@ -67,7 +70,10 @@ class MessageNotifier(private val context: Context) {
             .setAutoCancel(true)
             // Own group with a summary, apart from the background notification ([NotificationGroups]).
             .setGroup(NotificationGroups.MESSAGES)
-            .build()
+            // Again after a failed reply, but without a second sound.
+            .setOnlyAlertOnce(notification.replyError != null)
+        if (notification.canReply) builder.addAction(replyAction(notification.key))
+        val built = builder.build()
         try {
             // Summary of app versions up to 13.11.2026, replaced by the one of [NotificationGroups].
             manager.cancel(OLD_SUMMARY_ID)
@@ -82,6 +88,24 @@ class MessageNotifier(private val context: Context) {
     private fun allowed(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * „Antworten“ with ready-made short replies: watches (Wear OS, Garmin) show them as quick replies, on the phone the
+     * text field stays free. Sends without opening the app ([MessageReplyReceiver]).
+     */
+    private fun replyAction(key: String): NotificationCompat.Action {
+        val input = RemoteInput.Builder(MessageReplyReceiver.KEY_TEXT)
+            .setLabel(texts.system.replyHint)
+            .setChoices(texts.system.quickReplies.toTypedArray())
+            .setAllowFreeFormInput(true)
+            .build()
+        return NotificationCompat.Action.Builder(AppBrand.notificationIcon, texts.system.reply, MessageReplyReceiver.intent(context, key))
+            .addRemoteInput(input)
+            .setAllowGeneratedReplies(true)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .build()
+    }
 
     private fun openIntent(key: String): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)

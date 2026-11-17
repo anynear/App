@@ -118,7 +118,18 @@ class StorageVersionTest {
     fun version7ChangesNothingStored() {
         val history = """[{"localId":"a","conversation":{"type":"circle","circleId":"k"},"fromNodeNum":0,"text":"Hallo","timestampMillis":1,"outgoing":false}]"""
         val raw = Raw(mapOf(StorageVersion.KEY to "6", "messages" to history))
-        assertEquals(7, StorageVersion.migrate(StorageVersion.Stores(raw, InMemorySecretStore()) { emptySet() }))
+        assertEquals(7, StorageVersion.migrate(StorageVersion.Stores(raw, InMemorySecretStore()) { emptySet() }, StorageVersion.MIGRATIONS.take(6), 7))
         assertEquals(history, raw.map["messages"])
+    }
+
+    /** 7 → 8: own names for other people are a new key `contact_names`; everything stored stays as it is. */
+    @Test
+    fun version8ChangesNothingStored() {
+        val history = """[{"localId":"a","conversation":{"type":"circle","circleId":"k"},"fromNodeNum":0,"text":"Hallo","timestampMillis":1,"outgoing":false}]"""
+        val raw = Raw(mapOf(StorageVersion.KEY to "7", "messages" to history, "read_until" to """{"c:k":1}"""))
+        assertEquals(8, StorageVersion.migrate(StorageVersion.Stores(raw, InMemorySecretStore()) { emptySet() }))
+        assertEquals(history, raw.map["messages"])
+        assertEquals("""{"c:k":1}""", raw.map["read_until"])
+        assertEquals(null, raw.map["contact_names"])
     }
 }

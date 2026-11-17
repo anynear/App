@@ -301,6 +301,10 @@ class CircleAppEndToEndTest {
         check(wake.key == Conversation.Circle(id).key())
         // The same wake-up from a second relay: the same text.
         check(WakeTexts(extension, store).contentFor(wake.objectId) == wake)
+        // A wake-up for something this device does not show (here: an unknown object): complete, nothing to show, so
+        // the extension may swallow it (ADR 0117).
+        val empty = WakeTexts(extension, store).outcomeFor("unbekannt")
+        check(empty.found == null && empty.nothingToShow) { "leerer Weckruf" }
     }
 
     /**

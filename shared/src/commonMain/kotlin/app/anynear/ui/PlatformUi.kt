@@ -1,10 +1,22 @@
 package app.anynear.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableFloatStateOf
 
-/** Intercept the system's back button (Android), e.g. from the chat back to the overview. */
+/**
+ * Intercept going back, e.g. from the chat to the overview: the system's back button on Android, the swipe from the
+ * left edge on iOS.
+ */
 @Composable
 internal expect fun SystemBackHandler(enabled: Boolean, onBack: () -> Unit)
+
+/**
+ * How far the finger has pulled the screen while swiping back from the left edge (iOS), 0 to 1; 0 when no swipe is
+ * running. The app lets the content follow the finger.
+ */
+internal object BackSwipe {
+    val progress = mutableFloatStateOf(0f)
+}
 
 /** Does Enter send in the chat (Mac) instead of starting a new line? Never on phone and tablet. */
 internal expect val enterSends: Boolean

@@ -198,7 +198,9 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
         now = { Clock.System.now().toEpochMilliseconds() },
         nameOf = { person ->
             if (person == core.identity.value?.personId) profile.ownName.value
-            else memberDirectory.members.value.firstOrNull { it.personId == person }?.name.orEmpty()
+            // An own name for the person ([app.anynear.people.ContactNames]) covers the name from their profile.
+            else app.anynear.people.ContactNames.active(profile.contactNameEntries.value)[person]
+                ?: memberDirectory.members.value.firstOrNull { it.personId == person }?.name.orEmpty()
         },
         circleName = { id -> core.circle(id)?.name.orEmpty() },
         helpersOf = { id ->

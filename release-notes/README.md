@@ -11,8 +11,9 @@ it, `vX.Y.Z-pre.<build>` (Semantic Versioning, `scripts/version.sh`). To aim for
 
 Both stop if the file is missing or incomplete.
 
-Write for the people who use anynear: what is new, what got better, what was fixed. Short sentences, no internal
-numbers, no names of people, nothing about the size or the operation of the network.
+Write for the people who use anynear: what is new, what got better, what was fixed. **One short sentence per entry**:
+the stores show only a few hundred characters (Google Play 500) and the app shows only what is new since the installed
+version. No internal numbers, no names of people, nothing about the size or the operation of the network.
 
 ## Format
 

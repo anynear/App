@@ -28,13 +28,38 @@ import app.anynear.app.CheckInNotification
 import app.anynear.app.Reminder
 import app.anynear.app.PlatformHooks
 import app.anynear.i18n.texts
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 
 class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
     private val _granted = MutableStateFlow(hasBluetoothPermissions())
     override val bluetoothPermissionGranted: StateFlow<Boolean> = _granted.asStateFlow()
+
+    private val _localNetwork = MutableStateFlow(hasLocalNetworkPermission())
+    override val localNetworkAllowed: StateFlow<Boolean> = _localNetwork.asStateFlow()
+
+    /** Like [permissionRequester], only for the local network (Android 17+); answers via [onLocalNetworkResult]. */
+    var localNetworkPermissionRequester: (() -> Unit)? = null
+
+    private var localNetworkAnswer: CompletableDeferred<Boolean>? = null
+
+    override suspend fun requestLocalNetworkPermission(): Boolean {
+        if (hasLocalNetworkPermission()) return true.also { _localNetwork.value = true }
+        val requester = localNetworkPermissionRequester ?: return false
+        val answer = CompletableDeferred<Boolean>().also { localNetworkAnswer = it }
+        withContext(Dispatchers.Main) { requester() }
+        return answer.await()
+    }
+
+    fun onLocalNetworkResult() {
+        refreshPermissions()
+        localNetworkAnswer?.complete(_localNetwork.value)
+        localNetworkAnswer = null
+    }
 
     /** Set by the visible Activity that can show the permission dialog. */
     var permissionRequester: (() -> Unit)? = null
@@ -134,6 +159,7 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
 
     fun refreshPermissions() {
         _granted.value = hasBluetoothPermissions()
+        _localNetwork.value = hasLocalNetworkPermission()
         _notificationNeeded.value = notificationPermissionMissing()
         _locationAllowed.value = location.allowed()
     }
@@ -343,11 +369,18 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
     private fun hasInternet(caps: NetworkCapabilities?): Boolean =
         caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 
+    private fun hasLocalNetworkPermission(): Boolean =
+        Build.VERSION.SDK_INT < LOCAL_NETWORK_SDK ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) == PackageManager.PERMISSION_GRANTED
+
     private fun hasBluetoothPermissions(): Boolean =
         requiredPermissions().all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
 
     companion object {
         private const val TAG = "App"
+
+        /** Android 17: local network only with `ACCESS_LOCAL_NETWORK` (for apps with target SDK 37). */
+        const val LOCAL_NETWORK_SDK = 37
 
         /** Needed for the connection. The app asks for notifications separately, with its own explanation. */
         fun requiredPermissions(): List<String> =

@@ -111,6 +111,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let info = response.notification.request.content.userInfo
+        // „Antworten“ (also from the Apple Watch): send without opening the app, then let iOS end it again.
+        if let reply = response as? UNTextInputNotificationResponse {
+            MainViewControllerKt.onNotificationReply(
+                conversation: info["conversation"] as? String,
+                text: reply.userText
+            ) { completionHandler() }
+            return
+        }
         if let channel = info["alertChannel"] as? String {
             MainViewControllerKt.onAlertOpened(channel: channel)
         } else if info["finder"] != nil {

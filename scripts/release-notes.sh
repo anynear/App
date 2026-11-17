@@ -28,6 +28,9 @@ for language in "${languages[@]}"; do
   awk -v want="## $language" '$0 == want { on = 1; next } /^## / { on = 0 } on && /^- / { n++ } END { exit n ? 0 : 1 }' "$file" \
     || die "section '## $language' of release-notes/$version.md has no entry (a line starting with '- ')"
 done
+# One short sentence per entry (README): the stores show only a few hundred characters.
+too_long=$(awk -v max=160 '/^- / { text = substr($0, 3); if (length(text) > max) print NR ": " text }' "$file")
+[ -z "$too_long" ] || { echo "$too_long" >&2; die "release-notes/$version.md has entries longer than 160 characters; one short sentence per entry"; }
 # Only notes of versions before the first public release carry a date line; a version that is released must not.
 if grep -qE '^Date:' "$file"; then die "release-notes/$version.md has a Date line; that is only for versions without a GitHub release"; fi
 if grep -nE 'TODO|TBD|XXX' "$file" >&2; then die "release-notes/$version.md still has placeholders"; fi

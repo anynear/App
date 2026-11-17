@@ -51,7 +51,7 @@ import app.anynear.people.Person
 internal fun originOf(person: Person, circleNames: Map<String, String>, members: List<Member>): String {
     if (person.deviceId == null) return texts.people.radioOnly
     val names = person.circleIds.mapNotNull(circleNames::get)
-    val added = members.any { it.deviceId == person.deviceId && it.circleId == MemberDirectory.DIRECT_CONTACTS }
+    val added = person.isIn(members, MemberDirectory.DIRECT_CONTACTS)
     return when {
         names.isEmpty() -> texts.chat.addedByYou
         added -> (listOf(texts.chat.addedByYou) + names).joinToString(" · ")
@@ -139,7 +139,13 @@ internal fun OwnCodeDialog(controller: AppController, onDismiss: () -> Unit) {
         confirmButton = {
             if (link != null) AppButton(texts.people.shareLink, { controller.shareOwnContact(); onDismiss() }, icon = AppIcons.Teilen)
         },
-        dismissButton = { link?.let { CopyButton(it) } ?: AppButton(texts.common.done, onDismiss, kind = ButtonKind.Quiet) },
+        // Always a way out: dialogs do not close by tapping outside, and iOS has no back gesture inside a dialog.
+        dismissButton = {
+            Row {
+                link?.let { CopyButton(it) }
+                AppButton(texts.common.done, onDismiss, kind = ButtonKind.Quiet)
+            }
+        },
     )
 }
 

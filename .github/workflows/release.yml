@@ -13,7 +13,8 @@
 #   android  signed APK (flavor direct) as GitHub release v<version> with the assets anynear-v<version>.apk and
 #            build.json (the website picks the newest release, pre-releases included, and the APK
 #            updates itself through the website), plus the app bundle for Google Play (flavor play) as a workflow
-#            artifact; with PLAY_SERVICE_ACCOUNT_JSON also released to the closed test track
+#            artifact; with PLAY_SERVICE_ACCOUNT_JSON also released to the closed test track, with the release notes as
+#            „What's new“
 #   ios      upload to TestFlight (closed beta, invited testers only), with the release notes as “What to Test”
 #   publish  attaches ios.json to the release and redeploys the website, which shows the newest release
 #
@@ -237,6 +238,43 @@ jobs:
           if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then echo "upload=true" >> "$GITHUB_OUTPUT"
           else echo "::notice::No PLAY_SERVICE_ACCOUNT_JSON, the app bundle stays an artifact."; fi
 
+      # „What's new“ in Google Play from the same release notes, German and English (whatsnew-<language>), only with what
+      # is new: a pre-release lists the entries that came since the release before it (testers update build by build),
+      # the version vX.Y.Z its whole file (people update from the version before). Google allows 500 characters per
+      # language; longer text ends after a whole entry with a link to all notes (scripts/store-notes.py).
+      - name: Release notes for Google Play
+        if: steps.play.outputs.upload == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          MARKETING: ${{ steps.version.outputs.marketing }}
+          PRE: ${{ steps.version.outputs.pre }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/whatsnew
+          known=()
+          if [ "$PRE" = true ]; then
+            # The release before this one (pre-release or version); this run has already created its own.
+            prev=$(gh release list --limit 50 --json tagName,isDraft,createdAt \
+              --jq '[.[] | select(.isDraft | not) | select(.tagName != env.TAG)
+                     | select(.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-pre\\.[0-9]+)?$"))] | sort_by(.createdAt) | last | .tagName // ""')
+            if [ -n "$prev" ]; then
+              gh release view "$prev" --json body --jq .body > "$RUNNER_TEMP/previous-notes.md"
+              known=(--known "$RUNNER_TEMP/previous-notes.md")
+              echo "Google Play lists what is new since $prev."
+            fi
+            more_de="Mehr dazu: https://github.com/anynear/App/releases/tag/$TAG"
+            more_en="More: https://github.com/anynear/App/releases/tag/$TAG"
+          else
+            more_de="Alles Neue: https://anynear.app/de/was-ist-neu/"
+            more_en="Everything new: https://anynear.app/en/whats-new/"
+          fi
+          python3 -I scripts/store-notes.py Deutsch "release-notes/$MARKETING.md" "${known[@]}" --max 500 \
+            --more "$more_de" --empty "Kleine Verbesserungen und Fehlerbehebungen." > dist/whatsnew/whatsnew-de-DE
+          python3 -I scripts/store-notes.py English "release-notes/$MARKETING.md" "${known[@]}" --max 500 \
+            --more "$more_en" --empty "Small improvements and fixes." > dist/whatsnew/whatsnew-en-US
+          head -c 2000 dist/whatsnew/*
+
       # Straight to the closed test (ADR 0089): the testers get it as soon as Google has reviewed the release; nothing to
       # release by hand in the Play Console. The default closed track has the id alpha; another closed track via the
       # repository variable PLAY_TRACK.
@@ -251,6 +289,7 @@ jobs:
           releaseFiles: App/dist/anynear-play-${{ steps.version.outputs.tag }}.aab
           releaseName: ${{ steps.version.outputs.name }}
           track: ${{ vars.PLAY_TRACK || 'alpha' }}
+          whatsNewDirectory: App/dist/whatsnew
           status: completed
 
   ios:

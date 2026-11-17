@@ -1,5 +1,8 @@
 package app.anynear
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.window.ComposeUIViewController
 import app.anynear.alerts.AlarmProblem
 import app.anynear.alerts.AlertNotification
@@ -7,8 +10,11 @@ import app.anynear.alerts.GeoPoint
 import app.anynear.app.MessageNotification
 import app.anynear.app.Reminder
 import app.anynear.push.AlertNotifications
+import app.anynear.push.REPLY_ACTION
+import app.anynear.push.REPLY_CATEGORY
 import app.anynear.push.WAKE_THREAD
 import app.anynear.push.WakeBadge
+import app.anynear.app.AppController
 import app.anynear.app.AppUpdateState
 import app.anynear.app.NoOpPlatformHooks
 import app.anynear.app.createAppController
@@ -41,8 +47,10 @@ import platform.UserNotifications.UNNotificationCategory
 import platform.UserNotifications.UNNotificationRequest
 import platform.UserNotifications.UNNotificationSettingEnabled
 import platform.UserNotifications.UNNotificationSound
+import platform.UserNotifications.UNTextInputNotificationAction
 import platform.UserNotifications.UNTimeIntervalNotificationTrigger
 import platform.UserNotifications.UNUserNotificationCenter
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
@@ -125,7 +133,23 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
             hiddenPreviewsBodyPlaceholder = texts.system.newMessage,
             options = 0u,
         )
-        center.setNotificationCategories(setOf(message))
+        // Circle chats and direct messages: „Antworten“ without opening the app, also on the Apple Watch.
+        val reply = UNNotificationCategory.categoryWithIdentifier(
+            identifier = REPLY_CATEGORY,
+            actions = listOf(
+                UNTextInputNotificationAction.actionWithIdentifier(
+                    identifier = REPLY_ACTION,
+                    title = texts.system.reply,
+                    options = 0u,
+                    textInputButtonTitle = texts.chat.send,
+                    textInputPlaceholder = texts.system.replyHint,
+                ),
+            ),
+            intentIdentifiers = emptyList<Any>(),
+            hiddenPreviewsBodyPlaceholder = texts.system.newMessage,
+            options = 0u,
+        )
+        center.setNotificationCategories(setOf(message, reply))
         // Already allowed (earlier start): fetch the token anew, it can change.
         center.getNotificationSettingsWithCompletionHandler { settings ->
             if (settings?.authorizationStatus == UNAuthorizationStatusAuthorized) {
@@ -171,11 +195,15 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
         val content = UNMutableNotificationContent()
         content.setTitle(notification.title)
         content.setBody(
-            notification.lines.joinToString("\n") { if (notification.isCircle) "${it.sender}: ${it.text}" else it.text },
+            (
+                notification.lines.map { if (notification.isCircle) "${it.sender}: ${it.text}" else it.text } +
+                    listOfNotNull(notification.replyError?.let(texts.system::replyNotSent))
+                ).joinToString("\n"),
         )
         content.setThreadIdentifier(notification.key)
-        content.setCategoryIdentifier(CATEGORY)
-        content.setSound(UNNotificationSound.defaultSound)
+        content.setCategoryIdentifier(if (notification.canReply) REPLY_CATEGORY else CATEGORY)
+        // Again after a failed reply: without a second sound.
+        if (notification.replyError == null) content.setSound(UNNotificationSound.defaultSound)
         content.setUserInfo(mapOf<Any?, Any?>(CONVERSATION_KEY to notification.key))
         // One notification per conversation: replace those of the extension for the same conversation.
         replaceThread(notification.key) {
@@ -283,12 +311,43 @@ fun recordNativeCrash(error: String, trace: String, fromMillis: Long, toMillis: 
     crashes.record(app.anynear.app.CrashReport.Kind.Native, error, trace, at = toMillis)
 }
 
-// One controller per process, as on Android in the Application.
+// One controller at a time, as on Android in the Application. A restart (after the emergency card code, the handover
+// from another own device, a reset) replaces it within the process: iOS apps must not quit themselves.
 // If iOS starts the app in the background (push, sharing), nothing counts as read until `scenePhase` reports active.
-private val controller by lazy {
+private fun newController(restart: Boolean = false): AppController =
     createAppController(hooks, crashes = crashes).also {
-        it.setFocused(UIApplication.sharedApplication.applicationState == UIApplicationState.UIApplicationStateActive)
+        val active = UIApplication.sharedApplication.applicationState == UIApplicationState.UIApplicationStateActive
+        it.setFocused(active)
         it.start()
+        // On a restart `scenePhase` does not change again, so tell the new controller here that the app is open.
+        if (restart && active) it.setInForeground(true)
+    }
+
+private val current: MutableStateFlow<AppController> by lazy {
+    app.anynear.data.restartHandler = { restart() }
+    MutableStateFlow(newController())
+}
+
+private val controller: AppController get() = current.value
+
+// Only touched on the main thread.
+private var restarting = false
+
+/**
+ * Stops the running controller, then builds a new one from the stored state; the UI follows [current]. On the main
+ * thread, whichever thread asks for it (a dialog, or the controller's own work, e.g. after „Alle Daten löschen“).
+ */
+private fun restart() {
+    MainScope().launch {
+        if (restarting) return@launch
+        restarting = true
+        val old = current.value
+        try {
+            old.shutdown()
+            current.value = newController(restart = true)
+        } finally {
+            restarting = false
+        }
     }
 }
 
@@ -325,7 +384,11 @@ fun onFinderOpened() = controller.openFindDocs()
 
 /** Entry point for the Swift shell in iosApp/. */
 @Suppress("FunctionName", "unused")
-fun MainViewController(): UIViewController = ComposeUIViewController { App(controller) }
+fun MainViewController(): UIViewController = ComposeUIViewController {
+    // After a restart everything starts anew with the new controller, as after opening the app.
+    val c by current.collectAsState()
+    key(c) { App(c) }
+}
 
 /** Universal link https://anynear.net/k#… or /c#… (from SwiftUI `onOpenURL`). */
 @Suppress("unused")
@@ -365,6 +428,28 @@ fun onPushToken(token: String, sandbox: Boolean) {
 @Suppress("unused")
 fun onNotificationOpened(conversation: String?) {
     conversation?.let(controller::openConversation)
+}
+
+/**
+ * „Antworten“ in a message notification (also from the Apple Watch): iOS starts the app in the background if needed, the
+ * reply goes the same way as from the chat. [completion] (the handler of `didReceive`) comes once it left the phone or
+ * after at most 20 seconds, so that iOS keeps the app running that long.
+ */
+@Suppress("unused")
+fun onNotificationReply(conversation: String?, text: String, completion: () -> Unit) {
+    if (conversation == null) {
+        completion()
+        return
+    }
+    // Create the controller here on the main thread, as on every other start.
+    val app = controller
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+        try {
+            app.replyFromNotification(conversation, text)
+        } finally {
+            dispatch_async(dispatch_get_main_queue()) { completion() }
+        }
+    }
 }
 
 /** Notification of an alert tapped: `userInfo["alertChannel"]` opens the channel. */

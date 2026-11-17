@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Android 17+: find and reach a radio on Wi-Fi without the system's device picker on every search -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
     <!-- Android 12+: scan without deriving the location, connection to the radio -->
     <uses-permission
@@ -265,6 +267,11 @@
             android:exported="false" />
         <receiver
             android:name=".LifeSignActionReceiver"
+            android:exported="false" />
+
+        <!-- „Antworten“ in a message notification, also from a watch (MessageNotifier). -->
+        <receiver
+            android:name=".MessageReplyReceiver"
             android:exported="false" />
 
         <!-- Scheduled reminders, e.g. to charge the radio (ADR 0085). -->

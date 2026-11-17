@@ -14,7 +14,7 @@ class PersonalSettingsTest {
         phone.setDarkMode(DarkMode.DARK)
         phone.setUsageStats(false)
         phone.postponeBluetoothHint(123)
-        assertEquals(setOf("dark_mode", "usage_stats", "alerts_acked", "alerts_seen", "read_until"), phone.personalSettings().keys)
+        assertEquals(setOf("dark_mode", "usage_stats", "alerts_acked", "alerts_seen", "read_until", "contact_names"), phone.personalSettings().keys)
 
         val tablet = ProfileRepository(InMemoryStore())
         tablet.applyPersonalSettings(phone.personalSettings())

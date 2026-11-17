@@ -138,6 +138,51 @@ class ReadReceiptAppTest {
     }
 
     /**
+     * Introduction (ADR 0116): Anna passes Ilse on to Ben. Ben sees the card and wants her, Ilse gets a request naming
+     * Anna; only once Ilse agrees can both write. Before that, Ilse's overview does not list Ben.
+     */
+    @Test
+    fun introductionNeedsBothToAgree() = runBlocking {
+        if (!enabled) return@runBlocking
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val anna = app(scope)
+            val ben = app(scope)
+            val ilse = app(scope)
+            anna.setOwnName("Testperson Anna")
+            ben.setOwnName("Testperson Ben")
+            ilse.setOwnName("Testperson Ilse")
+            listOf(anna, ben, ilse).forEach { it.finishSetup() }
+            eventually("Kontaktlinks") { listOf(anna, ben, ilse).all { it.ownContactLink.value != null && it.myPersonId.value != null } }
+            // Both sides add each other's link: no request is left over.
+            for (other in listOf(ben, ilse)) {
+                anna.receiveLink(other.ownContactLink.value!!)
+                anna.acceptPendingContact(openChat = false)
+                other.receiveLink(anna.ownContactLink.value!!)
+                other.acceptPendingContact(openChat = false)
+            }
+            eventually("Anna kennt beide") { anna.findPerson("d:" + ben.myPersonId.value) != null && anna.findPerson("d:" + ilse.myPersonId.value) != null }
+
+            anna.introduce("d:" + ilse.myPersonId.value, "d:" + ben.myPersonId.value)
+            eventually("Karte bei Ben") { ben.messages.value.any { it.intro?.person == ilse.myPersonId.value } }
+            val intro = ben.messages.value.first { it.intro != null }.intro!!
+            check(ben.findPerson("d:" + ilse.myPersonId.value) == null) { "vorher nichts von Ilse bei Ben" }
+            check(ben.acceptIntro(intro) == null)
+            eventually("Anfrage gesendet") { ben.sentRequests.value.any { it.person == ilse.myPersonId.value } }
+
+            eventually("Anfrage bei Ilse") { ilse.contactRequests.value.any { it.person == ben.myPersonId.value } }
+            check(ilse.contactRequests.value.single().introducedByName == "Testperson Anna") { "nennt Anna" }
+            check(ilse.chatList.value.none { it.conversation.isWith(ben) }) { "Ben steht noch nicht in Ilses Übersicht" }
+            ilse.acceptContactRequest(ben.myPersonId.value!!)
+            eventually("Ilse ist Bens Kontakt") { ben.findPerson("d:" + ilse.myPersonId.value) != null && ben.sentRequests.value.isEmpty() }
+            ben.send(Conversation.Direct("d:" + ilse.myPersonId.value), "Hallo Ilse")
+            eventually("Ilse hat sie") { ilse.messages.value.any { it.text == "Hallo Ilse" } }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    /**
      * Direct conversation of [from] with [to], the way [from] knows it: via the device from the contact link or, once
      * the key chain is there, via the person (ADR 0042).
      */
@@ -194,7 +239,7 @@ class ReadReceiptAppTest {
 
     /**
      * Two installations without a circle (setup via „Erst einmal umsehen“): Anna adds Ben via his
-     * contact link (only after confirmation), writes to him, Ben receives without a contact and replies,
+     * contact link (only after confirmation), Ben agrees to her request, she writes to him and he replies,
      * Anna sees the delivery. Only via the mailboxes, without a radio.
      */
     @Test
@@ -213,6 +258,10 @@ class ReadReceiptAppTest {
             check(anna.people.value.none { it.peer == "d:" + ben.myDeviceId.value }) { "vor der Bestätigung nichts gespeichert" }
             check(anna.acceptPendingContact() == null)
             eventually("Ben ist Kontakt") { anna.findPerson("d:" + ben.myDeviceId.value) != null }
+            // Ben decides (ADR 0116 §7): Anna's request shows at Ben, he agrees.
+            eventually("Anfrage bei Ben") { ben.contactRequests.value.isNotEmpty() }
+            ben.acceptContactRequest(ben.contactRequests.value.single().person)
+            eventually("Anna ist Bens Kontakt") { ben.contactRequests.value.isEmpty() && ben.findPerson("d:" + anna.myPersonId.value) != null }
             fun toBen() = directTo(anna, ben)
             fun toAnna() = directTo(ben, anna)
             anna.send(toBen(), "Hallo Ben, ohne Kreis")

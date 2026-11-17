@@ -91,6 +91,15 @@ internal expect fun openWithOtherApp(bytes: ByteArray, name: String, mimeType: S
  */
 internal expect fun shareFile(bytes: ByteArray, name: String, mimeType: String): Boolean
 
+/** A file for [shareContent]: content, name without a path, media type. */
+internal class HandedFile(val bytes: ByteArray, val name: String, val mimeType: String)
+
+/**
+ * The system's share menu with a whole message, **only on explicit request** („Teilen…“ under a message): [text]
+ * (may be empty) together with [files] (may be empty). Android: sharesheet, iOS: share menu. `false` if nothing works.
+ */
+internal expect fun shareContent(text: String, files: List<HandedFile>): Boolean
+
 /** Result of [saveToDevice]. */
 internal sealed interface SaveResult {
     /** Saved; [where] says in everyday language where it is (e.g. „Bilder › anynear“). */

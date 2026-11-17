@@ -687,3 +687,19 @@ conversations. After the update the core moves old entries and the app hands ove
 | DP8 | As DP7, but the phone ran a version without “read until” (no mark yet) | everything sent before the restore is read, a message sent during loading is unread | pending |
 | DP9 | Phone and web app, read a circle on the phone | the circle is read in the web app a few seconds later, also after reloading | pending |
 
+
+## Reply from the notification and on watches (17.11.2026) – watches and iPhone not tested
+
+Message notifications of circle chats and direct messages have “Reply” with ready-made short replies (“Yes”, “No”,
+“Okay”, “On my way”, “Will call you soon”) and free text. The reply goes the same way as from the chat, without opening
+the app. Public chats and alerts have no reply.
+
+| Nr | Test | Expected | Result |
+|---|---|---|---|
+| NR1 | Android: Ben writes Anna, app in the background, Anna taps a ready-made reply in the notification | reply arrives at Ben, Anna's notification shows it and the app does not open; Ben sees “Read” | Android emulator (two Medium Phone, API 36, real relays) passed 17.11.2026 with “Okay”: arrived at Ben, read receipt; Android keeps the notification with “Me: Okay” until it is swiped away; phones pending |
+| NR2 | Garmin watch paired with an Android phone (Garmin Connect), message arrives | the watch offers “Reply” with text responses; a chosen one arrives at the sender. Note: Garmin may show its own list of text responses from Garmin Connect instead of the app's | pending |
+| NR3 | Wear OS watch, message arrives | “Reply” with the app's ready-made replies (and generated ones if the watch offers them); a chosen one arrives | pending |
+| NR4 | iPhone, app closed, push wakes the extension, Anna long-presses the notification and replies | text field with “Send”; iOS starts the app in the background, the reply arrives at Ben, the notification disappears | pending (the iOS simulator only built and started the app, no reply sent) |
+| NR5 | Apple Watch paired with the iPhone, as NR4 | “Reply” on the watch with the watch's own suggestions, dictation or scribble; reply arrives | pending |
+| NR6 | Garmin watch with an iPhone | iOS only passes simple actions to Garmin; no text reply expected on the watch, the notification still arrives | pending |
+| NR7 | Reply without a path (e.g. contact without internet and no radio) | notification comes back without sound, “Not sent: …” with the reason | unit test only |

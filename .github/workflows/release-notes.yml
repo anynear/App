@@ -1,0 +1,56 @@
+# Release notes belong in the same pull request as the change (release-notes/README.md): a pull request whose title is
+# feat, fix or perf must change release-notes/X.Y.Z.md, unless it carries the label "no release notes" (only internal,
+# nothing people who use anynear notice). Every changed notes file is checked with scripts/release-notes.sh, which also
+# keeps entries short. The app and the stores show only the entries that are new since the installed version, so an
+# entry that is missing here is missing for everyone.
+name: Release notes
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: release-notes-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  check:
+    name: Release notes
+    runs-on: ${{ fromJSON(vars.RUNNER_LINUX || '"ubuntu-latest"') }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Notes for user-visible changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          SKIP: ${{ contains(github.event.pull_request.labels.*.name, 'no release notes') }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[] | select(.status != "removed") | .filename' \
+            | grep -E '^release-notes/[0-9]+\.[0-9]+\.[0-9]+\.md$' > "$RUNNER_TEMP/notes.txt" || true
+          while read -r file; do
+            version=$(basename "$file" .md)
+            # Versions from before the first public release carry a date line and are not checked any more.
+            grep -qE '^Date:' "$file" && continue
+            scripts/release-notes.sh "$version" > /dev/null
+            echo "$file is complete."
+          done < "$RUNNER_TEMP/notes.txt"
+
+          if printf '%s\n' "$TITLE" | grep -Eq '^(feat|fix|perf)(\([^()[:space:]]+\))?!?: '; then
+            if [ -s "$RUNNER_TEMP/notes.txt" ]; then
+              echo "Release notes are part of this pull request."
+            elif [ "$SKIP" = true ]; then
+              echo "Label \"no release notes\": nothing for the release notes."
+            else
+              echo "::error::A feat, fix or perf pull request needs an entry in release-notes/X.Y.Z.md (the highest file without a tag), one short sentence for the people who use anynear. Only internal? Add the label \"no release notes\"."
+              exit 1
+            fi
+          fi

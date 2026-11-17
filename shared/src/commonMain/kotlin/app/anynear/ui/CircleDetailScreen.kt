@@ -141,6 +141,8 @@ internal fun CircleDetailScreen(
                 members.forEach { m ->
                     AppRow(
                         title = m.name,
+                        // Own name ([app.anynear.people.ContactNames]): the name from the profile small below it.
+                        subtitle = m.profileName.takeIf { it != m.name && it.isNotBlank() }?.let(texts.people::profileNameLine),
                         leading = { PersonAvatar(controller, PeerId.device(m.personId), m.image, 40.dp, enlargeable = true) },
                         chevron = true,
                         onClickLabel = texts.people.viewPerson,

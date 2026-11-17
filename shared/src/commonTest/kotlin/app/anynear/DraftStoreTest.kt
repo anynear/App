@@ -51,6 +51,26 @@ class DraftStoreTest {
     }
 
     @Test
+    fun passedOnMarkSurvivesRestartAndMovesWithTheDraft() {
+        // ADR 0118: a draft from „Weiterleiten“ goes out marked; the mark survives a restart.
+        store().setText(direct, "Schau mal")
+        store().setPassedOn(direct, true)
+        assertTrue(store().passedOn(direct))
+        assertFalse(store().passedOn(circle))
+        val person = Conversation.Direct(PeerId.device("person-anna"))
+        store().move(direct, person)
+        assertTrue(store().passedOn(person))
+        assertFalse(store().passedOn(direct))
+        // Not onto a draft of its own.
+        store().setText(direct, "eigener Text")
+        store().setPassedOn(direct, false)
+        store().setPassedOn(person, true)
+        store().setText(circle, "im Kreis")
+        store().move(person, circle)
+        assertFalse(store().passedOn(circle))
+    }
+
+    @Test
     fun emptyTextRemovesEntry() {
         store().setText(circle, "x")
         store().setText(circle, "")

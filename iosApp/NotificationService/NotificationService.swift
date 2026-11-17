@@ -4,7 +4,9 @@ import Shared
 /**
  Wake-up from an anynear relay (ADR 0009, ANDP §10). It carries only a fixed text and the ANDP object of the new
  message (field „o“). The extension fetches the message itself via the ANMP core, decrypts it on the
- iPhone and replaces the text with circle or person and „Anna: …“. If that fails, the fixed text stays.
+ iPhone and replaces the text with circle or person and „Anna: …“. If that fails, the fixed text stays. If the
+ fetch was complete and there is nothing to show, the wake-up is swallowed (with Apple's filtering entitlement) or
+ at least shown quietly (ADR 0117).
  */
 final class NotificationService: UNNotificationServiceExtension {
     private var contentHandler: ((UNNotificationContent) -> Void)?
@@ -19,10 +21,16 @@ final class NotificationService: UNNotificationServiceExtension {
         fallback = content
         content.threadIdentifier = NotificationServiceKt.WAKE_THREAD
         let objectId = request.content.userInfo["o"] as? String
-        NotificationServiceKt.handleWake(objectId: objectId) { [weak self] found in
+        NotificationServiceKt.handleWake(objectId: objectId) { [weak self] outcome in
             DispatchQueue.main.async {
                 guard let self, let handler = self.contentHandler else { return }
-                if let found {
+                if outcome.found == nil && outcome.nothingToShow && NotificationServiceKt.filterEmptyWakes {
+                    // Nothing to show (ADR 0117): with the filtering entitlement an empty content swallows the wake-up.
+                    self.contentHandler = nil
+                    handler(UNNotificationContent())
+                    return
+                }
+                if let found = outcome.found {
                     content.title = found.title
                     content.body = found.body
                     content.threadIdentifier = found.key
@@ -36,10 +44,20 @@ final class NotificationService: UNNotificationServiceExtension {
                         NotificationServiceKt.applyWake(content: content, found: found)
                     } else {
                         content.userInfo["conversation"] = found.key
+                        // „Antworten“ for circle chats and direct messages, sent by the app in the background.
+                        if let category = NotificationServiceKt.replyCategory(key: found.key) {
+                            content.categoryIdentifier = category
+                        }
                     }
                 } else {
                     // Nothing found: fixed text in its own group so that the app can clear it away on reading.
                     content.threadIdentifier = NotificationServiceKt.WAKE_THREAD
+                    if outcome.nothingToShow {
+                        // Certainly nothing new for this device, but no entitlement to swallow it: at least quiet,
+                        // without sound and without lighting up the screen (ADR 0117).
+                        content.sound = nil
+                        content.interruptionLevel = .passive
+                    }
                 }
                 self.contentHandler = nil
                 handler(content)

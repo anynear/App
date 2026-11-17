@@ -11,6 +11,14 @@ interface SystemTexts {
     val newReaction: String
     val messagesChannel: String
     val messagesChannelDescription: String
+    /** Action on a message notification, also on watches: „Antworten“ */
+    val reply: String
+    /** Placeholder of the reply field in the notification */
+    val replyHint: String
+    /** Ready-made short replies offered on watches and in the notification, shortest first. */
+    val quickReplies: List<String>
+    /** Shown in the notification when a reply from it could not be sent: „Nicht gesendet: …“ */
+    fun replyNotSent(reason: String): String
     /** Android channel for reminders, e.g. to charge the radio (ADR 0085). */
     val remindersChannel: String
     val remindersChannelDescription: String
@@ -63,6 +71,10 @@ internal object SystemTextsDe : SystemTexts {
     override val newReaction = "Neue Reaktion"
     override val messagesChannel = "Nachrichten"
     override val messagesChannelDescription = "Neue Nachrichten aus deinen Kreisen und von deinen Kontakten"
+    override val reply = "Antworten"
+    override val replyHint = "Nachricht"
+    override val quickReplies = listOf("Ja", "Nein", "Okay", "Bin unterwegs", "Rufe gleich an")
+    override fun replyNotSent(reason: String) = "Nicht gesendet: $reason"
     override val remindersChannel = "Erinnerungen"
     override val remindersChannelDescription = "Zum Beispiel, dein Funkgerät zu laden"
 
@@ -99,6 +111,10 @@ internal object SystemTextsEn : SystemTexts {
     override val newReaction = "New reaction"
     override val messagesChannel = "Messages"
     override val messagesChannelDescription = "New messages from your circles and contacts"
+    override val reply = "Reply"
+    override val replyHint = "Message"
+    override val quickReplies = listOf("Yes", "No", "Okay", "On my way", "Will call you soon")
+    override fun replyNotSent(reason: String) = "Not sent: $reason"
     override val remindersChannel = "Reminders"
     override val remindersChannelDescription = "For example, to charge your radio"
 

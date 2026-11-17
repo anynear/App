@@ -16,7 +16,10 @@ expect fun platformRawKeyValueAccess(): RawKeyValueAccess
 /** Names of all entries in the protected store of the platform ([platformSecretStore]). */
 expect fun platformSecretKeys(): Set<String>
 
-/** Restarts the app, e.g. after taking over the keys of another own device (iOS: quits it). */
+/**
+ * Restarts the app, e.g. after taking over the keys of another own device. Android: new process. iOS: the app must not
+ * quit itself (to the person it looks like a crash), so the controller is replaced within the process.
+ */
 expect fun restartApp()
 
 /** Delete the cache of the radio SDK (devices in range, databases `meshtastic…`); only before the SDK starts. */

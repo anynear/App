@@ -44,6 +44,23 @@ class RadioAreasTest {
         assertEquals(RadioTarget.DEFAULT, RadioAreas.targetOf(null, null, null))
     }
 
+    /** ADR 0054 §1: `channel0` per area switches ANMP between channel 0 and `anynear` without an app update. */
+    @Test
+    fun channel0FollowsTheArea() {
+        val switched = RadioList.parse(
+            """{"issued":1,"regions":[
+                {"name":"Hessen","area":[[49.4,7.7],[51.7,7.7],[51.7,10.3],[49.4,10.3]],"lora":"EU_868","preset":"SHORT_SLOW","channel0":false},
+                {"name":"Europa","area":[[34,-25],[72,-25],[72,24],[34,24]],"lora":"EU_868","preset":"LONG_FAST"}]}""",
+        )
+        assertTrue(RadioAreas.channel0Of(null, null, null), "without a list channel 0 stays on")
+        assertTrue(RadioAreas.channel0Of(switched, null, null), "without an area channel 0 stays on")
+        assertTrue(RadioAreas.channel0Of(switched, null, "Europa"), "absent field means on")
+        assertFalse(RadioAreas.channel0Of(switched, null, "Hessen"))
+        assertTrue(RadioAreas.channel0Of(switched, "Europa", "Hessen"), "the area chosen by hand wins")
+        assertFalse(RadioAreas.channel0Of(switched, "Hessen", "Europa"))
+        assertTrue(RadioAreas.channel0Of(switched, "Weg", null), "a chosen area that left the list counts as automatic")
+    }
+
     @Test
     fun loraFollowsTheArea() {
         val lora = RadioProfile.lora(null, us)

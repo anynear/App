@@ -3,6 +3,7 @@ package app.anynear.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -150,7 +151,10 @@ private fun RadioAreaRow(controller: AppController) {
     }
 }
 
-/** Below the choice of the area: what „Automatisch“ still lacks, the permission or location of the device. */
+/**
+ * Below the choice of the area: what „Automatisch“ still lacks, the permission or location of the device. Set apart
+ * from the explanation above by a small gap, so the two read as separate notes.
+ */
 @Composable
 internal fun RadioAreaLocationHelp(controller: AppController) {
     val areas = controller.radioAreas
@@ -159,11 +163,11 @@ internal fun RadioAreaLocationHelp(controller: AppController) {
     val settings = texts.settings
     when {
         !allowed -> {
-            Text(settings.radioAreaNeedsLocation, style = MaterialTheme.typography.bodySmall)
+            Text(settings.radioAreaNeedsLocation, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
             AppButton(texts.alerts.allowLocation, controller::allowLocationForRadioArea, kind = ButtonKind.Quiet)
         }
         off -> {
-            Text(settings.radioAreaLocationOff, style = MaterialTheme.typography.bodySmall)
+            Text(settings.radioAreaLocationOff, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
             AppButton(settings.radioAreaLocationOn, controller::openLocationSettings, kind = ButtonKind.Quiet)
         }
     }

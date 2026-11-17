@@ -38,6 +38,9 @@ internal val CircleNameLimit = TextLimit.chars(app.anynear.anmp.core.AnmpLinks.M
 /** Your own name. */
 internal val OwnNameLimit = TextLimit.chars(ProfileRepository.MAX_OWN_NAME)
 
+/** Own name for another person, only for oneself ([app.anynear.people.ContactNames]). */
+internal val ContactNameLimit = TextLimit.chars(app.anynear.people.ContactNames.MAX_NAME)
+
 /** Own part of the radio name (after „anynear.app | “), measured in bytes as in the radio. */
 internal val DeviceNameLimit = TextLimit.bytes(DeviceName.SUFFIX_MAX_BYTES)
 

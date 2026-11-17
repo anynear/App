@@ -18,6 +18,9 @@ import app.anynear.anmp.core.OwnHistoryItem
 import app.anynear.anmp.core.AddContactResult as CoreAddContactResult
 import app.anynear.anmp.core.BlobResult
 import app.anynear.anmp.core.ContactCard
+import app.anynear.anmp.core.ContactRequest
+import app.anynear.anmp.core.Intro
+import app.anynear.anmp.core.SentRequest
 import app.anynear.anmp.core.CoreEvent
 import app.anynear.alerts.AlertChannel
 import app.anynear.alerts.Alerts
@@ -36,6 +39,7 @@ import app.anynear.mesh.MeshtasticRadioPort
 import app.anynear.anmp.core.radio.RadioTarget
 import app.anynear.mesh.toMessageStatus
 import app.anynear.mesh.ReplyRef
+import app.anynear.mesh.ContactIntro
 import app.anynear.anmp.core.RecoverResult
 import app.anynear.anmp.core.VaultResult
 import app.anynear.anmp.core.AnmpCoreHost
@@ -133,6 +137,7 @@ import app.anynear.mesh.Transport
 import app.anynear.mesh.ownReaction
 import app.anynear.mesh.previewText
 import app.anynear.people.CircleMember
+import app.anynear.people.ContactNames
 import app.anynear.people.Member
 import app.anynear.people.MemberDirectory
 import app.anynear.people.Person
@@ -198,8 +203,8 @@ import app.anynear.mesh.radioNumberLabel
 import app.anynear.anmp.core.Conversation as CoreConversation
 
 /**
- * Central app logic without UI dependencies. Lives as long as the app process
- * (Android: in the Application, iOS: in the MainViewController).
+ * Central app logic without UI dependencies. Lives as long as the app process (Android: in the Application, iOS: in
+ * the MainViewController, where a restart replaces it within the process, see [shutdown]).
  *
  * One chat, two paths (ADR 0003): every message goes over the internet (ANMP core on ANDP, ADR 0034–0036) and,
  * if a radio is paired, additionally over radio (ANMP format). A radio is not a prerequisite.
@@ -504,6 +509,9 @@ class AppController(
     /** Person of a device as [PeerId] (ADR 0042); devices without a person key are the person themselves. */
     private fun peerOfDevice(deviceId: String): String = PeerId.device(memberDirectory.personOf(deviceId))
 
+    /** Person ID of [deviceId] (ADR 0042). */
+    fun personOfDevice(deviceId: String): String = memberDirectory.personOf(deviceId)
+
     private fun isOwnDevice(deviceId: String): Boolean = _myPersonId.value != null && memberDirectory.personOf(deviceId) == _myPersonId.value
 
     private val _myDeviceId = MutableStateFlow<String?>(null)
@@ -533,24 +541,38 @@ class AppController(
     /** Contacts being added via a link right now; the core stores them in the background ([acceptPendingContact]). */
     private val addingContacts = MutableStateFlow<Set<String>>(emptySet())
 
+    /** Own names for other people in effect, person ID → name ([ContactNames]). */
+    private val ownContactNames: StateFlow<Map<String, String>> =
+        profile.contactNameEntries.map(ContactNames::active).stateIn(scope, SharingStarted.Eagerly, ContactNames.active(profile.contactNameEntries.value))
+
     /**
      * The others in each circle, one entry per person (ADR 0042): several devices of someone count once, one's own
      * further devices not at all (they belong to the own line „(du)“).
      */
     val circleMembers: StateFlow<Map<String, List<CircleMember>>> =
-        combine(memberDirectory.members, _myPersonId, _myDeviceId) { m, person, device -> circleMembersByCircle(m, person, device) }
-            .stateIn(scope, SharingStarted.Eagerly, circleMembersByCircle(memberDirectory.members.value, null, null))
+        combine(memberDirectory.members, _myPersonId, _myDeviceId, ownContactNames) { m, person, device, names -> circleMembersByCircle(m, person, device, names) }
+            .stateIn(scope, SharingStarted.Eagerly, circleMembersByCircle(memberDirectory.members.value, null, null, ownContactNames.value))
 
-    private fun circleMembersByCircle(m: List<Member>, person: String?, device: String?): Map<String, List<CircleMember>> =
-        m.map { it.circleId }.filter { it != MemberDirectory.DIRECT_CONTACTS }.distinct().associateWith { circleMembers(m, it, person, device) }
+    private fun circleMembersByCircle(m: List<Member>, person: String?, device: String?, names: Map<String, String>): Map<String, List<CircleMember>> =
+        m.map { it.circleId }.filter { it != MemberDirectory.DIRECT_CONTACTS }.distinct().associateWith { circleMembers(m, it, person, device, names) }
 
     /** How many of one's own devices are in [circleId], this one included. */
     fun ownDevicesIn(circleId: String): Int = ownDevicesIn(memberDirectory.members.value, circleId, _myPersonId.value, _myDeviceId.value)
 
-    /** All persons from all circles and radio contacts, merged. */
+    /** All persons from all circles and radio contacts, merged; own names ([ContactNames]) cover profile names. */
     val people: StateFlow<List<Person>> =
-        combine(memberDirectory.members, contactRepository.contacts, circleRepository.circles, _myPersonId) { m, c, k, own -> Person.merge(m, c, k.map { it.id }, own) }
-            .stateIn(scope, SharingStarted.Eagerly, Person.merge(memberDirectory.members.value, contactRepository.contacts.value, emptyList()))
+        combine(memberDirectory.members, contactRepository.contacts, circleRepository.circles, _myPersonId, ownContactNames) { m, c, k, own, names ->
+            Person.merge(m, c, k.map { it.id }, own, names)
+        }.stateIn(scope, SharingStarted.Eagerly, Person.merge(memberDirectory.members.value, contactRepository.contacts.value, emptyList(), ownNames = ownContactNames.value))
+
+    /**
+     * Gives [peer] an own name that only applies to oneself and covers the name from their profile everywhere; blank:
+     * back to the profile name („Zurücksetzen“). Goes to all own devices via the person's settings (ADR 0050).
+     */
+    fun setContactName(peer: String, name: String) {
+        val personId = findPerson(peer)?.deviceId ?: PeerId.deviceIdOf(peer) ?: return
+        profile.setContactName(personId, name, nowMillis())
+    }
 
     /** Does the phone have internet at all? Without internet a silent mailbox is not a problem of its own. */
     val internetAvailable: StateFlow<Boolean> = hooks.internetAvailable
@@ -584,14 +606,114 @@ class AppController(
         return prefixes.any(circle.name::startsWith) && memberDirectory.of(circleId).any { PeerId.device(it.personId) == support }
     }
 
+    // --- Contact requests and introductions (ADR 0116) -----------------------------------
+
+    private val _contactRequests = MutableStateFlow<List<ContactRequest>>(emptyList())
+
+    /** Persons asking to become a contact; shown as cards in „Nachrichten“ until you agree or decline. */
+    val contactRequests: StateFlow<List<ContactRequest>> = _contactRequests.asStateFlow()
+
+    private val _sentRequests = MutableStateFlow<List<SentRequest>>(emptyList())
+
+    /** Our own requests not yet answered: „Anfrage gesendet“. */
+    val sentRequests: StateFlow<List<SentRequest>> = _sentRequests.asStateFlow()
+
+    private suspend fun refreshContactRequests() {
+        val before = _contactRequests.value.map { it.person }.toSet()
+        val now = runCatching { core.contactRequests() }.getOrNull() ?: return
+        _contactRequests.value = now
+        _sentRequests.value = runCatching { core.sentContactRequests() }.getOrDefault(_sentRequests.value)
+        // One notice per new request, not one per message it brings along.
+        now.filter { it.person !in before }.forEach { r ->
+            if (!inFront()) {
+                hooks.showMessageNotification(
+                    MessageNotification(
+                        key = "request:${r.person}",
+                        title = texts.people.requestTitle(r.name),
+                        isCircle = false,
+                        lines = listOf(MessageNotification.Line(r.name, requestOrigin(r), r.ts)),
+                        unreadCount = 1,
+                    ),
+                )
+            }
+        }
+    }
+
+    /** „Vorgestellt von Anna“ or „Über deinen Kontaktlink“. */
+    fun requestOrigin(r: ContactRequest): String =
+        r.introducedByName?.let(texts.people::introducedBy) ?: texts.people.viaYourContactLink
+
+    /** Agree to the request of [person]: it becomes a contact, its messages appear in „Nachrichten“. */
+    fun acceptContactRequest(person: String) {
+        scope.launch {
+            val name = _contactRequests.value.firstOrNull { it.person == person }?.name
+            if (core.acceptContactRequest(person) && name != null) _notice.value = texts.people.requestAccepted(name)
+            refreshContactRequests()
+        }
+    }
+
+    /** Decline silently: the person learns nothing, what it wrote is deleted here. */
+    fun declineContactRequest(person: String) {
+        scope.launch {
+            core.declineContactRequest(person)
+            forgetConversationData(Conversation.Direct(PeerId.device(person)))
+            refreshContactRequests()
+        }
+    }
+
+    /**
+     * Introduce the contact [peer] to the contact [toPeer] (ADR 0116): a card in your chat with [toPeer]; both have to
+     * agree before they can write to each other. `null` on success, otherwise a text for the notice.
+     */
+    fun introduce(peer: String, toPeer: String) {
+        scope.launch { introduceNow(peer, toPeer)?.let { _notice.value = it } }
+    }
+
+    private suspend fun introduceNow(peer: String, toPeer: String): String? {
+        val person = PeerId.deviceIdOf(peer) ?: return texts.people.introFailed
+        val to = PeerId.deviceIdOf(toPeer) ?: return texts.people.introFailed
+        // The name the person gave itself, never an own name for it (ADR 0116 §2): the stand-in text goes to the other side.
+        val name = findPerson(peer)?.profileName?.takeIf { it.isNotBlank() } ?: peerName(peer)
+        val image = personImageBytes(peer)?.let { bytes ->
+            runCatching { core.prepareAttachment(bytes, AttachmentKind.IMAGE.wire, null) }.getOrNull()
+        }
+        val out = core.introduce(person, to, texts.chat.introStandIn(name), image) ?: return texts.people.introFailed
+        val now = Clock.System.now().toEpochMilliseconds()
+        messageStore.addOutgoing(
+            ChatMessage(
+                localId = out.mid, conversation = Conversation.Direct(toPeer), fromNodeNum = 0, text = texts.chat.introStandIn(name),
+                timestampMillis = now, outgoing = true, status = MessageStatus.ONLINE, recipients = setOf(toPeer), via = setOf(Transport.INTERNET),
+                remoteId = out.mid,
+                intro = ContactIntro("", person, name, _myPersonId.value.orEmpty(), now + INTRO_LIFETIME_MILLIS, ""),
+            ),
+        )
+        _notice.value = texts.people.introSent(name, peerName(toPeer))
+        return null
+    }
+
+    /** We want the contact of the card [intro] (ADR 0116): the introducer passes the request on. */
+    suspend fun acceptIntro(intro: ContactIntro): String? {
+        val r = core.acceptIntro(Intro(intro.id, intro.person, intro.name, intro.byPerson, intro.until, intro.card))
+        refreshContactRequests()
+        return when (r) {
+            is CoreAddContactResult.Requested -> { _notice.value = texts.people.requestSent(intro.name); null }
+            is CoreAddContactResult.AlreadyKnown -> null
+            CoreAddContactResult.Own -> texts.status.ownContact
+            else -> texts.people.introExpired
+        }
+    }
+
     // --- Overview „Nachrichten“ and notifications ---------------------------------------
 
     /** All conversations as in common messengers: newest on top, with the number of unread messages. */
     val chatList: StateFlow<List<ChatListEntry>> =
-        combine(circleRepository.circles, messageStore.messages, people, supportPeer) { circles, messages, _, support ->
-            // The direct conversation with support (only „Neue Anfrage“) is not in the list.
+        combine(circleRepository.circles, messageStore.messages, people, supportPeer, _contactRequests) { circles, messages, _, support, requests ->
+            // The direct conversation with support (only „Neue Anfrage“) is not in the list; nor one of a person that
+            // still asks to become a contact (ADR 0116): it shows as a request until you agree.
+            val asking = requests.map { Conversation.Direct(PeerId.device(it.person)) }.toSet()
             ChatList.build(circles, messages, ::peerName, ::senderLabel)
                 .filterNot { support != null && it.conversation == Conversation.Direct(support) }
+                .filterNot { it.conversation in asking }
         }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /**
@@ -727,6 +849,21 @@ class AppController(
     fun checkAppUpdate() = hooks.checkAppUpdate(force = true)
 
     fun installAppUpdate() = hooks.installAppUpdate()
+
+    private val updateNotes = mutableMapOf<String, ReleaseNotes>()
+
+    /**
+     * „Was ist neu“ of the offered [version] since the installed one, in the language of the app; Google Play names no
+     * version, then the build number counts. `null` as long as the website has nothing for it (no internet, no notes,
+     * nothing new).
+     */
+    suspend fun updateNotes(version: String?): ReleaseNotes? {
+        val build = if (version.isNullOrBlank()) hooks.installableBuild.value else null
+        val language = texts.language
+        val key = "$language/${version.orEmpty()}/${build ?: ""}"
+        updateNotes[key]?.let { return it }
+        return ReleaseNotesLoader.load(version, build, since = hooks.appVersion, language = language)?.also { updateNotes[key] = it }
+    }
 
     // --- Update requested by the network (ADR 0096) ---
 
@@ -1059,10 +1196,46 @@ class AppController(
         hooks.cancelMessageNotification(conversation.key())
     }
 
-    private fun notifyAbout(conversation: Conversation) {
+    /**
+     * Reply typed or picked in the notification of [key] (also on a watch, ready-made replies), without opening the
+     * app. Goes the same way as from the chat ([send]), encrypted over internet and radio. Afterwards the conversation
+     * counts as read and its notification disappears; if the reply cannot go, the notification comes back with the
+     * reason. Returns `true` once the reply was accepted; waits at most [wait] for it to leave the phone, so that the
+     * platform keeps the app alive that long. Public chats (radio) offer no reply in the notification.
+     */
+    suspend fun replyFromNotification(key: String, text: String, wait: Duration = REPLY_WAIT): Boolean {
+        val conversation = conversationOf(key) ?: return false
+        if (text.isBlank()) {
+            notifyAbout(conversation)
+            return false
+        }
+        // Started by the notification: give the core a moment to load the own keys and contacts. Both waits together
+        // stay within [wait].
+        val deadline = nowMillis() + wait.inWholeMilliseconds
+        withTimeoutOrNull(wait) { _myDeviceId.filterNotNull().first() }
+        val since = nowMillis()
+        val result = send(conversation, text)
+        if (result is SendResult.Rejected) {
+            log("Antwort aus der Benachrichtigung ${conversation.key()} abgelehnt: ${result.reason}")
+            notifyAbout(conversation, replyError = result.reason)
+            return false
+        }
+        log("Antwort aus der Benachrichtigung ${conversation.key()} angenommen")
+        // Whoever replies has read the conversation: read receipts as when opening it (ADR 0019).
+        markConversationRead(conversation)
+        cancelNotification(conversation)
+        withTimeoutOrNull((deadline - nowMillis()).coerceAtLeast(0)) {
+            messageStore.messages.first { all ->
+                all.any { it.outgoing && it.conversation == conversation && it.timestampMillis >= since && it.status != MessageStatus.QUEUED }
+            }
+        }
+        return true
+    }
+
+    private fun notifyAbout(conversation: Conversation, replyError: String? = null) {
         val unread = messageStore.messages.value.filter { it.unread && it.conversation == conversation }
         val reactions = reactionNotices.of(conversation)
-        if (unread.isEmpty() && reactions.isEmpty()) return
+        if (replyError == null && unread.isEmpty() && reactions.isEmpty()) return
         val title = when (conversation) {
             is Conversation.Circle -> circleRepository.find(conversation.circleId)?.name ?: return
             is Conversation.Direct -> peerName(conversation.peer)
@@ -1080,6 +1253,8 @@ class AppController(
                     ).sortedBy { it.timestampMillis }.takeLast(NOTIFICATION_LINES),
                 unreadCount = unread.size,
                 image = conversationImage(conversation)?.let { runCatching { avatars.bytes(it) }.getOrNull() },
+                canReply = true,
+                replyError = replyError,
             ),
         )
     }
@@ -1124,8 +1299,11 @@ class AppController(
         if (removedHere) _notice.value = texts.devices.removedHereNotice
     }
 
-    /** Invitation opened via a link: link, circle ID and name, until it is confirmed. */
-    data class InviteOffer(val url: String, val circleId: String, val circleName: String)
+    /**
+     * Invitation opened via a link: link, circle ID and name, until it is confirmed. [inviter] is the name of whoever
+     * created the link; `""` for links of older apps.
+     */
+    data class InviteOffer(val url: String, val circleId: String, val circleName: String, val inviter: String = "")
 
     private val _pendingInvite = MutableStateFlow<InviteOffer?>(null)
 
@@ -1830,7 +2008,7 @@ class AppController(
     }
 
     /** Radio for the core (ADR 0057); remember packet IDs of own transmissions so that echoes do not count as new. */
-    private val radioPort = MeshtasticRadioPort(scope, link, MutableStateFlow(app.anynear.AppConfig.RADIO_CHANNEL0), onSent = { messageStore.rememberPacket(profile.ownNodeNum.value, it) }, log = { log(it) })
+    private val radioPort = MeshtasticRadioPort(scope, link, radioAreas.channel0, onSent = { messageStore.rememberPacket(profile.ownNodeNum.value, it) }, log = { log(it) })
 
     /** What the radio path in the core wants to know from the app (ADR 0051, 0057). */
     private val radioHost = object : RadioHost {
@@ -1909,6 +2087,10 @@ class AppController(
      * the own network is very likely the own one), via Bluetooth only one that was assigned here before
      * (one in radio range may be someone else's). A paired device first gets [SUGGEST_GRACE] to connect;
      * if it is not there afterwards, another one is offered (or the same over Wi-Fi instead of Bluetooth).
+     *
+     * On Wi-Fi only when a radio was used here before and the system will not step in ([suggestWifi]): otherwise
+     * Android 17 shows its dialog „Gerät zum Verbinden auswählen“ on every search, so people without a radio would see
+     * it each time the app opens. Without a radio the search on Wi-Fi only runs under „Funkgerät verbinden“ ([startScan]).
      */
     private suspend fun suggestDevices() {
         combine(pairedDevices.device, linkState, inForeground, pairedDevices.disconnected) { device, state, visible, off ->
@@ -1930,12 +2112,12 @@ class AppController(
                     if (scanJob?.isActive != true && !postponed) {
                         val known = pairedDevices.known.value
                         val sources = buildList {
-                            add(scanNetwork().catch { })
+                            if (suggestWifi(known)) add(scanNetwork().catch { })
                             if (hooks.bluetoothPermissionGranted.value && known.isNotEmpty()) {
                                 add(scanBluetooth().catch { }.filter { it.identifier in known })
                             }
                         }
-                        val found = withTimeoutOrNull(SUGGEST_SCAN_DURATION) {
+                        val found = if (sources.isEmpty()) null else withTimeoutOrNull(SUGGEST_SCAN_DURATION) {
                             merge(*sources.toTypedArray()).first { it.identifier != device?.identifier }
                         }
                         if (found != null) {
@@ -1946,6 +2128,24 @@ class AppController(
                     delay(SUGGEST_SCAN_PAUSE)
                 }
             }
+    }
+
+    /**
+     * Search on Wi-Fi on its own only if a radio was assigned here before (paired now or under „Meine Funkgeräte“)
+     * and the local network may be searched without a system dialog (Android 17+: permission granted).
+     */
+    private fun suggestWifi(known: Set<String>): Boolean = known.isNotEmpty() && hooks.localNetworkAllowed.value
+
+    /**
+     * Ends this controller for a restart within the process (iOS, [app.anynear.data.restartApp]): disconnect the radio,
+     * stop all work of [scope] and wait briefly for it, so that nothing writes any more when the next controller reads
+     * the stored state. Afterwards this controller is unusable.
+     */
+    suspend fun shutdown() {
+        withTimeoutOrNull(SHUTDOWN_WAIT) { link.stop() }
+        val job = scope.coroutineContext[Job] ?: return
+        job.cancel()
+        withTimeoutOrNull(SHUTDOWN_WAIT) { job.join() }
     }
 
     @OptIn(kotlinx.coroutines.FlowPreview::class)
@@ -1983,7 +2183,11 @@ class AppController(
             val me = core.start()
             _myDeviceId.value = me.deviceId
             _myPersonId.value = me.personId
-            core.setOwnDeviceName(platformDeviceName())
+            launch { refreshContactRequests() }
+            // Only a stand-in if this device has no name yet (e.g. after the emergency card); the name typed when adding
+            // it by QR stays instead of turning back into the model name at every start.
+            ownDeviceNameToSet(core.ownDevices.value.firstOrNull { it.deviceId == me.deviceId }?.name, platformDeviceName())
+                ?.let { core.setOwnDeviceName(it) }
             runCatching { reattributeRemovedDevices(me.personId) }.onFailure { if (it is CancellationException) throw it }
             // Own name and radio go along with every registration in the circle; afterwards the contact link.
             combine(profile.ownName, profile.ownNodeNum, link.ownDevice) { name, node, _ -> name to node }
@@ -2188,6 +2392,10 @@ class AppController(
                 messageStore.addSystem(newId(), Conversation.Direct(person.peer), texts.status.lineUnreachable(person.name.ifBlank { texts.status.someone }))
             }
             is CoreEvent.ContactReachable -> Unit
+            is CoreEvent.ContactRequestsChanged -> scope.launch { refreshContactRequests() }
+            is CoreEvent.IntroAccepted -> messageStore.addSystem(
+                newId(), Conversation.Direct(PeerId.device(event.toPerson)), texts.people.introAcceptedLine(peerName(PeerId.device(event.toPerson)), event.name),
+            )
             is CoreEvent.MemberUpdated -> if (event.member.image != null) imageWake.trySend(Unit)
             is CoreEvent.MemberLeft -> {
                 messageStore.dropRecipient(Conversation.Circle(event.circleId), peerOfDevice(event.deviceId))
@@ -2215,6 +2423,8 @@ class AppController(
             is CoreEvent.Alert -> Unit
             // Check-ins (ADR 0083): [LifeSigns] reads them from the core itself.
             is CoreEvent.AliveChanged -> Unit
+            // Only the iOS notification extension reports these (wakeFetch); the running core emits AliveChanged.
+            is CoreEvent.AliveWake -> Unit
             is CoreEvent.Have -> onHave(event.hash, event.ref)
             is CoreEvent.ReadElsewhere -> {
                 val conversation = conversationOf(event.conversation)
@@ -2295,8 +2505,10 @@ class AppController(
             link = e.link?.let { l -> LinkPreview(l.url, l.title, l.description, l.site, l.image?.let(::attachmentOf)) },
             remoteId = e.mid,
             replyTo = replyRef(e.replyTo, e.replyFrom),
+            passedOn = e.passedOn,
             signed = e.opened?.let(b64::encode),
             space = e.space.ifEmpty { null },
+            intro = e.intro?.let { ContactIntro(it.id, it.person, it.name, it.byPerson, it.until, it.card) },
         )
         if (e.history && conversation is Conversation.Circle) {
             historyBuffer.getOrPut(conversation.circleId) { mutableListOf() } += message
@@ -2307,7 +2519,8 @@ class AppController(
         val read = !own && readOnArrival(conversation, message.timestampMillis)
         val added = messageStore.addOnline(e.objectId, message, read)
         if (message.attachments.isNotEmpty() || message.link?.image != null) downloadWake.trySend(Unit)
-        if (added && !read) onReceived(conversation)
+        // A person that still asks to become a contact (ADR 0116): one notice for the request, none per message.
+        if (added && !read && !e.fromRequest) onReceived(conversation)
     }
 
     /** Attachment of a received message; unknown kinds are skipped. */
@@ -2530,6 +2743,10 @@ class AppController(
         scanJob = scope.launch {
             _isScanning.value = true
             try {
+                // Searched on purpose: ask once for the local network (Android 17+), so the system does not show its
+                // own device picker on this and every later search. Declined, the search on Wi-Fi still runs and
+                // Android shows its picker, which is fine here because the person asked for it.
+                if (!hooks.localNetworkAllowed.value) hooks.requestLocalNetworkPermission()
                 // Both searches run in parallel. If one fails (Bluetooth off, no Wi-Fi), the other keeps running.
                 val sources = buildList {
                     add(scanNetwork().catch { })
@@ -2625,6 +2842,11 @@ class AppController(
 
     fun saveDraftText(conversation: Conversation, text: String) = drafts.setText(conversation, text)
 
+    /** The draft of [conversation] came from „Weiterleiten“ (ADR 0118). */
+    fun draftPassedOn(conversation: Conversation): Boolean = drafts.passedOn(conversation)
+
+    fun saveDraftPassedOn(conversation: Conversation, passedOn: Boolean) = drafts.setPassedOn(conversation, passedOn)
+
     suspend fun draftAttachments(conversation: Conversation): List<DraftAttachment> =
         withContext(draftIo) { drafts.attachments(conversation) }
 
@@ -2633,7 +2855,14 @@ class AppController(
     }
 
     /** Shared from another app (share menu of the system), until one has chosen whom it goes to. */
-    class SharedContent(val text: String, val files: List<File>) {
+    class SharedContent(
+        val text: String,
+        val files: List<File>,
+        /** Attachments ready as they are (forwarding: photos are not shrunk a second time). */
+        val drafts: List<DraftAttachment> = emptyList(),
+        /** Forwarded from a chat of the app („Weiterleiten“) instead of shared from another app. */
+        val forward: Boolean = false,
+    ) {
         /** [bytes] `null`: not readable or [tooLarge]. */
         class File(val bytes: ByteArray?, val name: String, val image: Boolean, val tooLarge: Boolean = false)
     }
@@ -2648,7 +2877,7 @@ class AppController(
      * menu. Then into it as a draft without „An wen?“ and open the conversation; unknown conversations ask as usual.
      */
     fun receiveShared(content: SharedContent, target: String? = null) {
-        if (content.text.isBlank() && content.files.isEmpty()) return
+        if (content.text.isBlank() && content.files.isEmpty() && content.drafts.isEmpty()) return
         val conversation = target?.takeIf { key -> chatList.value.any { it.key == key && !it.removed } }?.let(::conversationOf)
         if (conversation == null) {
             _shared.value = content
@@ -2662,6 +2891,24 @@ class AppController(
 
     fun dismissShared() {
         _shared.value = null
+    }
+
+    /**
+     * „Weiterleiten“: text and attachments of [message] go through the same „An wen?“ as something shared from another
+     * app and then sit as a draft in the chosen conversation; only the send button sends. Attachments are taken from
+     * the phone and sealed again with a new key for the new conversation (ANDP has no references across spaces, and a
+     * new key keeps the same file in two conversations from being recognisable at the relays). Over radio only the
+     * text goes, as with every message. @return what cannot be forwarded, `null` if it is on its way to „An wen?“.
+     */
+    suspend fun forward(message: ChatMessage): String? {
+        val drafts = message.attachments.map { a ->
+            val bytes = attachmentBytes(a.blobId) ?: return texts.chat.attachmentGone
+            DraftAttachment(a.kind, bytes, name = a.name, width = a.width, height = a.height, durationMillis = a.durationMillis)
+        }
+        // The automatic text preview of a voice message is not the sender's words; the receiver's app makes its own.
+        val text = if (message.attachments.any { it.transcribed }) "" else message.text
+        receiveShared(SharedContent(text, emptyList(), drafts, forward = true))
+        return null
     }
 
     /**
@@ -2684,7 +2931,7 @@ class AppController(
 
     private suspend fun putIntoDraft(conversation: Conversation, content: SharedContent): String? {
         val problems = mutableListOf<String>()
-        val prepared = content.files.mapNotNull { file ->
+        val prepared = content.files.mapNotNullTo(mutableListOf()) { file ->
             val bytes = file.bytes
             when {
                 file.tooLarge -> null.also { problems += texts.chat.fileTooLarge }
@@ -2693,6 +2940,18 @@ class AppController(
                 else -> prepareFile(bytes, file.name).let { (d, problem) -> problem?.let { problems += it }; d }
             }
         }
+        val ready = content.drafts.toMutableList()
+        // A voice message goes alone (ADR 0030): not into a draft that already has attachments.
+        if (ready.any { it.kind == AttachmentKind.AUDIO }) {
+            val busy = withContext(draftIo) { drafts.attachments(conversation) }.isNotEmpty() || prepared.isNotEmpty()
+            if (busy) {
+                ready.removeAll { it.kind == AttachmentKind.AUDIO }
+                problems += texts.status.tooManyAttachments(1)
+            }
+        }
+        prepared += ready
+        // From „Weiterleiten“: the draft goes out marked „Weitergeleitet“ (ADR 0118).
+        if (content.forward) drafts.setPassedOn(conversation, true)
         val text = content.text.trim()
         if (text.isNotEmpty()) {
             val old = drafts.text(conversation).trimEnd()
@@ -2725,6 +2984,8 @@ class AppController(
         linkDraft: LinkDraft? = null,
         /** Message this one answers (ADR 0092), from [replyRefOf]. */
         reply: ReplyRef? = null,
+        /** Passes on a message one got („Weiterleiten“, ADR 0118): marked „Weitergeleitet“. */
+        passedOn: Boolean = false,
     ): SendResult {
         var body = text.trim()
         if (body.isEmpty() && drafts.isEmpty()) return SendResult.Rejected(texts.status.messageEmpty)
@@ -2750,7 +3011,7 @@ class AppController(
             if (current != null && current != conversation.peer) {
                 val moved = Conversation.Direct(current)
                 _openRequest.value = moved
-                return send(moved, text, drafts, transcript, linkDraft, reply)
+                return send(moved, text, drafts, transcript, linkDraft, reply, passedOn)
             }
         }
 
@@ -2759,7 +3020,7 @@ class AppController(
         if (conversation is Conversation.Direct && conversation.peer in addingContacts.value && !reachableNow(conversation.peer)) {
             scope.launch {
                 if (awaitReachable(conversation.peer, CONTACT_SAVE_WAIT)) {
-                    (send(conversation, text, drafts, transcript, linkDraft, reply) as? SendResult.Rejected)?.let { _notice.value = it.reason }
+                    (send(conversation, text, drafts, transcript, linkDraft, reply, passedOn) as? SendResult.Rejected)?.let { _notice.value = it.reason }
                 } else {
                     _notice.value = texts.status.personUnreachable
                 }
@@ -2842,6 +3103,7 @@ class AppController(
                 attachments = attachments,
                 link = linkPreview,
                 replyTo = reply,
+                passedOn = passedOn,
             ),
         )
         if (radioAvailable) {
@@ -3179,8 +3441,8 @@ class AppController(
             PreparedLink(l.url, l.title, l.description, l.site, image)
         }
         val out = when {
-            circleId != null -> core.sendCircle(circleId, ready.text, prepared, mid = localId, timestampMillis = ready.timestampMillis, link = preparedLink, replyTo = ready.replyTo?.mid, replyFrom = ready.replyTo?.tag)
-            else -> core.sendDirect(device!!, ready.text, prepared, mid = localId, timestampMillis = ready.timestampMillis, link = preparedLink, replyTo = ready.replyTo?.mid, replyFrom = ready.replyTo?.tag)
+            circleId != null -> core.sendCircle(circleId, ready.text, prepared, mid = localId, timestampMillis = ready.timestampMillis, link = preparedLink, replyTo = ready.replyTo?.mid, replyFrom = ready.replyTo?.tag, passedOn = ready.passedOn)
+            else -> core.sendDirect(device!!, ready.text, prepared, mid = localId, timestampMillis = ready.timestampMillis, link = preparedLink, replyTo = ready.replyTo?.mid, replyFrom = ready.replyTo?.tag, passedOn = ready.passedOn)
         }
         if (out == null) {
             if (ready.via.isEmpty()) messageStore.markFailed(localId)
@@ -3498,15 +3760,23 @@ class AppController(
             return null
         }
         if (isContactLinkText(url)) return texts.status.contactLinkBroken
-        inviteProblem(url)?.let { return it }
-        val invite = core.parseInvite(url) ?: return texts.status.inviteLinkBroken
-        val known = circleRepository.find(invite.circleId) ?: circleRepository.circles.value.firstOrNull { it.secret == invite.secret }
-        if (known != null && !known.removed && known.secret == invite.secret && setupDone.value) {
-            join(url)
+        return offerInvite(url)
+    }
+
+    /**
+     * Invitation link opened, scanned or pasted: nothing is joined yet, only [pendingInvite] asks „Beitreten“ with circle
+     * and inviter. A circle one is already in opens directly after setup. @return error message or `null`.
+     */
+    fun offerInvite(linkText: String): String? {
+        inviteProblem(linkText)?.let { return it }
+        val invite = core.parseInvite(linkText) ?: return texts.status.inviteLinkBroken
+        val known = memberCircleOf(invite)
+        if (known != null && setupDone.value) {
+            join(linkText)
             _openRequest.value = Conversation.Circle(known.id)
         } else {
             _pendingContact.value = null
-            _pendingInvite.value = InviteOffer(url, invite.circleId, invite.name)
+            _pendingInvite.value = InviteOffer(linkText, invite.circleId, invite.name, invite.inviter.trim())
         }
         return null
     }
@@ -3591,7 +3861,8 @@ class AppController(
             }
         }
         finishSetup(Conversation.Direct(peerOfDevice(pending.deviceId)).takeIf { openChat })
-        if (!known) _notice.value = texts.status.contactAdded(pending.name)
+        // The person decides whether you become contacts (ADR 0116 §7); until then it is a request.
+        if (!known) _notice.value = texts.people.requestSent(pending.name)
         return null
     }
 
@@ -4502,7 +4773,9 @@ class AppController(
             CoreAddContactResult.Own -> return AddContactResult.Own
             CoreAddContactResult.ForeignNetwork -> return AddContactResult.Invalid(texts.status.linkForeignNetwork)
             CoreAddContactResult.Invalid -> return AddContactResult.Invalid(texts.status.contactLinkBroken)
+            is CoreAddContactResult.Requested -> return AddContactResult.Invalid(texts.status.contactLinkBroken)
         }
+        scope.launch { refreshContactRequests() }
         ContactRepository.fromBytes(radioContact)?.let { radio ->
             if (contactRepository.add(radio, link.ownDevice.value?.nodeNum) is ContactRepository.ImportResult.Added) link.registerContact(radio)
         }
@@ -4511,8 +4784,12 @@ class AppController(
 
     fun removeContact(nodeNum: Int) = contactRepository.remove(nodeNum)
 
-    /** Is [deviceId] itself stored as a contact (contact link or direct messages)? */
-    fun isDirectContact(deviceId: String): Boolean = memberDirectory.find(MemberDirectory.DIRECT_CONTACTS, deviceId) != null
+    /** Is [id] (a device ID, or a person ID with any of its devices) stored as a contact (contact link or direct messages)? */
+    fun isDirectContact(id: String): Boolean = directEntries(id).isNotEmpty()
+
+    /** Contact entries of [id]: a device ID or a person ID (ADR 0042), whose entries carry its device IDs. */
+    private fun directEntries(id: String): List<Member> =
+        memberDirectory.members.value.filter { it.circleId == MemberDirectory.DIRECT_CONTACTS && (it.deviceId == id || it.personId == id) }
 
     /**
      * Remove an app contact stored by oneself, together with the radio contact stored with it. Conversation,
@@ -4521,11 +4798,13 @@ class AppController(
      * personal mailbox until you connect again via the contact link. With a shared circle
      * its grant continues to apply; if they then write directly, they become a contact again.
      */
-    fun removeDirectContact(deviceId: String) {
-        val entry = memberDirectory.find(MemberDirectory.DIRECT_CONTACTS, deviceId) ?: return
-        val inCircle = memberDirectory.members.value.any { it.deviceId == deviceId && it.circleId != MemberDirectory.DIRECT_CONTACTS }
-        if (!inCircle && entry.nodeNum != 0) contactRepository.remove(entry.nodeNum)
-        scope.launch { core.removeContact(deviceId) }
+    fun removeDirectContact(id: String) {
+        // [id] is a device or person ID; the page passes the person (ADR 0042), whose entries carry its device IDs.
+        val entries = directEntries(id).ifEmpty { return }
+        val devices = entries.map { it.deviceId }.toSet()
+        val inCircle = memberDirectory.members.value.any { it.deviceId in devices && it.circleId != MemberDirectory.DIRECT_CONTACTS }
+        if (!inCircle) entries.map { it.nodeNum }.filter { it != 0 }.distinct().forEach { contactRepository.remove(it) }
+        scope.launch { core.removeContact(id) }
     }
 
     fun findPerson(peer: String): Person? = Person.find(people.value, peer)
@@ -4553,6 +4832,7 @@ class AppController(
     fun peerName(peer: String): String {
         findPerson(peer)?.let { return it.name }
         PeerId.nodeNumOf(peer)?.let { return displayName(it) }
+        PeerId.deviceIdOf(peer)?.let(ownContactNames.value::get)?.let { return it }
         // Member that is only known from a message.
         return messageStore.messages.value.lastOrNull { it.fromPeer == peer }?.senderName
             ?: linkNames.value[peer]
@@ -4561,7 +4841,7 @@ class AppController(
 
     /** Name for the speech bubble of an incoming message. */
     fun senderLabel(message: ChatMessage): String =
-        message.fromPeer?.let { findPerson(it)?.name } ?: message.senderName ?: displayName(message.fromNodeNum)
+        message.fromPeer?.let { peer -> findPerson(peer)?.name ?: PeerId.deviceIdOf(peer)?.let(ownContactNames.value::get) } ?: message.senderName ?: displayName(message.fromNodeNum)
 
     fun displayName(nodeNum: Int): String =
         contactRepository.find(nodeNum)?.displayName
@@ -4580,6 +4860,9 @@ class AppController(
     private fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
     internal companion object {
+        /** Lifetime of an introduction card (ADR 0116), as in the core. */
+        const val INTRO_LIFETIME_MILLIS = 30L * 24 * 3600 * 1000
+
         /** From this many failed pairings in a row the app recommends pairing again. */
         const val PAIRING_HINT_AFTER = 2
 
@@ -4626,6 +4909,9 @@ class AppController(
 
         /** This many unread messages are shown by a notification, older ones only as a number. */
         private const val NOTIFICATION_LINES = 6
+
+        /** How long a reply from the notification waits for the core and for leaving the phone (iOS allows about 30 s). */
+        private val REPLY_WAIT = 20.seconds
 
         /** Fetch of a preview (ADR 0069): time limit and neutral name, without device and version. */
         private const val PREVIEW_TIMEOUT_MILLIS = 5_000L
@@ -4674,6 +4960,9 @@ class AppController(
 
         /** For this long a new device waits for the handover from the phone. */
         private val PAIRING_WAIT = 10.minutes
+
+        /** At most this long [shutdown] waits for the radio and for the running work to end. */
+        private val SHUTDOWN_WAIT = 3.seconds
 
         /** For this long passwords stay open when one leaves the area or the app goes to the background (ADR 0048). */
         val PASSWORD_GRACE = 180.seconds
@@ -4771,3 +5060,6 @@ data class DeviceSetupPrompt(
     /** Names of other radios in range, for the notice „gibt es schon“. */
     val takenNames: Set<String> = emptySet(),
 )
+
+/** Name to give this device at the start: the model name, but only if it has none yet; otherwise `null`. */
+internal fun ownDeviceNameToSet(current: String?, platform: String): String? = platform.takeIf { current.isNullOrBlank() }

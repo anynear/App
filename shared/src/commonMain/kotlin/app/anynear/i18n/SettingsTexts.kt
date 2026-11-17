@@ -180,6 +180,7 @@ interface SettingsTexts {
     fun newVersionTitle(version: String?): String
     val updateIntro: String
     val updateNow: String
+    val whatsNew: String
     fun version(version: String): String
     val appSection: String
     val upToDate: String
@@ -422,6 +423,7 @@ internal object SettingsTextsDe : SettingsTexts {
     override fun newVersionTitle(version: String?) = if (version == null) "Neue Version von $APP" else "$APP $version ist da"
     override val updateIntro = "Eine neue Version ist da. Das Aktualisieren dauert etwa eine Minute, deine Kreise und Nachrichten bleiben."
     override val updateNow = "Jetzt aktualisieren"
+    override val whatsNew = "Was ist neu"
     override fun version(version: String) = "Version $version"
     override val appSection = "App"
     override val upToDate = "Du hast die neueste Version"
@@ -663,6 +665,7 @@ internal object SettingsTextsEn : SettingsTexts {
     override fun newVersionTitle(version: String?) = if (version == null) "New version of $APP" else "$APP $version is here"
     override val updateIntro = "A new version is here. Updating takes about a minute. Your circles and messages stay."
     override val updateNow = "Update now"
+    override val whatsNew = "What's new"
     override fun version(version: String) = "Version $version"
     override val appSection = "App"
     override val upToDate = "You have the latest version"
