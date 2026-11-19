@@ -64,6 +64,7 @@ import app.anynear.attachments.shrinkImage
 import app.anynear.attachments.uprightTurn
 import app.anynear.chats.ChatList
 import app.anynear.chats.ChatListEntry
+import app.anynear.chats.ListedContact
 import app.anynear.chats.InviteCard
 import app.anynear.chats.InviteKind
 import app.anynear.chats.InviteLink
@@ -110,6 +111,7 @@ import io.ktor.http.isSuccess
 import io.ktor.utils.io.readRemaining
 import kotlinx.io.readByteArray
 import app.anynear.chats.LinkPreviews
+import app.anynear.chats.codePointCount
 import app.anynear.chats.isPublicHost
 import app.anynear.mesh.ConnectionDrops
 import app.anynear.mesh.Conversation
@@ -622,7 +624,22 @@ class AppController(
         val before = _contactRequests.value.map { it.person }.toSet()
         val now = runCatching { core.contactRequests() }.getOrNull() ?: return
         _contactRequests.value = now
-        _sentRequests.value = runCatching { core.sentContactRequests() }.getOrDefault(_sentRequests.value)
+        val sentBefore = _sentRequests.value
+        _sentRequests.value = runCatching { core.sentContactRequests() }.getOrDefault(sentBefore)
+        // A request of ours that ended before its time was answered: the person agreed. A line in the chat with it, so
+        // that the conversation shows in „Nachrichten“ right away (an expired one ended without an answer).
+        val at = Clock.System.now().toEpochMilliseconds()
+        val sentNow = _sentRequests.value.map { it.person }.toSet()
+        sentBefore.filter { it.person !in sentNow && (it.until == 0L || it.until > at) }.forEach { r ->
+            // A request over a contact link names the device, not the person: the line goes to the chat with the
+            // person, which [people] knows one step after the core.
+            scope.launch {
+                val peer = PeerId.device(r.deviceId ?: r.person)
+                awaitReachable(peer)
+                val conversation = Conversation.Direct(findPerson(peer)?.peer ?: PeerId.device(r.person))
+                messageStore.addSystem(newId(), conversation, texts.people.requestAnsweredLine(r.name))
+            }
+        }
         // One notice per new request, not one per message it brings along.
         now.filter { it.person !in before }.forEach { r ->
             if (!inFront()) {
@@ -645,11 +662,21 @@ class AppController(
 
     /** Agree to the request of [person]: it becomes a contact, its messages appear in „Nachrichten“. */
     fun acceptContactRequest(person: String) {
-        scope.launch {
-            val name = _contactRequests.value.firstOrNull { it.person == person }?.name
-            if (core.acceptContactRequest(person) && name != null) _notice.value = texts.people.requestAccepted(name)
-            refreshContactRequests()
-        }
+        scope.launch { acceptContactRequestNow(person) }
+    }
+
+    /**
+     * Like [acceptContactRequest], returns the conversation with the person to open, `null` if there is no such request
+     * (any more). A line in it makes the conversation show in „Nachrichten“ even without messages.
+     */
+    suspend fun acceptContactRequestNow(person: String): Conversation? {
+        val name = _contactRequests.value.firstOrNull { it.person == person }?.name
+        val accepted = core.acceptContactRequest(person)
+        refreshContactRequests()
+        if (!accepted || name == null) return null
+        val conversation = Conversation.Direct(PeerId.device(person))
+        messageStore.addSystem(newId(), conversation, texts.people.requestAcceptedLine(name))
+        return conversation
     }
 
     /** Decline silently: the person learns nothing, what it wrote is deleted here. */
@@ -707,14 +734,25 @@ class AppController(
 
     /** All conversations as in common messengers: newest on top, with the number of unread messages. */
     val chatList: StateFlow<List<ChatListEntry>> =
-        combine(circleRepository.circles, messageStore.messages, people, supportPeer, _contactRequests) { circles, messages, _, support, requests ->
+        combine(circleRepository.circles, messageStore.messages, people, supportPeer, _contactRequests) { circles, messages, persons, support, requests ->
             // The direct conversation with support (only „Neue Anfrage“) is not in the list; nor one of a person that
             // still asks to become a contact (ADR 0116): it shows as a request until you agree.
             val asking = requests.map { Conversation.Direct(PeerId.device(it.person)) }.toSet()
-            ChatList.build(circles, messages, ::peerName, ::senderLabel)
+            ChatList.build(circles, messages, ::peerName, ::senderLabel, listedContacts(persons, memberDirectory.members.value))
                 .filterNot { support != null && it.conversation == Conversation.Direct(support) }
                 .filterNot { it.conversation in asking }
         }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /**
+     * Contacts one added (not only circle members), also without messages, for the overview (ADR 0008): sorted by when
+     * they were added, the first device of the person counts.
+     */
+    private fun listedContacts(persons: List<Person>, members: List<Member>): List<ListedContact> =
+        persons.filter { it.isIn(members, MemberDirectory.DIRECT_CONTACTS) }.map { p ->
+            val added = members.filter { it.circleId == MemberDirectory.DIRECT_CONTACTS && (it.personId == p.deviceId || it.deviceId in p.devices) }
+                .map { it.addedAt }.filter { it > 0 }.minOrNull() ?: 0
+            ListedContact(p.peer, p.devices, added)
+        }
 
     /**
      * Unread messages in the conversations of the overview, for the number at „Nachrichten“ and on the icon. Unread ones
@@ -1021,6 +1059,25 @@ class AppController(
     /** „Später“: do not ask again for some days. */
     fun postponeBackgroundHint() {
         profile.postponeBackgroundHint(Clock.System.now().toEpochMilliseconds() + BACKGROUND_HINT_PAUSE.inWholeMilliseconds)
+    }
+
+    private val _backgroundNotice = MutableStateFlow(false)
+
+    /** The ongoing notification „Empfängt deine Nachrichten“ was tapped (Android): explain it and offer to hide it. */
+    val backgroundNotice: StateFlow<Boolean> = _backgroundNotice.asStateFlow()
+
+    fun openBackgroundNotice() {
+        _backgroundNotice.value = true
+    }
+
+    fun dismissBackgroundNotice() {
+        _backgroundNotice.value = false
+    }
+
+    /** „Ausblenden“: to the system setting of that notification; the switch there is the user's. */
+    fun hideBackgroundNotice() {
+        _backgroundNotice.value = false
+        hooks.openBackgroundNoticeSettings()
     }
 
     /** The UI reports which conversation is open right now (`null`: none). */
@@ -2180,6 +2237,10 @@ class AppController(
         // Removed, also already before this start (e.g. while the app was closed): delete everything here.
         scope.launch { core.revoked.first { it }; removedHere() }
         scope.launch {
+            // Note when this device began to load before anything arrives (ADR 0107 §8). Noted only once a message came
+            // back while loading, a circle joined later counted everything sent before that moment as read and sent no
+            // read receipt for it.
+            loadingSince()
             val me = core.start()
             _myDeviceId.value = me.deviceId
             _myPersonId.value = me.personId
@@ -2929,6 +2990,27 @@ class AppController(
 
     private var puttingShared = false
 
+    /**
+     * Shared from another app or forwarded into a conversation (the „Weitergeleitet“ mark with [passedOn]): waits
+     * here until the chat of the conversation takes it into its draft ([takeDraftAdditions]).
+     */
+    class DraftAddition(val text: String, val attachments: List<DraftAttachment>, val passedOn: Boolean = false)
+
+    private val _draftAdditions = MutableStateFlow<Map<Conversation, List<DraftAddition>>>(emptyMap())
+
+    /** Additions per conversation that its chat has not yet taken over. */
+    val draftAdditions: StateFlow<Map<Conversation, List<DraftAddition>>> = _draftAdditions.asStateFlow()
+
+    /** Takes the waiting additions of [conversation] (each only once). */
+    fun takeDraftAdditions(conversation: Conversation): List<DraftAddition> {
+        var taken = emptyList<DraftAddition>()
+        _draftAdditions.update { all ->
+            taken = all[conversation].orEmpty()
+            all - conversation
+        }
+        return taken
+    }
+
     private suspend fun putIntoDraft(conversation: Conversation, content: SharedContent): String? {
         val problems = mutableListOf<String>()
         val prepared = content.files.mapNotNullTo(mutableListOf()) { file ->
@@ -2940,31 +3022,12 @@ class AppController(
                 else -> prepareFile(bytes, file.name).let { (d, problem) -> problem?.let { problems += it }; d }
             }
         }
-        val ready = content.drafts.toMutableList()
-        // A voice message goes alone (ADR 0030): not into a draft that already has attachments.
-        if (ready.any { it.kind == AttachmentKind.AUDIO }) {
-            val busy = withContext(draftIo) { drafts.attachments(conversation) }.isNotEmpty() || prepared.isNotEmpty()
-            if (busy) {
-                ready.removeAll { it.kind == AttachmentKind.AUDIO }
-                problems += texts.status.tooManyAttachments(1)
-            }
-        }
-        prepared += ready
-        // From „Weiterleiten“: the draft goes out marked „Weitergeleitet“ (ADR 0118).
-        if (content.forward) drafts.setPassedOn(conversation, true)
-        val text = content.text.trim()
-        if (text.isNotEmpty()) {
-            val old = drafts.text(conversation).trimEnd()
-            drafts.setText(conversation, if (old.isEmpty()) text else "$old\n$text")
-        }
-        if (prepared.isNotEmpty()) {
-            withContext(draftIo) {
-                val old = drafts.attachments(conversation)
-                val room = AttachmentLimits.MAX_PER_MESSAGE - old.size
-                if (prepared.size > room) problems += texts.chat.maxAttachments(AttachmentLimits.MAX_PER_MESSAGE)
-                runCatching { drafts.setAttachments(conversation, old + prepared.take(room.coerceAtLeast(0))) }
-            }
-        }
+        prepared += content.drafts
+        // The chat takes it over into its draft as soon as it is open (also if it is open already); it then stores the
+        // draft itself. Written into the store from here, the open chat did not see it and overwrote it on its next
+        // change (tester report, round 2: shared photo missing until the app was restarted, or gone).
+        val addition = DraftAddition(content.text.trim(), prepared, passedOn = content.forward)
+        _draftAdditions.update { it + (conversation to (it[conversation].orEmpty() + addition)) }
         return problems.distinct().firstOrNull()
     }
 
@@ -3000,7 +3063,7 @@ class AppController(
         val preview = if (voice != null && body.isEmpty()) transcript?.let { voicePreview(conversation, it) } else null
         if (preview != null) body = preview
         val kinds = drafts.map { it.kind }
-        if (textBytesLeft(conversation, body, kinds) < 0) return SendResult.Rejected(texts.status.messageTooLong)
+        if (textLeft(conversation, body, kinds) < 0) return SendResult.Rejected(texts.status.messageTooLong)
         // A long text goes in full over the internet, over radio only the beginning (ADR 0031).
         val radioBody = RadioAnnouncement.cut(RadioAnnouncement.radioText(body, kinds, voice?.durationMillis ?: 0), radioTextLimit(conversation))
 
@@ -3340,12 +3403,12 @@ class AppController(
         }
 
     /**
-     * Still free for text in [conversation]. With an internet path [MAX_ONLINE_TEXT_BYTES] applies, over radio
-     * only the beginning goes then ([radioTextKept]). Only reachable over radio (radio without anynear): the limit
-     * of the radio packet, the announcement of the attachments counts too.
+     * Still free for text in [conversation]. With an internet path [MAX_ONLINE_TEXT_CHARS] characters (Unicode code
+     * points, [codePointCount]) apply, over radio only the beginning goes then ([radioTextKept]). Only reachable over
+     * radio (radio without anynear): bytes of the radio packet, the announcement of the attachments counts too.
      */
-    fun textBytesLeft(conversation: Conversation, text: String, kinds: List<AttachmentKind>): Int =
-        if (reachableOnline(conversation)) MAX_ONLINE_TEXT_BYTES - text.trim().encodeToByteArray().size
+    fun textLeft(conversation: Conversation, text: String, kinds: List<AttachmentKind>): Int =
+        if (reachableOnline(conversation)) MAX_ONLINE_TEXT_CHARS - text.trim().codePointCount()
         else radioTextLimit(conversation) - RadioAnnouncement.radioText(text.trim(), kinds).encodeToByteArray().size
 
     /**
@@ -4191,7 +4254,7 @@ class AppController(
         return ReadUntil.readOnArrival(sentAt, mark, loadingSince())
     }
 
-    /** When this device began to load the messages after the emergency card or being added; noted the first time. */
+    /** When this device began to load the messages after the emergency card or being added; noted at its first start. */
     private fun loadingSince(): Long =
         store.getString(LOADING_SINCE_KEY)?.toLongOrNull() ?: nowMillis().also { store.putString(LOADING_SINCE_KEY, it.toString()) }
 
@@ -5004,9 +5067,11 @@ class AppController(
         private const val MAX_TEXT_BYTES = 200
 
         /**
-         * Longest text with an internet path. Over radio only the beginning goes (ADR 0031).
+         * Longest text with an internet path, in characters counted as Unicode code points ([codePointCount]), the
+         * same way as the web app; at most 16384 bytes in UTF-8. The same in every plan: text length is no plan feature.
+         * Over radio only the beginning goes (ADR 0031).
          */
-        internal const val MAX_ONLINE_TEXT_BYTES = 1000
+        internal const val MAX_ONLINE_TEXT_CHARS = 4096
 
         /** The app passes on these kinds for others at the shared radio (ADR 0022). */
         /** Below this battery level on the radio the app passes on nothing for others (ADR 0051). */

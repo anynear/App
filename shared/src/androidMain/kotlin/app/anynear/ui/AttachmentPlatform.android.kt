@@ -27,9 +27,13 @@ import androidx.compose.foundation.content.consume
 import androidx.compose.foundation.content.contentReceiver
 import androidx.compose.foundation.content.hasMediaType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -67,11 +71,15 @@ internal actual fun rememberAttachmentPicker(fileLimit: Long, onPicked: (images:
     }
     // Take a photo: the camera app writes to a file in the cache (via the FileProvider), then it is read and
     // deleted. Because the app declares CAMERA (QR code), Android requires the permission for the camera app too.
+    // While the camera app is in front, Android may end anynear's activity (often on phones with little memory or
+    // strict battery rules): the path is therefore kept as saved state, so that the photo still arrives afterwards.
     val context = AndroidPlatform.requireContext()
-    val photoFile = remember { mutableListOf<File>() }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val file = photoFile.removeLastOrNull() ?: return@rememberLauncherForActivityResult
-        if (!ok || !file.exists() || file.length() == 0L) {
+    var photoPath by rememberSaveable { mutableStateOf<String?>(null) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { _ ->
+        val file = photoPath?.let(::File) ?: return@rememberLauncherForActivityResult
+        photoPath = null
+        // Some camera apps report „canceled“ although they saved the photo; what was written counts.
+        if (!file.exists() || file.length() == 0L) {
             file.delete()
             return@rememberLauncherForActivityResult
         }
@@ -88,9 +96,9 @@ internal actual fun rememberAttachmentPicker(fileLimit: Long, onPicked: (images:
         val dir = File(context.cacheDir, "camera").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
         val file = File(dir, "photo-${System.currentTimeMillis()}.jpg")
-        photoFile += file
+        photoPath = file.path
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-        runCatching { camera.launch(uri) }.onFailure { photoFile.remove(file) }
+        runCatching { camera.launch(uri) }.onFailure { photoPath = null }
     }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) launchCamera()

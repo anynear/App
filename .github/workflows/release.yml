@@ -294,7 +294,8 @@ jobs:
 
   ios:
     if: vars.RELEASE != 'off'
-    runs-on: ${{ fromJSON(vars.RUNNER_MAC || '"macos-26"') }}
+    # xcode-27 is GitHub's image with Xcode 27 (macOS 27); macos-26 carries Xcode 26 only.
+    runs-on: ${{ fromJSON(vars.RUNNER_MAC || '"xcode-27"') }}
     environment: release
     outputs:
       built: ${{ steps.ios-json.outputs.built }}
@@ -474,21 +475,21 @@ jobs:
           done
           rm -f "$RUNNER_TEMP/asc.json"
 
-      # App Store Connect accepts only builds with the current SDK (Xcode 26, iOS 26 SDK). Better to
-      # abort immediately than after the long build at upload.
-      - name: Check for Xcode 26
+      # From April 2027 App Store Connect accepts only builds with the iOS 27 SDK (Xcode 27 or newer; before that
+      # it warns with 90725). Better to abort immediately than after the long build at upload.
+      - name: Check for Xcode 27
         if: steps.check.outputs.ready == 'true'
         run: |
           version=$(xcodebuild -version | awk 'NR==1 {print $2}')
-          if [ "${version%%.*}" -lt 26 ]; then
-            # GitHub's macOS images carry several Xcode versions; take the newest 26.x if there is one.
-            newest=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ "${version%%.*}" -lt 27 ]; then
+            # A runner can carry several Xcode versions; take the newest 27.x if there is one.
+            newest=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1 || true)
             if [ -n "$newest" ]; then sudo xcode-select -s "$newest/Contents/Developer"; fi
             version=$(xcodebuild -version | awk 'NR==1 {print $2}')
           fi
           xcodebuild -version
-          if [ "${version%%.*}" -lt 26 ]; then
-            echo "::error::Xcode $version on this runner, Xcode 26 or newer is needed."
+          if [ "${version%%.*}" -lt 27 ]; then
+            echo "::error::Xcode $version on this runner, Xcode 27 or newer is needed."
             exit 1
           fi
 

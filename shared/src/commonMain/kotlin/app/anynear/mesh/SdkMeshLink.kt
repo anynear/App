@@ -127,6 +127,9 @@ class SdkMeshLink(
 
     private fun log(message: String, cause: Throwable? = null) = logSink.log(LogLevel.INFO, "App", message, cause)
 
+    /** Context of each `RadioClient`: a closed channel at the end of a connection must not end the app ([radioSdkContext]). */
+    private fun sdkContext() = radioSdkContext { log("Funkgerät: Verbindungsende im SDK abgefangen", it) }
+
     private val _state = MutableStateFlow<LinkState>(LinkState.NoDevice)
     override val state: StateFlow<LinkState> = _state.asStateFlow()
 
@@ -222,6 +225,7 @@ class SdkMeshLink(
                 rc = RadioClient.Builder()
                     .transport(transport)
                     .storage(SqlDelightStorageProvider(baseDir = dataDir))
+                    .coroutineContext(sdkContext())
                     .skipNodeDb()
                     .build()
                 rc?.connect()
@@ -249,6 +253,7 @@ class SdkMeshLink(
                     // Limited: afterwards the loop here takes over, which searches less often in the background.
                     .autoReconnect(AutoReconnectConfig(maxBackoff = 30.seconds, maxAttempts = SDK_RECONNECT_ATTEMPTS))
                     .logger(logSink)
+                    .coroutineContext(sdkContext())
                     .build()
                 val session = launch { observe(rc) }
                 try {

@@ -173,8 +173,13 @@ class ReadReceiptAppTest {
             eventually("Anfrage bei Ilse") { ilse.contactRequests.value.any { it.person == ben.myPersonId.value } }
             check(ilse.contactRequests.value.single().introducedByName == "Testperson Anna") { "nennt Anna" }
             check(ilse.chatList.value.none { it.conversation.isWith(ben) }) { "Ben steht noch nicht in Ilses Übersicht" }
-            ilse.acceptContactRequest(ben.myPersonId.value!!)
+            val opened = ilse.acceptContactRequestNow(ben.myPersonId.value!!)
+            check(opened != null && opened.isWith(ben)) { "Zustimmen öffnet den Chat mit Ben" }
+            eventually("Ben steht in Ilses Übersicht, ohne Nachricht") { ilse.chatList.value.any { it.conversation.isWith(ben) } }
+            ilse.send(opened, "Hallo Ben")
+            eventually("Ilse kann gleich schreiben, Ben hat sie") { ben.messages.value.any { it.text == "Hallo Ben" } }
             eventually("Ilse ist Bens Kontakt") { ben.findPerson("d:" + ilse.myPersonId.value) != null && ben.sentRequests.value.isEmpty() }
+            eventually("Ilse steht in Bens Übersicht") { ben.chatList.value.any { it.conversation.isWith(ilse) } }
             ben.send(Conversation.Direct("d:" + ilse.myPersonId.value), "Hallo Ilse")
             eventually("Ilse hat sie") { ilse.messages.value.any { it.text == "Hallo Ilse" } }
         } finally {
@@ -262,6 +267,9 @@ class ReadReceiptAppTest {
             eventually("Anfrage bei Ben") { ben.contactRequests.value.isNotEmpty() }
             ben.acceptContactRequest(ben.contactRequests.value.single().person)
             eventually("Anna ist Bens Kontakt") { ben.contactRequests.value.isEmpty() && ben.findPerson("d:" + anna.myPersonId.value) != null }
+            // Anna learns that Ben agreed, in one chat with Ben, even before anyone writes.
+            eventually("Ben hat zugestimmt, bei Anna") { anna.chatList.value.any { it.conversation == directTo(anna, ben) && it.last?.system != null } }
+            check(anna.chatList.value.count { it.conversation.isWith(ben) } == 1) { "nur ein Chat mit Ben: ${anna.chatList.value.map { it.conversation }}" }
             fun toBen() = directTo(anna, ben)
             fun toAnna() = directTo(ben, anna)
             anna.send(toBen(), "Hallo Ben, ohne Kreis")
@@ -301,6 +309,9 @@ class ReadReceiptAppTest {
             val opened = Conversation.Direct("d:" + ben.myDeviceId.value)
             val byPerson = Conversation.Direct("d:" + ben.myPersonId.value)
             check(opened != byPerson) { "Ben hat eine eigene Personen-ID" }
+            // Ben decides (ADR 0116 §7): only his profile after agreeing tells Anna his person.
+            eventually("Anfrage bei Ben") { ben.contactRequests.value.isNotEmpty() }
+            ben.acceptContactRequest(ben.contactRequests.value.single().person)
             eventually("Anna führt Ben unter seiner Personen-ID") { anna.findPerson(byPerson.peer) != null }
             check(anna.send(opened, "Hallo Ben, eben gescannt") is AppController.SendResult.Sent) { "nicht abgelehnt" }
             check(anna.openRequest.value == byPerson) { "Gespräch wechselt zur Person" }

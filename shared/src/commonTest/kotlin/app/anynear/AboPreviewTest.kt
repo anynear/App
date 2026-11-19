@@ -70,13 +70,13 @@ class AboPreviewTest {
             ]}
             """.trimIndent(),
         )!!
-        assertEquals("single" to 5000, p.upgradeFor(AboLimit.TEXT)?.let { it.first.id to it.second })
         assertEquals("single" to 50, p.upgradeFor(AboLimit.ATTACHMENT_SIZE)?.let { it.first.id to it.second })
         // Already at the limit with Single: then Plus.
         assertEquals("plus" to 20, p.upgradeFor(AboLimit.ATTACHMENT_COUNT, current = 10)?.let { it.first.id to it.second })
-        assertNull(p.upgradeFor(AboLimit.TEXT, current = 10000))
-        // Older preview without limits: no hint.
-        assertNull(AboPreview.parse(sample)!!.upgradeFor(AboLimit.TEXT))
+        assertNull(p.upgradeFor(AboLimit.ATTACHMENT_COUNT, current = 20))
+        // Older preview without limits: no hint. Text length is no plan feature (all plans 4096 characters): a
+        // preview that still names „textChars“ is read anyway.
+        assertNull(AboPreview.parse(sample)!!.upgradeFor(AboLimit.ATTACHMENT_SIZE))
     }
 
     @Test

@@ -232,6 +232,7 @@ internal class AndroidUsbRescue(private val context: Context, private val log: (
                 rc = RadioClient.Builder()
                     .transport(transport)
                     .storage(SqlDelightStorageProvider(baseDir = ""))
+                    .coroutineContext(radioSdkContext { log("Verbindungsende im SDK abgefangen: ${it.message}") })
                     .skipNodeDb()
                     .build()
                 coroutineScope {

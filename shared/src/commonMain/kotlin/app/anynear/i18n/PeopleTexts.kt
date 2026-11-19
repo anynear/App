@@ -219,7 +219,11 @@ interface PeopleTexts {
     val viaYourContactLink: String
     val requestAgree: String
     val requestDecline: String
-    fun requestAccepted(name: String): String
+    fun requestAcceptedLine(name: String): String
+    fun requestAnsweredLine(name: String): String
+    fun requestsTitle(count: Int): String
+    val requestsShow: String
+    val requestsHide: String
     fun requestSent(name: String): String
     val requestPending: String
     val shareContact: String
@@ -423,7 +427,11 @@ internal object PeopleTextsDe : PeopleTexts {
     override val viaYourContactLink = "Über deinen Kontaktlink"
     override val requestAgree = "Zustimmen"
     override val requestDecline = "Ablehnen"
-    override fun requestAccepted(name: String) = "$name ist jetzt in deinen Kontakten."
+    override fun requestAcceptedLine(name: String) = "Du hast $name hinzugefügt. Ihr könnt euch jetzt schreiben."
+    override fun requestAnsweredLine(name: String) = "$name hat zugestimmt. Ihr könnt euch jetzt schreiben."
+    override fun requestsTitle(count: Int) = "$count Kontaktanfragen"
+    override val requestsShow = "Anzeigen"
+    override val requestsHide = "Ausblenden"
     override fun requestSent(name: String) = "Anfrage an $name gesendet. Ihr könnt euch schreiben, sobald $name zustimmt."
     override val requestPending = "Anfrage gesendet"
     override val shareContact = "Kontakt teilen"
@@ -433,7 +441,7 @@ internal object PeopleTextsDe : PeopleTexts {
     override fun introSent(name: String, to: String) = "Du hast $name an $to weitergegeben."
     override val introFailed = "Das hat nicht geklappt. Versuch es später noch einmal."
     override val introExpired = "Diese Vorstellung gilt nicht mehr."
-    override fun introAcceptedLine(to: String, name: String) = "$to möchte $name hinzufügen. $name muss noch zustimmen."
+    override fun introAcceptedLine(to: String, name: String) = "$to möchte $name hinzufügen. $name wird gefragt."
     override fun introCardIncoming(by: String, name: String) = "$by stellt dir $name vor"
     override fun introCardOwn(name: String) = "Du hast $name vorgestellt"
     override val introAdd = "Hinzufügen"
@@ -627,7 +635,11 @@ internal object PeopleTextsEn : PeopleTexts {
     override val viaYourContactLink = "Through your contact link"
     override val requestAgree = "Accept"
     override val requestDecline = "Decline"
-    override fun requestAccepted(name: String) = "$name is now in your contacts."
+    override fun requestAcceptedLine(name: String) = "You added $name. You can now message each other."
+    override fun requestAnsweredLine(name: String) = "$name accepted. You can now message each other."
+    override fun requestsTitle(count: Int) = "$count contact requests"
+    override val requestsShow = "Show"
+    override val requestsHide = "Hide"
     override fun requestSent(name: String) = "Request sent to $name. You can message each other once $name accepts."
     override val requestPending = "Request sent"
     override val shareContact = "Share contact"
@@ -637,7 +649,7 @@ internal object PeopleTextsEn : PeopleTexts {
     override fun introSent(name: String, to: String) = "You passed $name on to $to."
     override val introFailed = "That didn't work. Please try again later."
     override val introExpired = "This introduction is no longer valid."
-    override fun introAcceptedLine(to: String, name: String) = "$to would like to add $name. $name still has to accept."
+    override fun introAcceptedLine(to: String, name: String) = "$to would like to add $name. $name will be asked."
     override fun introCardIncoming(by: String, name: String) = "$by is introducing $name to you"
     override fun introCardOwn(name: String) = "You introduced $name"
     override val introAdd = "Add"

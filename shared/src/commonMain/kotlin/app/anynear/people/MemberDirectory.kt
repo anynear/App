@@ -25,6 +25,8 @@ data class Member(
     val signKey: String? = null,
     /** Person of this device (ADR 0042); for apps without a person key the device ID itself. */
     val personId: String = deviceId,
+    /** When the person became a contact (ms), only for [MemberDirectory.DIRECT_CONTACTS]; 0 = unknown. */
+    val addedAt: Long = 0,
 )
 
 /**
@@ -58,6 +60,7 @@ class MemberDirectory(scope: CoroutineScope, source: StateFlow<List<MemberState>
         fun toMember(m: MemberState) = Member(
             circleId = m.circleId, deviceId = m.deviceId, name = m.name, publicKey = m.publicKey,
             nodeNum = m.node.toInt(), image = m.image, imageTs = m.imageTs, signKey = m.signKey, personId = m.person,
+            addedAt = m.addedAt,
         )
     }
 }

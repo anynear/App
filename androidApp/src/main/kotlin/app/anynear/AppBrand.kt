@@ -11,6 +11,12 @@ object AppBrand {
     val notificationIcon: Int get() = R.drawable.ic_stat_app
 
     /**
+     * Name on the home screen: „anynear“, in the test version next to it „anynear Test“. Titles of notifications that
+     * are always there use it, so that two installed apps do not look like one notification twice.
+     */
+    fun label(context: Context): String = context.applicationInfo.loadLabel(context.packageManager).toString().ifBlank { name }
+
+    /**
      * The brand tests (until October 2026) could disable the launcher icon `Launcher` and enable a different
      * one. The others no longer exist; without this step the app would then have no icon.
      */

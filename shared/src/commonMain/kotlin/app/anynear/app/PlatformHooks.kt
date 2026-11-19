@@ -148,6 +148,12 @@ interface PlatformHooks {
     /** Opens the system setting in which [restriction] can be lifted. */
     fun openBackgroundSettings(restriction: BackgroundRestriction) = Unit
 
+    /**
+     * Android: opens the system setting of the ongoing notification „Empfängt deine Nachrichten“, where the user can
+     * hide it. Only the user can; receiving goes on without it (ADR 0008).
+     */
+    fun openBackgroundNoticeSettings() = Unit
+
     /** Installed app version for display, e.g. `0.1.0-beta.cdfbd83`. */
     val appVersion: String? get() = null
 

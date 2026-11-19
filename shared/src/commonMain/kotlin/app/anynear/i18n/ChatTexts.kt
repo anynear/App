@@ -44,7 +44,6 @@ interface ChatTexts {
     val fileUnreadable: String
     val photoUnreadable: String
     fun maxAttachments(n: Int): String
-    fun aboLongerText(plan: String, chars: Int): String
     fun aboBiggerAttachments(plan: String, mb: Int): String
     fun aboMoreAttachments(plan: String, n: Int): String
     fun aboLongerVoice(plan: String, minutes: Int): String
@@ -101,6 +100,9 @@ interface ChatTexts {
 
     /** Hand a message to the system's share menu, only via this explicit button. */
     val shareMessage: String
+
+    /** Notice after the text of a message was copied. */
+    val textCopied: String
 
     /** Mark of a passed on message and of such a draft (ADR 0118). */
     val passedOn: String
@@ -324,7 +326,6 @@ internal object ChatTextsDe : ChatTexts {
     override val fileUnreadable = "Eine Datei ließ sich nicht lesen."
     override val photoUnreadable = "Ein Foto ließ sich nicht lesen."
     override fun maxAttachments(n: Int) = "Höchstens $n Anhänge pro Nachricht."
-    override fun aboLongerText(plan: String, chars: Int) = "Mit $plan bis zu ${grouped(chars, ' ')} Zeichen."
     override fun aboBiggerAttachments(plan: String, mb: Int) = "Mit $plan Anhänge bis je $mb MB."
     override fun aboMoreAttachments(plan: String, n: Int) = "Mit $plan bis zu $n Anhänge pro Nachricht."
     override fun aboLongerVoice(plan: String, minutes: Int) = "Mit $plan Sprachnachrichten bis zu $minutes Minuten."
@@ -369,6 +370,7 @@ internal object ChatTextsDe : ChatTexts {
     override val toFiles = "In Ablage speichern"
     override val forward = "Weiterleiten"
     override val shareMessage = "Teilen…"
+    override val textCopied = "Text kopiert."
     override val passedOn = "Weitergeleitet"
     override fun downloadTitle(count: Int) = if (count == 1) "Möchtest du die Datei herunterladen?" else "Möchtest du die $count Dateien herunterladen?"
     override fun downloadText(count: Int) = if (count == 1) "Sie wird auf deinem Handy gespeichert." else "Sie werden auf deinem Handy gespeichert."
@@ -556,7 +558,6 @@ internal object ChatTextsEn : ChatTexts {
     override val fileUnreadable = "A file couldn't be read."
     override val photoUnreadable = "A photo couldn't be read."
     override fun maxAttachments(n: Int) = "Up to $n attachments per message."
-    override fun aboLongerText(plan: String, chars: Int) = "With $plan up to ${grouped(chars, ',')} characters."
     override fun aboBiggerAttachments(plan: String, mb: Int) = "With $plan attachments up to $mb MB each."
     override fun aboMoreAttachments(plan: String, n: Int) = "With $plan up to $n attachments per message."
     override fun aboLongerVoice(plan: String, minutes: Int) = "With $plan voice messages up to $minutes minutes."
@@ -601,6 +602,7 @@ internal object ChatTextsEn : ChatTexts {
     override val toFiles = "Save to files"
     override val forward = "Forward"
     override val shareMessage = "Share…"
+    override val textCopied = "Text copied."
     override val passedOn = "Forwarded"
     override fun downloadTitle(count: Int) = if (count == 1) "Do you want to download the file?" else "Do you want to download the $count files?"
     override fun downloadText(count: Int) = if (count == 1) "It will be saved on your phone." else "They will be saved on your phone."
@@ -755,4 +757,3 @@ internal object ChatTextsEn : ChatTexts {
 }
 
 /** 10000 → „10 000“ or „10,000“, as in the building blocks of the subscription preview. */
-private fun grouped(n: Int, sep: Char): String = n.toString().reversed().chunked(3).joinToString(sep.toString()).reversed()
