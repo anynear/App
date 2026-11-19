@@ -34,6 +34,21 @@ fun longestFitting(text: String, fits: (String) -> Boolean): String {
     return text.safePrefix(low)
 }
 
+/**
+ * Number of characters as Unicode code points: a surrogate pair (most emojis) counts once. Emoji sequences
+ * with joiners or skin tones and flags count each of their code points. The web app counts the same way
+ * (`[...text].length`), so a limit in characters means the same in both; at most 4 bytes per character in UTF-8.
+ */
+fun String.codePointCount(): Int {
+    var n = 0
+    var i = 0
+    while (i < length) {
+        i += if (this[i].isHighSurrogate() && i + 1 < length && this[i + 1].isLowSurrogate()) 2 else 1
+        n++
+    }
+    return n
+}
+
 private fun extends(cp: Int): Boolean =
     cp == ZWJ ||
         cp in 0x0300..0x036F || cp in 0x1AB0..0x1AFF || cp in 0x1DC0..0x1DFF || cp in 0x20D0..0x20FF ||

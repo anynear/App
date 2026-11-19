@@ -77,12 +77,13 @@ class MeshConnectionService : Service() {
         val open = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE,
+            // Tapped: the app explains the notification and offers to hide it.
+            Intent(this, MainActivity::class.java).setAction(ACTION_OPEN_NOTICE).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(AppBrand.notificationIcon)
-            .setContentTitle(AppBrand.name)
+            .setContentTitle(AppBrand.label(this))
             .setContentText(texts.system.receiving)
             .setContentIntent(open)
             .setOngoing(true)
@@ -99,6 +100,9 @@ class MeshConnectionService : Service() {
         var running: MeshConnectionService? = null
             private set
 
+        /** The ongoing notification was tapped ([MainActivity]). */
+        const val ACTION_OPEN_NOTICE = "app.anynear.background.OPEN_NOTICE"
+
         /** Whether the connection to the radio is held in addition (type connectedDevice). */
         const val EXTRA_RADIO = "radio"
 
@@ -106,7 +110,7 @@ class MeshConnectionService : Service() {
          * Own channel without a dot on the app icon: the notification is always there, the dot should only
          * indicate something new. Android does not change that for an existing channel, hence a new ID.
          */
-        private const val CHANNEL_ID = "background"
+        const val CHANNEL_ID = "background"
 
         /** Former channel with a dot on the app icon, from the time when the service only held the radio. */
         private const val OLD_CHANNEL_ID = "mesh_connection"

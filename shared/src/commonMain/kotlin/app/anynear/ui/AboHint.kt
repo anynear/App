@@ -34,7 +34,6 @@ internal fun AboLimitHint(limit: AboLimit?, modifier: Modifier = Modifier) {
     var showing by remember { mutableStateOf(false) }
     val name = plan.name(german())
     val text = when (limit) {
-        AboLimit.TEXT -> texts.chat.aboLongerText(name, value)
         AboLimit.ATTACHMENT_SIZE -> texts.chat.aboBiggerAttachments(name, value)
         AboLimit.ATTACHMENT_COUNT -> texts.chat.aboMoreAttachments(name, value)
         AboLimit.VOICE_LENGTH -> texts.chat.aboLongerVoice(name, value)

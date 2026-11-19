@@ -112,7 +112,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Invitation or contact link https://anynear.net/k#… or /c#… (App Link). The part after # stays on the phone.
-     * Or: notification tapped, then open the conversation or „Dokumente finden“. Or: shared from another app, then the
+     * Or: notification tapped, then open the conversation or „Dokumente finden“, or explain „Empfängt deine Nachrichten“. Or: shared from another app, then the
      * app asks whom it is for. Or: radio plugged in via USB and anynear chosen, then open the rescue.
      */
     private fun handleLink(intent: Intent?) {
@@ -138,6 +138,11 @@ class MainActivity : ComponentActivity() {
         }
         if (intent?.action == DocFinderService.ACTION_OPEN_FINDER) {
             app.controller.openFindDocs()
+            intent.action = null
+            return
+        }
+        if (intent?.action == MeshConnectionService.ACTION_OPEN_NOTICE) {
+            app.controller.openBackgroundNotice()
             intent.action = null
             return
         }

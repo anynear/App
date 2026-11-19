@@ -106,11 +106,10 @@ data class AboCompareRow(val label: String = "", val values: Map<String, String>
  * in minutes (ADR 0099; 0 = not named, older previews).
  */
 @Serializable
-data class AboLimits(val textChars: Int = 0, val attachmentMb: Int = 0, val attachments: Int = 0, val voiceMinutes: Int = 0)
+data class AboLimits(val attachmentMb: Int = 0, val attachments: Int = 0, val voiceMinutes: Int = 0)
 
 /** Which limit has been reached. */
 enum class AboLimit(val of: (AboLimits) -> Int) {
-    TEXT({ it.textChars }),
     ATTACHMENT_SIZE({ it.attachmentMb }),
     ATTACHMENT_COUNT({ it.attachments }),
     VOICE_LENGTH({ it.voiceMinutes }),

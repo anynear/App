@@ -55,8 +55,15 @@ class ReadUntilTest {
 
     @Test
     fun withoutAMarkEverythingBeforeLoadingCountsAsRead() {
-        assertTrue(ReadUntil.readOnArrival(sentAt = 499, mark = null, loadingSince = 500))
-        assertFalse(ReadUntil.readOnArrival(sentAt = 500, mark = null, loadingSince = 500), "kam erst während des Ladens")
+        assertTrue(ReadUntil.readOnArrival(sentAt = 499_000, mark = null, loadingSince = 500_000))
+        assertFalse(ReadUntil.readOnArrival(sentAt = 500_000, mark = null, loadingSince = 500_000), "kam erst während des Ladens")
+    }
+
+    @Test
+    fun aMessageFromTheSecondLoadingBeganIsUnread() {
+        // Send times are whole seconds: sent at 500.7 s it says 500 s, after loading began at 500.4 s.
+        assertFalse(ReadUntil.readOnArrival(sentAt = 500_000, mark = null, loadingSince = 500_400))
+        assertTrue(ReadUntil.readOnArrival(sentAt = 499_000, mark = null, loadingSince = 500_400))
     }
 
     @Test

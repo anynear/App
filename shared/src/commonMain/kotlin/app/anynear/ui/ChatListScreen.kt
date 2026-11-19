@@ -26,6 +26,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,6 +50,7 @@ import app.anynear.mesh.FoundDevice
 import app.anynear.mesh.PublicChannel
 import app.anynear.mesh.previewText
 import kotlin.time.Clock
+import kotlinx.coroutines.launch
 
 /**
  * „Nachrichten“ overview, built as in common messengers: every circle and every person one
@@ -83,8 +85,23 @@ internal fun ChatListScreen(
     var deleting by remember { mutableStateOf<ChatListEntry?>(null) }
     val now = Clock.System.now().toEpochMilliseconds()
     var query by rememberSaveable { mutableStateOf("") }
+    var requestsOpen by rememberSaveable { mutableStateOf(false) }
+    val uiScope = rememberCoroutineScope()
     // The search covers the name and the last message, the way the row shows them.
     val shown = entries.filter { matchesSearch(query, it.title, it.preview(loading)) }
+    // While searching, also circles and contacts without a conversation yet (ADR 0100 §2): otherwise one would think
+    // the person is gone. Tapping opens the conversation, like „Neue Nachricht“.
+    val circleMembers by controller.circleMembers.collectAsState()
+    val supportPeer by controller.supportPeer.collectAsState()
+    val listed = entries.map { it.conversation }.toSet()
+    val circleNames = circles.associate { it.id to it.name }
+    val moreCircles = if (query.isBlank()) emptyList() else circles.filter {
+        !it.removed && Conversation.Circle(it.id) !in listed && matchesSearch(query, it.name)
+    }
+    val morePeople = if (query.isBlank()) emptyList() else people.filter { person ->
+        person.peer != supportPeer && Conversation.Direct(person.peer) !in listed &&
+            matchesSearch(query, person.name, *person.circleIds.map(circleNames::get).toTypedArray())
+    }
     // Space below the list, as high as the button (grows with the font size), so that it never covers the last entry.
     var buttonHeight by remember { mutableStateOf(MainButtonHeight) }
     val density = LocalDensity.current
@@ -101,77 +118,88 @@ internal fun ChatListScreen(
         if (loading.any) HistoryStrip(texts.status.messagesLoading)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             Column(Modifier.fillMaxSize()) {
-                if (entries.isNotEmpty()) {
+                if (entries.isNotEmpty() || people.isNotEmpty() || circles.isNotEmpty()) {
                     SearchField(query, { query = it }, texts.chat.search, Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp))
                 }
-                if (shown.isEmpty() && query.isNotBlank()) NoSearchResults()
+                if (shown.isEmpty() && moreCircles.isEmpty() && morePeople.isEmpty() && query.isNotBlank()) NoSearchResults()
                 LazyColumn(
                     Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(bottom = buttonHeight + FLOATING_MARGIN * 2),
                 ) {
-                    // In the list, so that both scroll along with large font and the button covers nothing.
-                    // After a crash ask once whether we get a report (ADR 0082).
-                    item(key = "crash-report") { CrashCard(controller, onOpen) }
-                    // Persons asking to become a contact (ADR 0116): agree or decline; what they wrote waits until then.
-                    requests.forEach { r ->
-                        item(key = "request-${r.person}") {
-                            PermissionCard(
-                                texts.people.requestTitle(r.name),
-                                controller.requestOrigin(r),
-                                onAllow = { controller.acceptContactRequest(r.person) },
-                                onLater = { controller.declineContactRequest(r.person) },
-                                allowLabel = texts.people.requestAgree,
-                                laterLabel = texts.people.requestDecline,
-                            )
+                    // Cards only without a search, so that the hits are right below the field.
+                    if (query.isBlank()) {
+                        // In the list, so that both scroll along with large font and the button covers nothing.
+                        // After a crash ask once whether we get a report (ADR 0082).
+                        item(key = "crash-report") { CrashCard(controller, onOpen) }
+                        // Persons asking to become a contact (ADR 0116): agree or decline; what they wrote waits until then.
+                        // Several requests are one card that unfolds, so that they do not push the chats out of sight.
+                        if (requests.size > 1) {
+                            item(key = "requests") {
+                                RequestsCard(requests.size, requestsOpen) { requestsOpen = !requestsOpen }
+                            }
                         }
-                    }
-                    item(key = "emergency-card") { EmergencyCardReminder(controller) }
-                    if (bluetoothHint) {
-                        item(key = "bluetooth-hint") {
-                            PermissionCard(texts.chat.allowBluetoothTitle, texts.chat.allowBluetoothText, controller::allowBluetoothFromHint, controller::postponeBluetoothHint)
+                        if (requests.size == 1 || requestsOpen) {
+                            requests.forEach { r ->
+                                item(key = "request-${r.person}") {
+                                    PermissionCard(
+                                        texts.people.requestTitle(r.name),
+                                        controller.requestOrigin(r),
+                                        onAllow = { uiScope.launch { controller.acceptContactRequestNow(r.person)?.let(onOpen) } },
+                                        onLater = { controller.declineContactRequest(r.person) },
+                                        allowLabel = texts.people.requestAgree,
+                                        laterLabel = texts.people.requestDecline,
+                                    )
+                                }
+                            }
                         }
-                    }
-                    suggestedDevice?.let { device ->
-                        item(key = "radio-suggestion") {
-                            PermissionCard(
-                                texts.setup.radioFound,
-                                if (device.connection == FoundDevice.Connection.BLUETOOTH) texts.setup.suggestedKnownRadio(device.name)
-                                else texts.setup.suggestedRadio(device.name),
-                                controller::acceptSuggestedDevice,
-                                controller::postponeSuggestedDevice,
-                                allowLabel = texts.setup.connect,
-                            )
+                        item(key = "emergency-card") { EmergencyCardReminder(controller) }
+                        if (bluetoothHint) {
+                            item(key = "bluetooth-hint") {
+                                PermissionCard(texts.chat.allowBluetoothTitle, texts.chat.allowBluetoothText, controller::allowBluetoothFromHint, controller::postponeBluetoothHint)
+                            }
                         }
-                    }
-                    // Radio community of the area (ADR 0054 §1a): ask once, calmly, never as a dialog at start.
-                    communityOffer?.let { offer ->
-                        item(key = "community-offer") {
-                            if (offer.freeSlots > 0) {
+                        suggestedDevice?.let { device ->
+                            item(key = "radio-suggestion") {
                                 PermissionCard(
-                                    texts.publicRadio.offerTitle(offer.name),
-                                    texts.publicRadio.offerText(offer.name, offer.freeSlots),
-                                    onAllow = { publicRadio?.acceptCommunity() },
-                                    onLater = { publicRadio?.declineCommunity() },
-                                    allowLabel = texts.publicRadio.offerYes,
-                                    laterLabel = texts.publicRadio.offerNo,
-                                )
-                            } else {
-                                PermissionCard(
-                                    texts.publicRadio.offerTitle(offer.name),
-                                    texts.publicRadio.offerNoSlot(offer.name),
-                                    onAllow = null,
-                                    onLater = { publicRadio?.dismissNoSlot() },
-                                    laterLabel = texts.publicRadio.introOk,
+                                    texts.setup.radioFound,
+                                    if (device.connection == FoundDevice.Connection.BLUETOOTH) texts.setup.suggestedKnownRadio(device.name)
+                                    else texts.setup.suggestedRadio(device.name),
+                                    controller::acceptSuggestedDevice,
+                                    controller::postponeSuggestedDevice,
+                                    allowLabel = texts.setup.connect,
                                 )
                             }
                         }
-                    }
-                    if (notificationHint) {
-                        item(key = "notification-hint") {
-                            PermissionCard(texts.chat.allowNotificationsTitle, texts.chat.allowNotificationsText, controller::allowNotifications, controller::postponeNotificationHint)
+                        // Radio community of the area (ADR 0054 §1a): ask once, calmly, never as a dialog at start.
+                        communityOffer?.let { offer ->
+                            item(key = "community-offer") {
+                                if (offer.freeSlots > 0) {
+                                    PermissionCard(
+                                        texts.publicRadio.offerTitle(offer.name),
+                                        texts.publicRadio.offerText(offer.name, offer.freeSlots),
+                                        onAllow = { publicRadio?.acceptCommunity() },
+                                        onLater = { publicRadio?.declineCommunity() },
+                                        allowLabel = texts.publicRadio.offerYes,
+                                        laterLabel = texts.publicRadio.offerNo,
+                                    )
+                                } else {
+                                    PermissionCard(
+                                        texts.publicRadio.offerTitle(offer.name),
+                                        texts.publicRadio.offerNoSlot(offer.name),
+                                        onAllow = null,
+                                        onLater = { publicRadio?.dismissNoSlot() },
+                                        laterLabel = texts.publicRadio.introOk,
+                                    )
+                                }
+                            }
+                        }
+                        if (notificationHint) {
+                            item(key = "notification-hint") {
+                                PermissionCard(texts.chat.allowNotificationsTitle, texts.chat.allowNotificationsText, controller::allowNotifications, controller::postponeNotificationHint)
+                            }
                         }
                     }
-                    if (entries.isEmpty()) {
+                    if (entries.isEmpty() && query.isBlank()) {
                         item(key = "empty") {
                             if (people.isEmpty() && circles.isEmpty()) {
                                 // Nobody there yet: the two paths to others, without a second orange action.
@@ -199,6 +227,33 @@ internal fun ChatListScreen(
                             }
                         }
                         HorizontalDivider(Modifier.padding(start = 84.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    if (moreCircles.isNotEmpty()) item(key = "more-circles") {
+                        SearchMore(texts.chat.circles) {
+                            moreCircles.forEach { circle ->
+                                AppRow(
+                                    title = circle.name,
+                                    subtitle = circleSummary(circle, circleMembers[circle.id].orEmpty().size),
+                                    leading = { CircleAvatar(controller, circle.id, circle.image, 44.dp) },
+                                    onClickLabel = texts.chat.writeInCircle,
+                                    onClick = { onOpen(Conversation.Circle(circle.id)) },
+                                )
+                            }
+                        }
+                    }
+                    if (morePeople.isNotEmpty()) item(key = "more-people") {
+                        SearchMore(texts.chat.contacts) {
+                            morePeople.forEach { person ->
+                                val names = person.circleIds.mapNotNull(circleNames::get)
+                                AppRow(
+                                    title = person.name,
+                                    subtitle = if (names.isEmpty()) texts.chat.addedByYou else names.joinToString(" · "),
+                                    leading = { PersonAvatar(controller, person.peer, person.image, 44.dp) },
+                                    onClickLabel = texts.chat.writeMessage,
+                                    onClick = { onOpen(Conversation.Direct(person.peer)) },
+                                )
+                            }
+                        }
                     }
                     // Public radio (ADR 0055): a section of its own below circles and people, never in between.
                     if (publicRadio != null && publicChannels.isNotEmpty() && query.isBlank()) {
@@ -283,6 +338,28 @@ private fun PermissionCard(
             AppButton(laterLabel, onLater, Modifier.fillMaxWidth(), kind = ButtonKind.Quiet)
         }
     }
+}
+
+/** Several contact requests at once: their number, unfolds the single requests below. */
+@Composable
+private fun RequestsCard(count: Int, open: Boolean, onToggle: () -> Unit) {
+    AppSection(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
+        SectionContent {
+            Text(texts.people.requestsTitle(count), style = MaterialTheme.typography.titleMedium)
+            AppButton(
+                if (open) texts.people.requestsHide else texts.people.requestsShow,
+                onToggle,
+                Modifier.fillMaxWidth(),
+                kind = if (open) ButtonKind.Quiet else ButtonKind.Secondary,
+            )
+        }
+    }
+}
+
+/** Hits of the search without a conversation yet, as on „Neue Nachricht“: a heading and a card. */
+@Composable
+private fun SearchMore(title: String, content: @Composable () -> Unit) {
+    AppSection(title, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp)) { content() }
 }
 
 /** Distance of the floating button to the edge and to the list. */

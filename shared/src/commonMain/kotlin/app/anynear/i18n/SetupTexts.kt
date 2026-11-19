@@ -94,6 +94,12 @@ interface SetupTexts {
     /** Manufacturer lock: „Tippe gleich auf „Akku“ … „Autostart“ …“ */
     val backgroundTapStopped: String
     val openSetting: String
+
+    // Ongoing notification „Empfängt deine Nachrichten“ tapped (Android): what it is and how to hide it
+    val noticeTitle: String
+    val noticeText: String
+    val noticeHowToHide: String
+    val noticeHide: String
     val radioFound: String
     fun suggestedRadio(deviceName: String): String
     fun suggestedKnownRadio(deviceName: String): String
@@ -271,6 +277,10 @@ internal object SetupTextsDe : SetupTexts {
     override val backgroundStopped = "Dein Handy hat $APP im Hintergrund beendet. Dann kommen keine Nachrichten an."
     override val backgroundTapStopped = "Tippe gleich auf „Akku“ und wähle „Nicht eingeschränkt“. Gibt es „Autostart“, schalte es ein."
     override val openSetting = "Einstellung öffnen"
+    override val noticeTitle = "Der Hinweis „Empfängt deine Nachrichten“"
+    override val noticeText = "Er zeigt, dass $APP im Hintergrund läuft, damit neue Nachrichten ankommen. Du musst nichts tun."
+    override val noticeHowToHide = "Stört er dich? Tippe auf „Ausblenden“ und schalte im nächsten Fenster „Benachrichtigungen anzeigen“ aus. Deine Nachrichten kommen weiter an."
+    override val noticeHide = "Ausblenden"
     override val radioFound = "Funkgerät gefunden"
     override fun suggestedRadio(deviceName: String) =
         "In deinem WLAN ist das Funkgerät „$deviceName“. Möchtest du es mit $APP verbinden? " +
@@ -443,6 +453,10 @@ internal object SetupTextsEn : SetupTexts {
     override val backgroundStopped = "Your phone closed $APP in the background. Then no messages arrive."
     override val backgroundTapStopped = "Tap “Battery” next and choose “Unrestricted”. If there is “Autostart”, turn it on."
     override val openSetting = "Open setting"
+    override val noticeTitle = "The notice “Receiving your messages”"
+    override val noticeText = "It shows that $APP runs in the background so new messages arrive. You don't need to do anything."
+    override val noticeHowToHide = "Does it bother you? Tap “Hide” and turn off “Show notifications” in the next window. Your messages still arrive."
+    override val noticeHide = "Hide"
     override val radioFound = "Radio found"
     override fun suggestedRadio(deviceName: String) =
         "The radio “$deviceName” is on your Wi-Fi. Do you want to connect it to $APP? " +

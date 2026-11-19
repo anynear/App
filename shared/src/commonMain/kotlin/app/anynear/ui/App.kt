@@ -64,6 +64,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -74,6 +75,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import app.anynear.alerts.Alerts
+import app.anynear.chats.conversationOf
+import app.anynear.chats.key
 import app.anynear.lifesigns.LifeSigns
 import app.anynear.app.AppCommand
 import app.anynear.app.AppController
@@ -197,8 +200,9 @@ private fun MainScreen(controller: AppController) {
     // Rotating, a new window size or a different system mode must not jump back to „Nachrichten“:
     // the tab survives a recreated activity (the manifest keeps it alive on rotation anyway).
     var tab by rememberSaveable { mutableStateOf(Tab.Chats) }
-    // Open conversation (circle or person). Back always leads to the „Nachrichten“ overview.
-    var open by remember { mutableStateOf<Conversation?>(null) }
+    // Open conversation (circle or person). Back always leads to the „Nachrichten“ overview. Kept like the tab: if
+    // Android ends the activity while the camera or the photo picker is in front, the photo arrives in this chat.
+    var open by rememberSaveable(stateSaver = OpenConversationSaver) { mutableStateOf<Conversation?>(null) }
     // The conversation opened under a device (contact link) follows when the device turns out to be a person (ADR 0042).
     LaunchedEffect(Unit) {
         controller.peerRenamed.collect { (old, new) ->
@@ -610,7 +614,9 @@ private fun MainScreen(controller: AppController) {
     pending?.let { PendingInviteDialog(controller, it) }
     pendingContact?.let { PendingContactDialog(controller, it.name) }
     pendingChannel?.let { if (alerts != null) PendingChannelDialog(alerts, it) }
-    val linkOpen = pending != null || pendingContact != null || pendingChannel != null
+    val backgroundNotice by controller.backgroundNotice.collectAsState()
+    if (backgroundNotice) BackgroundNoticeDialog(controller)
+    val linkOpen = pending != null || pendingContact != null || pendingChannel != null || backgroundNotice
     // On its own initiative always only one hint (AppHints.kt).
     when (currentHint(controller, linkOpen)) {
         AppHint.RADIO_SOFTWARE_RUN -> RadioSoftwareProgress(controller)
@@ -773,6 +779,23 @@ private fun BackgroundHintDialog(controller: AppController, restriction: Backgro
     )
 }
 
+/** Ongoing notification „Empfängt deine Nachrichten“ tapped: what it is, and one button to where it can be hidden. */
+@Composable
+private fun BackgroundNoticeDialog(controller: AppController) {
+    AppDialog(
+        onDismissRequest = controller::dismissBackgroundNotice,
+        title = { Text(texts.setup.noticeTitle) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(texts.setup.noticeText)
+                Text(texts.setup.noticeHowToHide, style = MaterialTheme.typography.bodyMedium)
+            }
+        },
+        confirmButton = { AppButton(texts.setup.noticeHide, controller::hideBackgroundNotice) },
+        dismissButton = { AppButton(texts.common.close, controller::dismissBackgroundNotice, kind = ButtonKind.Quiet) },
+    )
+}
+
 /** Opened invitation link: only after „Beitreten“ does one become a member. */
 @Composable
 private fun PendingInviteDialog(controller: AppController, invite: AppController.InviteOffer) {
@@ -837,3 +860,6 @@ private fun StatusBanner(state: LinkState, internet: Boolean, onRequestPermissio
         }
     }
 }
+
+/** The open conversation as its key ([key]), as Android keeps saved state. */
+private val OpenConversationSaver = Saver<Conversation?, String>(save = { it?.key() }, restore = { conversationOf(it) })

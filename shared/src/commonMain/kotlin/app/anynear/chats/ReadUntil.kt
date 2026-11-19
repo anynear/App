@@ -39,8 +39,9 @@ object ReadUntil {
     /**
      * Whether a received message with send time [sentAt] that comes back while its conversation still loads counts as
      * read: up to the conversation's [mark]; without one (never read since this was introduced), everything sent before
-     * [loadingSince], the moment this device began to load.
+     * [loadingSince], the moment this device began to load. Send times are whole seconds: one from the second loading
+     * began counts as sent after it.
      */
     fun readOnArrival(sentAt: Long, mark: Long?, loadingSince: Long): Boolean =
-        if (mark != null) sentAt <= mark else sentAt < loadingSince
+        if (mark != null) sentAt <= mark else sentAt < loadingSince - loadingSince % 1000
 }

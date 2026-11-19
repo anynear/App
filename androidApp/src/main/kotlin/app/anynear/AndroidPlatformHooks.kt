@@ -263,6 +263,22 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
         }
     }
 
+    override fun openBackgroundNoticeSettings() {
+        // The page of this one channel, with a single switch; before Android 8 there are no channels.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                .putExtra(Settings.EXTRA_CHANNEL_ID, MeshConnectionService.CHANNEL_ID)
+            try {
+                context.startActivity(channel.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
+            } catch (e: ActivityNotFoundException) {
+                Log.w(TAG, "Einstellung nicht vorhanden: ${channel.action}")
+            }
+        }
+        openNotificationSettings()
+    }
+
     override fun openNotificationSettings() {
         val candidates = listOf(
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),

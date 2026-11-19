@@ -21,6 +21,10 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -189,6 +193,28 @@ internal fun ChatScreen(
     // Attachment too large or too many: hint about the plan that allows more (ADR 0076 §1a).
     var attachmentLimit by remember(conversation) { mutableStateOf<AboLimit?>(null) }
     var attachMenu by remember { mutableStateOf(false) }
+    // Shared from another app or forwarded into this chat (also while it is open): into the draft, which then is
+    // stored as usual. Only after the stored draft is loaded, so that loading does not displace it.
+    val additions by controller.draftAdditions.collectAsState()
+    LaunchedEffect(conversation, additions, draftsLoaded) {
+        if (!draftsLoaded || additions[conversation].isNullOrEmpty()) return@LaunchedEffect
+        controller.takeDraftAdditions(conversation).forEach { addition ->
+            if (addition.passedOn) passedOn = true
+            if (addition.text.isNotEmpty()) draft = draft.trimEnd().let { if (it.isEmpty()) addition.text else "$it\n${addition.text}" }
+            val added = addition.attachments.toMutableList()
+            // A voice message goes alone (ADR 0030): not into a draft that already has attachments.
+            if (added.any { it.kind == AttachmentKind.AUDIO } && (drafts.isNotEmpty() || added.size > 1)) {
+                added.removeAll { it.kind == AttachmentKind.AUDIO }
+                error = texts.status.tooManyAttachments(1)
+            }
+            val room = AttachmentLimits.MAX_PER_MESSAGE - drafts.size
+            if (added.size > room) {
+                error = texts.chat.maxAttachments(AttachmentLimits.MAX_PER_MESSAGE)
+                attachmentLimit = AboLimit.ATTACHMENT_COUNT
+            }
+            drafts = drafts + added.take(room.coerceAtLeast(0))
+        }
+    }
     val scope = rememberCoroutineScope()
     // Selected, pasted via „Bild einfügen“ or pasted into the input field: everything is prepared the same way.
     fun addPicked(images: Boolean, files: List<PickedFile>) {
@@ -477,7 +503,8 @@ internal fun ChatScreen(
                     onCancel = { replyTo = null },
                 )
             }
-            val textLimit = TextLimit({ controller.textBytesLeft(conversation, it, drafts.map { d -> d.kind }) }, TEXT_HINT_BELOW)
+            val kinds = drafts.map { d -> d.kind }
+            val textLimit = TextLimit({ controller.textLeft(conversation, it, kinds) }, textHintBelow(controller.textLeft(conversation, "", kinds)))
             val link by controller.linkState.collectAsState()
             // Too long for radio: the rest is marked in the field and only goes over the internet (like attachments).
             val radioKept = if (link == LinkState.Connected) controller.radioTextKept(conversation, draft, drafts.map { it.kind }) else null
@@ -488,11 +515,8 @@ internal fun ChatScreen(
             if (preparing) Hint(texts.chat.preparing)
             // Right-aligned with the input field, i.e. to the left of the send button (12 + 8 + 52).
             else textLimit.hint(draft)?.let { TextLimitHint(it, Modifier.padding(start = 16.dp, end = 72.dp, top = 2.dp, bottom = 2.dp)) }
-            // At the limit with an internet path (not the shorter one over radio): which plan allows longer messages.
-            val atOnlineLimit = textLimit.left(draft) <= 0 && draft.trim().encodeToByteArray().size >= AppController.MAX_ONLINE_TEXT_BYTES
             AboLimitHint(
                 when {
-                    atOnlineLimit -> AboLimit.TEXT
                     voiceAtLimit && notice != null -> AboLimit.VOICE_LENGTH
                     else -> attachmentLimit.takeIf { error != null }
                 },
@@ -694,8 +718,14 @@ private const val LINK_PREVIEW_DELAY_MILLIS = 700L
 /** The system only stops this much after the maximum duration; before that the interface ends the recording. */
 private const val RECORDING_SAFETY_MILLIS = 5_000L
 
-/** From this few free characters on the input field shows how much is still possible. */
-private const val TEXT_HINT_BELOW = 30
+/**
+ * From this few free characters on the input field shows how much is still possible: with the long limit over the
+ * internet a little earlier than with the short one over radio, where 100 would be most of the message.
+ */
+internal fun textHintBelow(capacity: Int): Int = if (capacity > LONG_TEXT) 100 else 30
+
+/** Above this many characters a limit counts as long ([textHintBelow]). */
+private const val LONG_TEXT = 1000
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -741,6 +771,12 @@ private fun MessageBubble(
         show(false)
         if (ok) controller.showNotice(text) else onError(text)
     }
+    @Suppress("DEPRECATION") // LocalClipboard needs platform-specific ClipEntry objects.
+    val clipboard = LocalClipboardManager.current
+    // Invitations as a card instead of as a link; the stored text keeps the link.
+    val invites = remember(message.text) { findInviteLinks(message.text) }
+    // With an introduction (ADR 0116) the card says it all; the text is only the stand-in for older apps.
+    val visibleText = remember(message.text, invites, message.intro) { if (message.intro != null) "" else withoutInviteLinks(message.text, invites) }
     // Speech bubble with a "tip" towards the sender's side (design: 18 dp, tip 6 dp).
     val shape = if (outgoing) RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp) else RoundedCornerShape(18.dp, 18.dp, 18.dp, 6.dp)
     // Not sent and out by no path: light background with a red border so that it stands out.
@@ -767,11 +803,15 @@ private fun MessageBubble(
                                 else -> Modifier.border(1.dp, colors.bubbleOutline, shape)
                             },
                         )
-                        // Long press like the "i": opens the details, once more closes them.
-                        .combinedClickable(
-                            onLongClickLabel = if (expanded) texts.chat.hideDetails else texts.chat.showDetailsAndReactions,
-                            onLongClick = { show(!expanded) },
-                        ) {}
+                        // Long press like the "i" opens the details. While they are open, a long press marks
+                        // text instead; the "i" closes them again.
+                        .then(
+                            if (expanded) Modifier
+                            else Modifier.combinedClickable(
+                                onLongClickLabel = texts.chat.showDetailsAndReactions,
+                                onLongClick = { show(true) },
+                            ) {},
+                        )
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     if (senderName != null) {
@@ -792,13 +832,20 @@ private fun MessageBubble(
                     }
                     if (message.attachments.isNotEmpty()) MessageAttachments(controller, message.attachments, onError)
                     val textColor = if (outgoing && !failed) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface
-                    // Invitations as a card instead of as a link; the stored text keeps the link.
-                    val invites = remember(message.text) { findInviteLinks(message.text) }
-                    // With an introduction (ADR 0116) the card says it all; the text is only the stand-in for older apps.
-                    val visibleText = remember(message.text, invites, message.intro) { if (message.intro != null) "" else withoutInviteLinks(message.text, invites) }
                     if (visibleText.isNotEmpty()) {
                         if (message.attachments.any { it.transcribed }) TextPreviewLabel(visibleText, textColor.copy(alpha = 0.75f))
-                        Text(linkified(visibleText, textColor), style = MaterialTheme.typography.bodyLarge, color = textColor)
+                        val shown = @Composable { Text(linkified(visibleText, textColor), style = MaterialTheme.typography.bodyLarge, color = textColor) }
+                        // With the details open the text can be marked in part (press and hold, drag the handles);
+                        // closed, a long press opens the details as before.
+                        if (expanded) {
+                            // In the own dark bubble the signal colour marks, as for the quote accent.
+                            val mark = if (outgoing && !failed) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                            CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(mark, mark.copy(alpha = 0.4f))) {
+                                SelectionContainer { shown() }
+                            }
+                        } else {
+                            shown()
+                        }
                     }
                     if (invites.isNotEmpty()) {
                         val sender = senderName ?: controller.senderLabel(message)
@@ -837,15 +884,23 @@ private fun MessageBubble(
             if (expanded) {
                 // Files of the message: download or into a storage, as in the full view (with a confirmation prompt).
                 val files = message.attachments.filter { it.local }
-                // Actions as plain text with icon, like „Löschen“: no frame, flush with the edge of the speech bubble.
+                // Actions as plain icons without labels: no frame, flush with the edge of the speech bubble.
                 FlowRow(
                     modifier = Modifier.widthIn(max = 320.dp),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp, if (outgoing) Alignment.End else Alignment.Start),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, if (outgoing) Alignment.End else Alignment.Start),
                 ) {
                     onReply?.let { reply ->
                         MessageAction(texts.chat.reply, AppIcons.Antworten) {
                             show(false)
                             reply()
+                        }
+                    }
+                    // The whole text at once; parts can be marked in the open bubble.
+                    if (visibleText.isNotEmpty()) {
+                        MessageAction(texts.common.copy, AppIcons.Kopieren) {
+                            clipboard.setText(AnnotatedString(visibleText))
+                            show(false)
+                            controller.showNotice(texts.chat.textCopied)
                         }
                     }
                     // Forward and share take the whole message: only once every attachment is on the phone.
@@ -908,19 +963,18 @@ private fun PassedOnLabel(modifier: Modifier = Modifier, color: Color = Material
     }
 }
 
-/** Action below an opened message: icon and word without a frame, a little smaller than a button; still 40 dp high to hit. */
+/** Action below an opened message: an icon without a frame or label, 48 dp to hit. */
 @Composable
 private fun MessageAction(text: String, icon: ImageVector, color: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) {
-    Row(
+    // Icon only; the text is what screen readers say. 48 dp: minimum size for touch targets.
+    Box(
         Modifier
-            .heightIn(min = 40.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .size(48.dp)
+            .clip(CircleShape)
             .clickable(role = Role.Button, onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically,
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(text, style = MaterialTheme.typography.labelMedium, color = color)
+        Icon(icon, contentDescription = text, tint = color, modifier = Modifier.size(22.dp))
     }
 }
 
