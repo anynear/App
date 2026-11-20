@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- The permission above makes Google Play assume that Wi-Fi is required. It is not: without Wi-Fi the app only
+         cannot find a radio on the local network; devices without Wi-Fi still get the app. -->
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
     <!-- Android 17+: find and reach a radio on Wi-Fi without the system's device picker on every search -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 

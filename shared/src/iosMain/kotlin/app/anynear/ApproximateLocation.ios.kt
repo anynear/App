@@ -38,6 +38,16 @@ internal class IosApproximateLocation(private val openSettings: () -> Unit) : NS
     /** Allowed with „Genauer Standort“ (ADR 0121 §10). Without it iOS gives a place a few kilometres wide. */
     val precise = MutableStateFlow(false)
 
+    /** „Immer“ (ADR 0121 §13): the levels that share all the time continue after a restart of the iPhone with it. */
+    val always = MutableStateFlow(false)
+
+    /** Places while a place is shared ([share]), also with the app in the background. */
+    val updates = kotlinx.coroutines.flow.MutableSharedFlow<Place>(extraBufferCapacity = 4, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+
+    private var sharing = false
+
+    // Everything [refresh] and the delegate touch is declared above this block: a property declared below it does not
+    // exist yet while `init` runs, and the app crashed at the start on that (0.9.0-pre.10042).
     init {
         manager.delegate = this
         manager.desiredAccuracy = kCLLocationAccuracyReduced
@@ -117,14 +127,6 @@ internal class IosApproximateLocation(private val openSettings: () -> Unit) : NS
         finish(location)
         if (sharing && location != null) placeOf(location).let { updates.tryEmit(it) }
     }
-
-    /** Places while a place is shared ([share]), also with the app in the background. */
-    val updates = kotlinx.coroutines.flow.MutableSharedFlow<Place>(extraBufferCapacity = 4, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
-
-    private var sharing = false
-
-    /** „Immer“ (ADR 0121 §13): the levels that share all the time continue after a restart of the iPhone with it. */
-    val always = MutableStateFlow(false)
 
     fun requestAlways() {
         when (manager.authorizationStatus) {
