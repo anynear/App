@@ -138,6 +138,8 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
 
     override val placeUpdates: kotlinx.coroutines.flow.Flow<app.anynear.location.Place> = location.updates
 
+    override fun watchMoves(on: Boolean) = location.watchMoves(on)
+
     override fun batteryPercent(): Int? {
         val device = platform.UIKit.UIDevice.currentDevice
         device.batteryMonitoringEnabled = true

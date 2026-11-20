@@ -25,6 +25,17 @@ interface SosTexts {
     val runningTitle: String
     fun runningSince(time: String): String
     val nobodyCares: String
+    fun agreedOf(done: Int, all: Int): String
+    val nobodyAgreed: String
+    fun askTitle(name: String): String
+    fun askText(name: String): String
+    val askNotice: String
+    val askYes: String
+    val askNo: String
+    val askLater: String
+    val contactFor: String
+    val openAsks: String
+    val withdraw: String
     fun arrived(done: Int, all: Int): String
     val notArrived: String
     fun cares(names: String): String
@@ -68,26 +79,37 @@ internal object SosTextsDe : SosTexts {
     override val title = "Hilfe rufen"
     override val button = "SOS"
     override val buttonLabel = "Hilfe rufen. Fünfmal schnell tippen löst mit Rückzähler aus."
-    override val hold = "Halten, um deine Helfer zu warnen"
+    override val hold = "Halten, um deine SOS-Kontakte zu warnen"
     override fun goesTo(names: String) = "Geht an: $names"
-    override val whatGoes = "Deine Helfer bekommen deinen Standort, den Akkustand und wo du zuletzt warst."
-    override val not112 = "anynear warnt deine Helfer. Es ersetzt nicht den Notruf 112."
+    override val whatGoes = "Deine SOS-Kontakte bekommen deinen Standort, den Akkustand und wo du zuletzt warst."
+    override val not112 = "anynear warnt deine SOS-Kontakte. Es ersetzt nicht den Notruf 112."
     override val dial112 = "112 anrufen"
     override val noHelpersTitle = "Wer soll dir helfen?"
     override val noHelpersText = "Wähle Kreise oder einzelne Personen. Sie werden laut geweckt, wenn du Hilfe rufst."
-    override val chooseHelpers = "Helfer ändern"
+    override val chooseHelpers = "SOS-Kontakte ändern"
     override val save = "Speichern"
     override val nobodyYet = "Du hast noch keinen Kreis und keinen Kontakt. Lade zuerst jemanden ein."
-    override fun countdown(seconds: Int) = "Deine Helfer werden in $seconds Sekunden gewarnt"
+    override fun countdown(seconds: Int) = "Deine SOS-Kontakte werden in $seconds Sekunden gewarnt"
     override val cancel = "Abbrechen"
-    override val sending = "Deine Helfer werden gewarnt …"
+    override val sending = "Deine SOS-Kontakte werden gewarnt …"
     override val sendingGoesOn = "Das läuft weiter, auch wenn du diese Seite schließt."
     override val sentConfirm = "Der Ruf ist raus und läuft weiter, auch wenn du diese Seite oder anynear schließt."
     override val failedBanner = "Dein Hilferuf ging nicht raus. Antippen"
     override val failed = "Das ging nicht raus. Prüf deine Verbindung und versuch es noch einmal, oder ruf die 112."
-    override val runningTitle = "Deine Helfer sind gewarnt"
+    override val runningTitle = "Deine SOS-Kontakte sind gewarnt"
     override fun runningSince(time: String) = "Seit $time. Dein Standort geht weiter mit, auch wenn anynear nicht offen ist."
     override val nobodyCares = "Noch hat niemand geantwortet."
+    override fun agreedOf(done: Int, all: Int) = "$done von $all haben zugesagt"
+    override val nobodyAgreed = "Noch hat niemand zugesagt. Erst nach der Zusage klingelt ein Hilferuf dort laut; bis dahin ist er nur eine Mitteilung."
+    override fun askTitle(name: String) = "$name möchte dich als SOS-Kontakt"
+    override fun askText(name: String) = "Ruft $name Hilfe oder bleibt ein Lebenszeichen aus, klingelt dein Handy laut, auch nachts. Du kannst das jederzeit zurücknehmen."
+    override val askNotice = "Öffne anynear, um zu antworten."
+    override val askYes = "Ja, einverstanden"
+    override val askNo = "Nein"
+    override val askLater = "Später"
+    override val contactFor = "Du bist SOS-Kontakt für"
+    override val openAsks = "Offene Anfragen"
+    override val withdraw = "Antippen, um es zurückzunehmen"
     override fun arrived(done: Int, all: Int) = "Angekommen bei $done von $all"
     override val notArrived = "Noch bei niemandem angekommen. Wenn es eilt, ruf die 112 an."
     override fun cares(names: String) = "$names kümmert sich"
@@ -110,8 +132,8 @@ internal object SosTextsDe : SosTexts {
     override val circles = "Kreise"
     override val persons = "Personen"
     override fun activeBanner(name: String) = "$name braucht Hilfe. Antippen"
-    override val ownBanner = "Deine Helfer sind gewarnt. Antippen"
-    override val buttonSetUp = "Hilfe rufen ist noch nicht eingerichtet. Antippen, um Helfer zu wählen."
+    override val ownBanner = "Deine SOS-Kontakte sind gewarnt. Antippen"
+    override val buttonSetUp = "Hilfe rufen ist noch nicht eingerichtet. Antippen, um SOS-Kontakte zu wählen."
 
     override fun missedTitle(name: String) = "$name hat das Lebenszeichen nicht bestätigt"
     override val missedText = "Antippen, um zu sehen, wo, und zu antworten."
@@ -123,33 +145,44 @@ internal object SosTextsDe : SosTexts {
     override val ownMissedTitle = "Du hast nicht geantwortet"
     override fun ownMissedText(circle: String) = "Dein Lebenszeichen blieb aus. Deshalb ist „$circle“ gewarnt."
     override val ownMissedNoPlace = "Dein Standort geht nicht mit, weil du ihn mit diesem Kreis nicht teilst."
-    override val ownMissedBanner = "Lebenszeichen blieb aus: Deine Helfer sind gewarnt. Antippen"
+    override val ownMissedBanner = "Lebenszeichen blieb aus: Deine SOS-Kontakte sind gewarnt. Antippen"
 }
 
 internal object SosTextsEn : SosTexts {
     override val title = "Call for help"
     override val button = "SOS"
     override val buttonLabel = "Call for help. Five quick taps start it with a countdown."
-    override val hold = "Hold to warn your helpers"
+    override val hold = "Hold to warn your SOS contacts"
     override fun goesTo(names: String) = "Goes to: $names"
-    override val whatGoes = "Your helpers get your location, your battery level and where you were last."
-    override val not112 = "anynear warns your helpers. It does not replace the emergency number 112."
+    override val whatGoes = "Your SOS contacts get your location, your battery level and where you were last."
+    override val not112 = "anynear warns your SOS contacts. It does not replace the emergency number 112."
     override val dial112 = "Call 112"
     override val noHelpersTitle = "Who should help you?"
     override val noHelpersText = "Choose circles or single people. They are woken loudly when you call for help."
-    override val chooseHelpers = "Change helpers"
+    override val chooseHelpers = "Change SOS contacts"
     override val save = "Save"
     override val nobodyYet = "You have no circle and no contact yet. Invite someone first."
-    override fun countdown(seconds: Int) = "Your helpers will be warned in $seconds seconds"
+    override fun countdown(seconds: Int) = "Your SOS contacts will be warned in $seconds seconds"
     override val cancel = "Cancel"
-    override val sending = "Warning your helpers …"
+    override val sending = "Warning your SOS contacts …"
     override val sendingGoesOn = "This goes on, also when you close this page."
     override val sentConfirm = "The call is out and goes on, also when you close this page or anynear."
     override val failedBanner = "Your call for help didn't go out. Tap"
     override val failed = "That didn't go out. Check your connection and try again, or call 112."
-    override val runningTitle = "Your helpers have been warned"
+    override val runningTitle = "Your SOS contacts have been warned"
     override fun runningSince(time: String) = "Since $time. Your location keeps going along, also when anynear isn't open."
     override val nobodyCares = "Nobody has answered yet."
+    override fun agreedOf(done: Int, all: Int) = "$done of $all have agreed"
+    override val nobodyAgreed = "Nobody has agreed yet. A call for help only rings loudly there after they agree; until then it is just a notification."
+    override fun askTitle(name: String) = "$name wants you as an SOS contact"
+    override fun askText(name: String) = "If $name calls for help or misses a check-in, your phone rings loudly, also at night. You can take this back at any time."
+    override val askNotice = "Open anynear to answer."
+    override val askYes = "Yes, I agree"
+    override val askNo = "No"
+    override val askLater = "Later"
+    override val contactFor = "You are an SOS contact for"
+    override val openAsks = "Open requests"
+    override val withdraw = "Tap to take it back"
     override fun arrived(done: Int, all: Int) = "Arrived with $done of $all"
     override val notArrived = "Not arrived with anyone yet. If it is urgent, call 112."
     override fun cares(names: String) = "$names is looking after it"
@@ -172,8 +205,8 @@ internal object SosTextsEn : SosTexts {
     override val circles = "Circles"
     override val persons = "People"
     override fun activeBanner(name: String) = "$name needs help. Tap"
-    override val ownBanner = "Your helpers have been warned. Tap"
-    override val buttonSetUp = "Calling for help isn't set up yet. Tap to choose helpers."
+    override val ownBanner = "Your SOS contacts have been warned. Tap"
+    override val buttonSetUp = "Calling for help isn't set up yet. Tap to choose SOS contacts."
 
     override fun missedTitle(name: String) = "$name didn't confirm the check-in"
     override val missedText = "Tap to see where and to answer."
@@ -185,5 +218,5 @@ internal object SosTextsEn : SosTexts {
     override val ownMissedTitle = "You didn't answer"
     override fun ownMissedText(circle: String) = "Your check-in stopped. That's why “$circle” has been warned."
     override val ownMissedNoPlace = "Your location doesn't go along, because you don't share it with this circle."
-    override val ownMissedBanner = "Check-in stopped: your helpers have been warned. Tap"
+    override val ownMissedBanner = "Check-in stopped: your SOS contacts have been warned. Tap"
 }

@@ -64,7 +64,11 @@ internal fun guideSteps(controller: AppController, withRadio: Boolean): List<Gui
         withRadio = withRadio,
         radioPaired = controller.pairedDevice.value != null,
         // Also when the approximate location is allowed already but the question who sees it is open (ADR 0121 §10).
-        locationNeeded = !controller.radioAreas.locationAllowed.value || controller.locationSharing?.let { it.default.value == null } == true,
+        // And when the person said yes on another device, but this phone may not read the exact place yet: then the
+        // answer exists and the permission of this phone is still missing (20.11.2026).
+        locationNeeded = !controller.radioAreas.locationAllowed.value || controller.locationSharing?.let {
+            it.default.value == null || (it.default.value != ShareLevel.Off && !it.allowed.value)
+        } == true,
     )
 }
 

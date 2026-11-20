@@ -93,6 +93,14 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
         _placeUpdates.tryEmit(place)
     }
 
+    private var watchingMoves = false
+
+    override fun watchMoves(on: Boolean) {
+        if (on == watchingMoves) return
+        watchingMoves = on
+        ContextCompat.getMainExecutor(context).execute { location.watchMoves(on, ::onPlace) }
+    }
+
     private val sharingReasons = mutableMapOf<String, String>()
 
     override fun setLocationInUse(reason: String, text: String?) {
@@ -194,6 +202,8 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
         _locationAllowed.value = location.allowed()
         _preciseAllowed.value = location.preciseAllowed()
         _backgroundAllowed.value = location.backgroundAllowed()
+        // Allowed just now: what was asked for before the permission starts with it.
+        if (watchingMoves) location.watchMoves(true, ::onPlace)
     }
 
     override fun requestLocation() {

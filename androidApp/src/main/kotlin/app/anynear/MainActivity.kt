@@ -43,17 +43,22 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { app.hooks.refreshPermissions() }
 
-    /** When the app last asked for the location; as with Bluetooth. */
-    private var locationAskedAt = 0L
+    /**
+     * Whether Android would still have shown its reason hint before the app asked for the location. Together with the
+     * state after the answer this tells a silent refusal („Nicht mehr fragen“) from a real one: asked for the first
+     * time and declined, the hint is due afterwards; declined for good, it is due neither before nor after. A stopwatch
+     * for „no dialog came“ missed that on slow phones, and the button then did nothing (20.11.2026).
+     */
+    private var locationHintBefore = false
+
+    /** Declined, and Android shows no question any more: only the app's settings help. */
+    private fun declinedForGood(permission: String): Boolean = !locationHintBefore && !shouldShowRequestPermissionRationale(permission)
 
     // Approximate location for official warnings. If no prompt comes any more („Nicht mehr fragen“), go to settings.
     private val locationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             app.hooks.refreshPermissions()
-            val noDialog = SystemClock.elapsedRealtime() - locationAskedAt < NO_DIALOG_MILLIS
-            if (!granted && noDialog && !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)) {
-                app.hooks.openAppSettings()
-            }
+            if (!granted && declinedForGood(Manifest.permission.ACCESS_COARSE_LOCATION)) app.hooks.openAppSettings()
         }
 
     // Exact location for „wenn etwas ist“ (ADR 0121 §10): Android asks for exact and approximate together and lets the
@@ -65,11 +70,8 @@ class MainActivity : ComponentActivity() {
     private val preciseLocationLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
             app.hooks.refreshPermissions()
-            val noDialog = SystemClock.elapsedRealtime() - locationAskedAt < NO_DIALOG_MILLIS
             val exact = result[Manifest.permission.ACCESS_FINE_LOCATION] == true
-            if (!exact && noDialog && !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
-                app.hooks.openAppSettings()
-            }
+            if (!exact && declinedForGood(Manifest.permission.ACCESS_FINE_LOCATION)) app.hooks.openAppSettings()
         }
 
     // Local network (Android 17+): asked only when searching for a radio on purpose; declined, Android shows its own
@@ -104,11 +106,11 @@ class MainActivity : ComponentActivity() {
             }
         }
         app.hooks.locationPermissionRequester = {
-            locationAskedAt = SystemClock.elapsedRealtime()
+            locationHintBefore = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)
             locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
         app.hooks.preciseLocationRequester = {
-            locationAskedAt = SystemClock.elapsedRealtime()
+            locationHintBefore = shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
             preciseLocationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
         app.hooks.backgroundLocationRequester = {

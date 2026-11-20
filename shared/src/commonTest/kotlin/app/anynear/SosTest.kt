@@ -51,6 +51,22 @@ class SosTest {
         override suspend fun update(id: String, place: Place?, battery: Int?, trail: List<Place>) = true
         override suspend fun end(id: String): Boolean { all = all.map { if (it.id == id) it.copy(ended = true) else it }; return true }
         override suspend fun care(id: String): Boolean { cared = id; all = all.map { if (it.id == id) it.copy(caring = it.caring + "ich") else it }; return true }
+
+        // Contacts for calls (ADR 0121 §25): in these tests this phone said yes to Anna, unless a test says otherwise.
+        override val contactChanges = MutableSharedFlow<String>(extraBufferCapacity = 8)
+        var agreedTo = listOf("anna")
+        var asking = listOf<app.anynear.anmp.core.SosAsk>()
+        var asked: Pair<List<String>, List<String>>? = null
+        var answered: Pair<String, Boolean>? = null
+        override fun agreed() = agreedTo
+        override fun asks() = asking
+        override suspend fun ask(circleIds: List<String>, personIds: List<String>): Boolean { asked = circleIds to personIds; return true }
+        override suspend fun answer(person: String, agree: Boolean): Boolean {
+            answered = person to agree
+            agreedTo = if (agree) agreedTo + person else agreedTo - person
+            asking = asking.filter { it.person != person }
+            return true
+        }
     }
 
     private fun sos(source: Source = Source(), hooks: Hooks = Hooks(), store: ObservedKeyValueStore = ObservedKeyValueStore(InMemoryStore())) =
@@ -262,6 +278,43 @@ class SosTest {
         )
         source.changes.emit("call-5")
         assertEquals("call-5", s.own()?.id)
+    }
+
+    /** ADR 0121 §25: nobody can make someone else's phone ring without a yes. */
+    @Test
+    fun aCallOnlyRingsForSomeoneThisPersonSaidYesTo() = runTest {
+        val source = Source().apply { agreedTo = emptyList() }
+        val hooks = Hooks()
+        val s = sos(source, hooks)
+        source.all = listOf(SosCall("call-7", "anna", own = false, start = t0, lastAt = t0))
+        source.changes.emit("call-7")
+        // Shown, but quietly, and it does not ring again.
+        assertEquals(AlertLoudness.Normal, hooks.shown.single().loudness)
+        s.ringAgain()
+        assertEquals(1, hooks.shown.size)
+
+        // Anna asks: a quiet notice once, and the question waits in the app.
+        source.asking = listOf(app.anynear.anmp.core.SosAsk("anna", t0))
+        source.contactChanges.emit("anna")
+        source.contactChanges.emit("anna")
+        assertEquals(2, hooks.shown.size)
+        assertTrue("Anna" in hooks.shown.last().title)
+        assertEquals(listOf("anna"), s.asks.value.map { it.person })
+        assertTrue(s.answer("anna", true))
+        assertEquals("anna" to true, source.answered)
+        assertEquals(listOf("anna"), s.agreed.value)
+        assertTrue(s.asks.value.isEmpty())
+        // Answered: the notice about the question goes.
+        assertTrue("sos-ask" in hooks.cancelled)
+
+        // From now on her call rings.
+        source.all = listOf(SosCall("call-8", "anna", own = false, start = t0, lastAt = t0))
+        source.changes.emit("call-8")
+        assertEquals(AlertLoudness.Loud, hooks.shown.last().loudness)
+
+        // Choosing contacts asks them.
+        s.setHelpers(SosHelpers(circles = setOf("familie"), persons = setOf("dora")))
+        assertEquals(listOf("familie") to listOf("dora"), source.asked)
     }
 
     @Test

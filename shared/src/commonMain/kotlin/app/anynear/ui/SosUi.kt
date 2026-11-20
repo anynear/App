@@ -154,12 +154,39 @@ internal fun SosBanner(controller: AppController) {
     }
 }
 
+/**
+ * Someone asks this person to be its SOS contact (ADR 0121 §25): asked once, on any page. Yes lets its calls ring
+ * here; no, or no answer, and they are only shown. „Später“ asks again the next time the app is opened.
+ */
+@Composable
+private fun SosAskDialog(sos: Sos) {
+    val st = texts.sos
+    val asks by sos.asks.collectAsState()
+    val scope = rememberCoroutineScope()
+    val later by sos.later.collectAsState()
+    val ask = asks.firstOrNull { it.person !in later } ?: return
+    val name = sos.name(ask.person)
+    AppDialog(
+        onDismissRequest = { sos.askLater(ask.person) },
+        title = { Text(st.askTitle(name)) },
+        text = { Text(st.askText(name)) },
+        confirmButton = { AppButton(st.askYes, { scope.launch { sos.answer(ask.person, true) } }) },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppButton(st.askLater, { sos.askLater(ask.person) }, kind = ButtonKind.Quiet)
+                AppButton(st.askNo, { scope.launch { sos.answer(ask.person, false) } }, kind = ButtonKind.Quiet)
+            }
+        },
+    )
+}
+
 /** The full-screen page of [Sos.screen]: calling, the running own call, or the call of someone we help. */
 @Composable
 internal fun SosScreenHost(controller: AppController) {
     val sos = controller.sos ?: return
     val screen by sos.screen.collectAsState()
     val calls by sos.calls.collectAsState()
+    SosAskDialog(sos)
     val id = screen ?: return
     Dialog(onDismissRequest = sos::close, properties = AppFullScreenDialogProperties) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -205,6 +232,14 @@ private fun RaisePage(controller: AppController, sos: Sos) {
     val names = circles.filter { it.id in helpers.circles }.map { it.name } + people.filter { it.deviceId in helpers.persons }.map { it.name }
     PageFrame(st.title, sos::close) {
         Text(st.goesTo(names.joinToString(", ").ifEmpty { "?" }), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        // Who said yes (ADR 0121 §25): only their phones ring; without a yes a call is just a notice there.
+        val contacts by sos.contacts.collectAsState()
+        val yes = contacts.count { it.state == app.anynear.anmp.core.SosContact.AGREED }
+        Text(
+            if (yes == 0) st.nobodyAgreed else st.agreedOf(yes, contacts.size),
+            style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
+            color = if (yes == 0) AppTheme.colors.alarm else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         if (counting) {
             Text(st.countdown(left), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
             AppButton(st.cancel, sos::cancelCountDown, Modifier.fillMaxWidth(), kind = ButtonKind.Main)
@@ -257,6 +292,19 @@ private fun HelpersPage(controller: AppController, sos: Sos, onDone: () -> Unit)
                     trailing = { Checkbox(checked = on, onCheckedChange = null) },
                     onClick = { chosenPersons = if (on) chosenPersons - id else chosenPersons + id },
                 )
+            }
+        }
+        // Questions put off with „Später“ wait here.
+        val openAsks by sos.asks.collectAsState()
+        if (openAsks.isNotEmpty()) AppSection(st.openAsks) {
+            openAsks.forEach { a -> AppRow(title = st.askTitle(sos.name(a.person)), icon = AppIcons.Person, chevron = true, onClick = { sos.askNow(a.person) }) }
+        }
+        // Whose SOS contact this person is, and the way to take it back.
+        val agreed by sos.agreed.collectAsState()
+        val scope = rememberCoroutineScope()
+        if (agreed.isNotEmpty()) AppSection(st.contactFor) {
+            agreed.forEach { person ->
+                AppRow(title = sos.name(person), subtitle = st.withdraw, icon = AppIcons.Person, onClick = { scope.launch { sos.answer(person, false) } })
             }
         }
         Text(st.not112, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

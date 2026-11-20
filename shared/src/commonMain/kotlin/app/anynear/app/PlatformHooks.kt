@@ -162,7 +162,14 @@ interface PlatformHooks {
      */
     fun setLocationInUse(reason: String, text: String?) = Unit
 
-    /** Places the system delivers while [setLocationInUse] holds, also with the app in the background. */
+    /**
+     * While [on], the system tells the app through [placeUpdates] when the phone has clearly moved, at next to no cost
+     * and also with the app in the background or closed where the system allows it (ADR 0121 §24): the levels that
+     * share for good follow the person without locating by the clock.
+     */
+    fun watchMoves(on: Boolean) = Unit
+
+    /** Places the system delivers while [setLocationInUse] or [watchMoves] holds, also with the app in the background. */
     val placeUpdates: kotlinx.coroutines.flow.Flow<Place> get() = kotlinx.coroutines.flow.emptyFlow()
 
     /** Battery of this device in percent, `null` if the system does not say; goes along with a call for the helpers. */

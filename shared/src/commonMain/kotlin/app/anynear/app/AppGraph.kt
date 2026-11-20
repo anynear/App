@@ -313,9 +313,32 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
         share.planId?.let { lifeSigns.end(it) }
         val conversation = share.circleId?.let { app.anynear.mesh.Conversation.Circle(it) }
             ?: share.personId?.let { id -> controller.people.value.firstOrNull { it.deviceId == id }?.let { app.anynear.mesh.Conversation.Direct(it.peer) } }
-        conversation?.let { controller.send(it, app.anynear.i18n.texts.map.arrivedMessage) }
+        // As a card with the place and its name (§26); the text is what older apps show.
+        val lat = share.destLatitude
+        val lon = share.destLongitude
+        val spot = if (lat != null && lon != null) {
+            app.anynear.mesh.ChatSpot(app.anynear.mesh.ChatSpot.ARRIVED, lat, lon, Clock.System.now().toEpochMilliseconds(), null, share.destLabel?.trim()?.take(60)?.takeIf { it.isNotEmpty() })
+        } else {
+            null
+        }
+        conversation?.let { controller.send(it, app.anynear.i18n.texts.map.arrivedMessage, spot = spot) }
         controller.showOnMap(null)
     }
+    placeSharer.onAsked = { id ->
+        controller.people.value.firstOrNull { it.deviceId == id }?.name?.let { name ->
+            val mt = app.anynear.i18n.texts.map
+            hooks.showAlertNotification(
+                app.anynear.alerts.AlertNotification(
+                    key = "${app.anynear.location.PlaceSharer.ASK_CHANNEL}/$id", channelId = app.anynear.location.PlaceSharer.ASK_CHANNEL, channelName = mt.title,
+                    title = mt.askedTitle(name), text = mt.askedNotice, priority = app.anynear.alerts.AlertPriority.Info,
+                    loudness = app.anynear.alerts.AlertLoudness.Normal, sound = app.anynear.alerts.AlertSound.Hint, timestampMillis = Clock.System.now().toEpochMilliseconds(),
+                ),
+            )
+        }
+    }
+    locationSharing.onMutualLowered = { id, level -> controller.tellMutualLowered(id, level) }
+    placeSharer.battery = { hooks.batteryPercent() }
+    placeSharer.onAnswered = { hooks.cancelAlertNotifications(app.anynear.location.PlaceSharer.ASK_CHANNEL) }
     placeSharer.start()
     host.target = controller.coreHost
     return controller

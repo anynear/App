@@ -45,6 +45,7 @@ internal class IosApproximateLocation(private val openSettings: () -> Unit) : NS
     val updates = kotlinx.coroutines.flow.MutableSharedFlow<Place>(extraBufferCapacity = 4, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
 
     private var sharing = false
+    private var watching = false
 
     // Everything [refresh] and the delegate touch is declared above this block: a property declared below it does not
     // exist yet while `init` runs, and the app crashed at the start on that (0.9.0-pre.10042).
@@ -125,7 +126,22 @@ internal class IosApproximateLocation(private val openSettings: () -> Unit) : NS
     override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
         val location = didUpdateLocations.lastOrNull() as? CLLocation
         finish(location)
-        if (sharing && location != null) placeOf(location).let { updates.tryEmit(it) }
+        if ((sharing || watching) && location != null) placeOf(location).let { updates.tryEmit(it) }
+    }
+
+    /**
+     * Has iOS report when the iPhone has clearly moved (about 500 m; ADR 0121 §24), from the mobile
+     * and Wi-Fi networks and at next to no cost. With „Immer“ iOS starts the app for it, also after it was closed;
+     * with „Beim Verwenden der App“ it only reports while the app is open.
+     */
+    fun watchMoves(on: Boolean) {
+        if (on == watching) return
+        watching = on
+        if (on) {
+            manager.startMonitoringSignificantLocationChanges()
+        } else {
+            manager.stopMonitoringSignificantLocationChanges()
+        }
     }
 
     fun requestAlways() {

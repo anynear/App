@@ -1,5 +1,6 @@
 package app.anynear.location
 
+import kotlin.concurrent.Volatile
 import app.anynear.anmp.core.AlivePosition
 import app.anynear.anmp.core.AnmpCore
 import app.anynear.anmp.core.CoreEvent
@@ -109,7 +110,41 @@ class PlaceSharer(
         store.getString(KEY_SENT)?.let { runCatching { json.decodeFromString(sentSerializer, it) }.getOrNull() }.orEmpty()
     private val lock = Mutex()
 
-    private val _places = MutableStateFlow(source.places().associateBy { it.personId })
+    /** What was known of one person when everything was paused, kept so that it is still there after a restart. */
+    @Serializable
+    private data class Kept(
+        val person: String, val level: String, val lat: Double? = null, val lon: Double? = null, val placeAt: Long = 0, val accuracy: Int? = null,
+        val radius: Int? = null, val until: Long = 0, val at: Long = 0, val label: String? = null, val since: Long = 0,
+    )
+
+    private val keptSerializer = kotlinx.serialization.builtins.ListSerializer(Kept.serializer())
+
+    private fun loadKept(): Map<String, SharedPlace> =
+        store.getString(KEY_PAUSED_PLACES)?.let { runCatching { json.decodeFromString(keptSerializer, it) }.getOrNull() }.orEmpty().mapNotNull { k ->
+            val level = ShareLevel.entries.firstOrNull { it.id == k.level } ?: return@mapNotNull null
+            val place = if (k.lat != null && k.lon != null) Place(k.lat, k.lon, k.placeAt, k.accuracy) else null
+            k.person to SharedPlace(k.person, level, place, k.radius, k.until, k.at, k.label, k.since)
+        }.toMap()
+
+    private fun saveKept(places: Map<String, SharedPlace>?) = store.putString(
+        KEY_PAUSED_PLACES,
+        places?.values?.map { p ->
+            Kept(p.personId, p.level.id, p.place?.latitude, p.place?.longitude, p.place?.atMillis ?: 0, p.place?.accuracyMeters, p.radiusMeters, p.untilMillis, p.atMillis, p.label, p.sinceMillis)
+        }?.let { json.encodeToString(keptSerializer, it) },
+    )
+
+    private val _places = MutableStateFlow(seen(loadKept()))
+
+    /**
+     * What is shown of the others: everything, or while everything is paused only what was known when pausing
+     * (20.11.2026). What [held] has stays as it is; it is kept on the phone and survives a restart.
+     */
+    private fun seen(held: Map<String, SharedPlace>): Map<String, SharedPlace> {
+        val all = source.places().associateBy { it.personId }
+        if (!sharing.paused.value) return all
+        val since = sharing.pausedAt()
+        return all.mapNotNull { (id, place) -> (held[id] ?: place.takeIf { it.atMillis <= since })?.let { id to it } }.toMap()
+    }
 
     /** What the others share with us, by person ID. */
     val places: StateFlow<Map<String, SharedPlace>> = _places.asStateFlow()
@@ -154,18 +189,24 @@ class PlaceSharer(
     /** Called when the person arrived at the destination of [Escort]: the app ends the check-in and says so in the conversation. */
     var onArrived: suspend (Escort) -> Unit = {}
 
+    /** Someone asks to see the place: the app tells the person, also when the map is not open (ADR 0121 §26). */
+    var onAsked: (personId: String) -> Unit = {}
+
+    /** Every request is answered: the notice about them goes. */
+    var onAnswered: () -> Unit = {}
+
     /** Starts or ends sharing for a time: the counterpart is set to the exact place until then, and back to what it was. */
     fun setEscort(escort: Escort?, members: Collection<String> = emptyList()) {
         val before = _escort.value
         if (before != null && before != escort) {
             before.circleId?.let { sharing.setLevel(it, null) }
-            before.personId?.let { sharing.setPersonLevel(it, null) }
+            before.personId?.let { sharing.setPersonLevel(it, null, quiet = true) }
         }
         if (escort != null) {
             escort.circleId?.let { sharing.setLevel(it, ShareLevel.Exact, escort.untilMillis, members) }
             escort.personId?.let {
                 sharing.approve(listOf(it))
-                sharing.setPersonLevel(it, ShareLevel.Exact, escort.untilMillis)
+                sharing.setPersonLevel(it, ShareLevel.Exact, escort.untilMillis, quiet = true)
             }
         }
         store.putString(KEY_ESCORT, escort?.let { json.encodeToString(Escort.serializer(), it) })
@@ -189,16 +230,47 @@ class PlaceSharer(
     val isSource: Boolean get() = sharing.source.value.let { it == null || it == ownDeviceId() }
 
     fun start() {
-        scope.launch { source.changes.collect { _places.value = source.places().associateBy { it.personId } } }
-        scope.launch { source.asks.collect { p -> if (p !in _asking.value) _asking.value = _asking.value + p } }
+        scope.launch { source.changes.collect { _places.value = seen(_places.value) } }
+        // Pausing keeps what is on the screen; going on shows what came in since.
+        scope.launch {
+            sharing.paused.collect { paused ->
+                // Pausing keeps what is known right now, also over a restart; an app started while paused has it already.
+                if (!paused) saveKept(null) else if (store.getString(KEY_PAUSED_PLACES) == null) saveKept(_places.value)
+                _places.value = seen(_places.value)
+            }
+        }
+        scope.launch {
+            source.asks.collect { p ->
+                if (p !in _asking.value) {
+                    _asking.value = _asking.value + p
+                    runCatching { onAsked(p) }
+                }
+            }
+        }
         scope.launch {
             merge(sharing.default, sharing.circles, sharing.persons, sharing.until, sharing.paused, sharing.source, sharing.approved, sharing.allowed)
                 .collect { sync() }
         }
+        // The first tries above come before the app knows its own device; once it does, the levels are brought up to date.
+        scope.launch {
+            while (ownDeviceId() == null) delay(START_WAIT_MILLIS)
+            sync()
+        }
         scope.launch {
             while (true) {
                 delay(TICK_MILLIS)
-                sync()
+                // Only an action keeps locating (ADR 0121 §24): sharing for a time, „Alle teilen“, a way with a destination.
+                // A level alone is brought up to date by [touch], when something happens anyway.
+                // And once an hour without anything happening (20.11.2026), so that a place never gets older than that
+                // while the phone lets the app run.
+                // That hour stretches while the phone rests in one place, up to [IDLE_MAX_MILLIS], and with a low battery
+                // the app does not locate just for this at all.
+                if (live()) {
+                    sync()
+                } else if (now() - syncedAt >= idleGap && (battery() ?: 100) >= LOW_BATTERY) {
+                    idleTick = true
+                    sync()
+                }
             }
         }
         // While a place is shared the system delivers places also with the app in the background (ADR 0121 §13).
@@ -234,9 +306,10 @@ class PlaceSharer(
     /** Answer to a request: „Einmal zeigen“ ([minutes] = 0), for some time, or `null` for „Nein“. */
     fun answer(personId: String, minutes: Int?) {
         _asking.value = _asking.value - personId
+        if (_asking.value.isEmpty()) runCatching { onAnswered() }
         if (minutes == null) return
         sharing.approve(listOf(personId))
-        sharing.setPersonLevel(personId, ShareLevel.Exact, now() + (if (minutes == 0) ONCE_MILLIS else minutes * 60_000L))
+        sharing.setPersonLevel(personId, ShareLevel.Exact, now() + (if (minutes == 0) ONCE_MILLIS else minutes * 60_000L), quiet = true)
     }
 
     /** Sends what changed since the last time; called on every change of the settings and every few minutes. */
@@ -250,18 +323,51 @@ class PlaceSharer(
         }
     }
 
+    @Volatile private var syncedAt = 0L
+
+    /** How long the app waits without anything happening before it brings the levels up to date; see [nextIdleGap]. */
+    @Volatile private var idleGap = IDLE_MILLIS
+    @Volatile private var idleTick = false
+    private var idlePlace: Place? = null
+
+    /** The battery in percent, if the phone says; with a low one the app does not locate without a reason. */
+    var battery: () -> Int? = { null }
+
     private suspend fun syncLocked() {
+        syncedAt = now()
         // „Begleite mich“ ends by itself: the circle goes back to what it was.
         _escort.value?.takeIf { it.untilMillis <= now() }?.let { setEscort(null) }
+        // Right after the start the app does not know yet which device it is: that try does not count.
+        if (ownDeviceId() == null) {
+            missed = true
+            return
+        }
+        // Someone sees the place for good: the system reports clear moves, so that it follows without the clock.
+        sharing.watchMoves(isSource && !sharing.paused.value && targets().any { sharing.levelFor(it.personId, it.circleIds).always })
         if (!isSource) return sharing.inUse(IN_USE, null)
+        // Paused: nothing goes out, not even that it is paused; the others keep what they saw last.
+        if (sharing.paused.value) {
+            running = false
+            return sharing.inUse(IN_USE, null)
+        }
         val all = targets()
         if (all.isEmpty()) return sharing.inUse(IN_USE, null)
         val wanted = all.associateWith { sharing.levelFor(it.personId, it.circleIds) }
-        // Tell the system, and through it the person, for as long as a place leaves the phone all the time.
-        val seeing = wanted.filterValues { it.always }.keys.map { it.name }
+        // Tell the system, and through it the person, for as long as an action runs: only then the phone keeps locating
+        // with the app in the background and shows its notification (ADR 0121 §24). A level without an end does not.
+        val t0 = now()
+        val seeing = wanted.filter { (target, level) -> level.always && sharing.untilFor(target.personId, target.circleIds) > t0 }.keys.map { it.name }
+        running = seeing.isNotEmpty()
         sharing.inUse(IN_USE, if (seeing.isEmpty()) null else app.anynear.i18n.texts.map.sharingNotice(seeing.take(3).joinToString(", ") + if (seeing.size > 3) " …" else ""))
         if (wanted.values.any { it.always } && sharing.source.value == null) ownDeviceId()?.let(sharing::setSource)
         val place = if (wanted.values.any { it.always }) locate() else null
+        missed = place == null && wanted.values.any { it.always }
+        if (place != null) {
+            val moved = idlePlace?.let { distanceMeters(it.latitude, it.longitude, place.latitude, place.longitude) > REST_METERS } ?: true
+            idleGap = nextIdleGap(idleGap, moved, quiet = idleTick)
+            if (moved) idlePlace = place
+        }
+        idleTick = false
         // Near the destination the sharing ends by itself (ADR 0121 §13); the levels below are then what they were before.
         val going = _escort.value
         if (place != null && going != null && going.hasDestination &&
@@ -345,6 +451,31 @@ class PlaceSharer(
     fun lastOwn(): Pair<Double, Double>? = _own.value?.let { it.latitude to it.longitude }
         ?: store.getString(KEY_LAST_OWN)?.split(',')?.takeIf { it.size == 2 }?.let { p -> p[0].toDoubleOrNull()?.let { lat -> p[1].toDoubleOrNull()?.let { lon -> lat to lon } } }
 
+    @Volatile private var running = false
+
+    /** `true` while an action shares the place live: a level with an end, e.g. „Standort teilen“ for an hour. */
+    fun live(): Boolean = running
+
+    private var touchedAt = 0L
+
+    /** The last [sync] wanted the place and the phone had none: the next [touch] tries again at once. */
+    @Volatile private var missed = false
+
+    /**
+     * Something happened anyway: the app was opened, a message was sent or the app was woken because something came
+     * in. A good moment to bring up to date what the levels „Ungefähr“ and „Genau“ show, without locating all the
+     * time (ADR 0121 §24). At most every [TOUCH_GAP_MILLIS].
+     */
+    fun touch() {
+        val t = now()
+        if (t - touchedAt < TOUCH_GAP_MILLIS) return
+        touchedAt = t
+        scope.launch {
+            sync()
+            if (missed) touchedAt = 0
+        }
+    }
+
     /** After the sharing ended by itself: once more with the levels as they are now. */
     private suspend fun syncAgain() = syncLocked()
 
@@ -362,6 +493,29 @@ class PlaceSharer(
     companion object {
         /** Device setting: what was sent last to whom, so that only changes go out. */
         const val KEY_SENT = "location_sent"
+        private const val KEY_PAUSED_PLACES = "location_paused_places"
+
+        /** Without anything happening the levels are brought up to date this often. */
+        const val IDLE_MILLIS = 3_600_000L
+
+        /** At rest the wait doubles up to this: at night or at the desk a place is asked for four times a day, not 24. */
+        const val IDLE_MAX_MILLIS = 6 * 3_600_000L
+
+        /** Within this distance the phone counts as resting. */
+        private const val REST_METERS = 100.0
+
+        /** Below this many percent the app does not locate without anything happening. */
+        private const val LOW_BATTERY = 15
+
+        /**
+         * The next wait after a place was read: back to an hour once the phone moved; doubled, up to
+         * [IDLE_MAX_MILLIS], when a check without anything happening ([quiet]) found it where it was; otherwise as it is.
+         */
+        internal fun nextIdleGap(gap: Long, moved: Boolean, quiet: Boolean): Long = when {
+            moved -> IDLE_MILLIS
+            quiet -> (gap * 2).coerceAtMost(IDLE_MAX_MILLIS)
+            else -> gap
+        }
 
         /** Device setting: where the phone was last, for the first view of the map. */
         const val KEY_LAST_OWN = "location_last_own"
@@ -373,6 +527,13 @@ class PlaceSharer(
         private const val IN_USE = "share"
 
         const val TICK_MILLIS = 2 * 60_000L
+
+        /** Channel of the notice that someone asks to see the place; a tap leads to the map. */
+        const val ASK_CHANNEL = "place-ask"
+        private const val START_WAIT_MILLIS = 500L
+
+        /** A level is brought up to date at most this often. */
+        const val TOUCH_GAP_MILLIS = 10 * 60_000L
 
         /** „Einmal zeigen“ holds this long, then the point is gone at the other side. */
         const val ONCE_MILLIS = 15 * 60_000L

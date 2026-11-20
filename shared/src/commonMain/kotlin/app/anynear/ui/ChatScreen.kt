@@ -3,7 +3,9 @@ package app.anynear.ui
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -196,6 +198,7 @@ internal fun ChatScreen(
     val placeRunning = rememberPlaceRunning(controller, conversation)
     var attachMenu by remember { mutableStateOf(false) }
     var meeting by remember { mutableStateOf(false) }
+    var askingMutual by remember { mutableStateOf(false) }
     var sharingPlace by remember { mutableStateOf(false) }
     var sharingAll by remember { mutableStateOf(false) }
     // A check-in for this circle or this person, from the „+“ (ADR 0121 §13, §23).
@@ -212,6 +215,7 @@ internal fun ChatScreen(
     if (sharingAll && conversation is Conversation.Circle) ShareAllDialog(controller, conversation.circleId, onDismiss = { sharingAll = false })
     if (sharingPlace) ShareMyPlaceDialog(controller, conversation, onDismiss = { sharingPlace = false })
     if (meeting) MeetingPointDialog(controller, conversation, onDismiss = { meeting = false })
+    if (askingMutual) MutualPlaceDialog(controller, conversation, onDismiss = { askingMutual = false })
     // Shared from another app or forwarded into this chat (also while it is open): into the draft, which then is
     // stored as usual. Only after the stored draft is loaded, so that loading does not displace it.
     val additions by controller.draftAdditions.collectAsState()
@@ -624,6 +628,15 @@ internal fun ChatScreen(
                                 controller.askWhere(conversation)
                             },
                         )
+                        // With one person who has anynear (ADR 0121 §28): both see each other for good, if both agree.
+                        if (conversation is Conversation.Direct && controller.locationSharing != null && controller.findPerson(conversation.peer)?.deviceId != null) DropdownMenuItem(
+                            text = { Text(texts.map.mutualStart) },
+                            leadingIcon = { Icon(AppIcons.Karte, contentDescription = null) },
+                            onClick = {
+                                attachMenu = false
+                                askingMutual = true
+                            },
+                        )
                         // Only if there is a picture in the clipboard right now; it is only read on tapping.
                         if (remember(attachMenu) { attachMenu && clipboardHasImage() }) {
                             DropdownMenuItem(
@@ -847,27 +860,32 @@ private fun MessageBubble(
     // The same for a place (ADR 0121 §8): the card shows it.
     val visibleText = remember(message.text, invites, message.intro, message.spot) { if (message.intro != null || message.spot != null) "" else withoutInviteLinks(message.text, invites) }
     // Speech bubble with a "tip" towards the sender's side (design: 18 dp, tip 6 dp).
-    val shape = if (outgoing) RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp) else RoundedCornerShape(18.dp, 18.dp, 18.dp, 6.dp)
+    val shape = if (message.spot != null) RoundedCornerShape(14.dp) else if (outgoing) RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp) else RoundedCornerShape(18.dp, 18.dp, 18.dp, 6.dp)
     // Not sent and out by no path: light background with a red border so that it stands out.
     val failed = outgoing && message.status == MessageStatus.FAILED && message.via.isEmpty()
+    // What the app sent for the person (a place, a question for it, „angekommen“; ADR 0121 §26) is an event, not
+    // something typed: a card in the middle, the same on both sides, that names who it is from.
+    val event = message.spot != null
+    val dark = outgoing && !failed && !event
     Row(
         Modifier
             .fillMaxWidth()
             .then(if (highlighted) Modifier.background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp)).padding(4.dp) else Modifier),
-        horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.spacedBy(8.dp),
+        horizontalArrangement = if (event) Arrangement.Center else if (outgoing) Arrangement.End else Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
-        avatar?.invoke()
-        Column(horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start) {
+        if (!event) avatar?.invoke()
+        Column(horizontalAlignment = if (event) Alignment.CenterHorizontally else if (outgoing) Alignment.End else Alignment.Start) {
             Row(verticalAlignment = Alignment.Bottom) {
-                if (outgoing) DetailsButton(expanded) { show(!expanded) }
+                if (outgoing && !event) DetailsButton(expanded) { show(!expanded) }
                 Column(
                     Modifier
-                        .widthIn(max = 296.dp)
-                        .background(if (outgoing && !failed) colors.outgoingBubble else colors.incomingBubble, shape)
+                        .then(if (event) Modifier.width(296.dp) else Modifier.widthIn(max = 296.dp))
+                        .background(if (event) MaterialTheme.colorScheme.surface else if (dark) colors.outgoingBubble else colors.incomingBubble, shape)
                         .then(
                             when {
                                 failed -> Modifier.border(1.5.dp, MaterialTheme.colorScheme.error, shape)
+                                event -> Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
                                 outgoing -> Modifier
                                 else -> Modifier.border(1.dp, colors.bubbleOutline, shape)
                             },
@@ -883,15 +901,15 @@ private fun MessageBubble(
                         )
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
-                    if (senderName != null) {
+                    if (senderName != null && !event) {
                         Text(senderName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (message.passedOn) {
-                        PassedOnLabel(color = if (outgoing && !failed) colors.onOutgoingBubble.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                        PassedOnLabel(color = if (dark) colors.onOutgoingBubble.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     quote?.let {
                         // In the own dark bubble the signal colour carries the accent, in others the primary colour.
-                        val own = outgoing && !failed
+                        val own = dark
                         QuoteBox(
                             it,
                             if (own) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface,
@@ -900,8 +918,8 @@ private fun MessageBubble(
                         )
                     }
                     if (message.attachments.isNotEmpty()) MessageAttachments(controller, message.attachments, onError)
-                    message.spot?.let { SpotCard(controller, message, it, senderName, if (outgoing && !failed) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface, onError) }
-                    val textColor = if (outgoing && !failed) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface
+                    message.spot?.let { SpotCard(controller, message, it, senderName, if (dark) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface, onError) }
+                    val textColor = if (dark) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface
                     if (visibleText.isNotEmpty()) {
                         if (message.attachments.any { it.transcribed }) TextPreviewLabel(visibleText, textColor.copy(alpha = 0.75f))
                         val shown = @Composable { Text(linkified(visibleText, textColor), style = MaterialTheme.typography.bodyLarge, color = textColor) }
@@ -909,7 +927,7 @@ private fun MessageBubble(
                         // closed, a long press opens the details as before.
                         if (expanded) {
                             // In the own dark bubble the signal colour marks, as for the quote accent.
-                            val mark = if (outgoing && !failed) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                            val mark = if (dark) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
                             CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(mark, mark.copy(alpha = 0.4f))) {
                                 SelectionContainer { shown() }
                             }
@@ -933,9 +951,9 @@ private fun MessageBubble(
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
-                    MessageFooter(message, isDirect, expanded, controller::peerName, if (outgoing && !failed) colors.onOutgoingBubble.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                    MessageFooter(message, isDirect, expanded, controller::peerName, if (dark) colors.onOutgoingBubble.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (!outgoing) DetailsButton(expanded) { show(!expanded) }
+                if (!outgoing || event) DetailsButton(expanded) { show(!expanded) }
             }
             val react = { emoji: String ->
                 controller.react(message, emoji)
@@ -1394,30 +1412,80 @@ private fun SpotCard(controller: AppController, message: ChatMessage, spot: app.
         ShareAllCard(controller, message, spot, senderName, color)
         return
     }
+    if (spot.kind == app.anynear.mesh.ChatSpot.SHARE || spot.kind == app.anynear.mesh.ChatSpot.SHARED) {
+        MutualPlaceCard(controller, message, spot, senderName, color)
+        return
+    }
+    val who = senderName ?: controller.findPerson(message.fromPeer.orEmpty())?.name ?: controller.senderLabel(message)
+    val arrived = spot.kind == app.anynear.mesh.ChatSpot.ARRIVED
     val title = when (spot.kind) {
         app.anynear.mesh.ChatSpot.MEET -> spot.label?.let { mt.spotMeetText(it) } ?: mt.spotMeet
-        app.anynear.mesh.ChatSpot.ASK -> mt.spotAsk
-        else -> if (message.outgoing) mt.spotHereOwn else mt.spotHere(senderName ?: controller.findPerson(message.fromPeer.orEmpty())?.name ?: "?")
+        app.anynear.mesh.ChatSpot.ASK -> if (message.outgoing) mt.spotAskOwn else mt.spotAskBy(who)
+        app.anynear.mesh.ChatSpot.ARRIVED -> if (message.outgoing) mt.arrivedOwn else mt.arrivedBy(who)
+        else -> if (message.outgoing) mt.spotHereOwn else mt.spotHere(who)
     }
+    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+    val accent = if (arrived) AppTheme.colors.safe else color
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(AppIcons.Karte, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
-            Text(title, style = MaterialTheme.typography.titleSmall, color = color)
+            Icon(if (arrived) AppIcons.Haken else AppIcons.Karte, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
+            Text(title, style = MaterialTheme.typography.titleSmall, color = accent)
         }
+        // A meeting point does not say in its title who set it.
+        if (spot.kind == app.anynear.mesh.ChatSpot.MEET) Text(if (message.outgoing) mt.spotByOwn else mt.spotBy(who), style = MaterialTheme.typography.labelMedium, color = quiet)
         val lat = spot.latitude
         val lon = spot.longitude
         if (lat != null && lon != null) {
-            val focus = AppController.MapFocus(lat, lon, if (spot.kind == app.anynear.mesh.ChatSpot.MEET) spot.label ?: mt.spotMeet else title, message.fromPeer.takeIf { spot.kind == app.anynear.mesh.ChatSpot.HERE })
-            SpotMap(controller, lat, lon, focus.label) { controller.showOnMap(focus) }
-            if (spot.atMillis > 0) Text(mt.spotFrom(formatTime(spot.atMillis)), style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.75f))
-        } else if (ask && !message.outgoing) {
-            Text(mt.spotAnswerHint, style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.75f))
-            AppButton(mt.spotAnswer, {
-                scope.launch {
-                    val r = controller.sendOwnPlace(message.conversation, app.anynear.mesh.ChatSpot.HERE)
-                    if (r != AppController.PlaceSend.Sent) onError(placeSendText(r))
+            val focus = AppController.MapFocus(lat, lon, if (spot.kind == app.anynear.mesh.ChatSpot.MEET) spot.label ?: mt.spotMeet else spot.label?.takeIf { arrived } ?: title, message.fromPeer.takeIf { spot.kind == app.anynear.mesh.ChatSpot.HERE })
+            if (arrived) {
+                spot.label?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = color) }
+                // Over and done: the cut-out steps back.
+                Box(Modifier.alpha(0.55f)) { SpotMap(controller, lat, lon, focus.label) { controller.showOnMap(focus) } }
+                Text(mt.arrivedDone, style = MaterialTheme.typography.labelMedium, color = quiet)
+            } else {
+                SpotMap(controller, lat, lon, focus.label) { controller.showOnMap(focus) }
+                if (spot.atMillis > 0) Text(mt.spotFrom(formatTime(spot.atMillis)), style = MaterialTheme.typography.labelMedium, color = quiet)
+            }
+        } else if (ask) {
+            // The question is a map card without a map: it fills with the answer.
+            val all by controller.messages.collectAsState()
+            val answer = remember(all, message.localId) {
+                all.firstOrNull {
+                    it.conversation == message.conversation && it.timestampMillis > message.timestampMillis && it.outgoing != message.outgoing &&
+                        it.spot?.kind == app.anynear.mesh.ChatSpot.HERE
                 }
-            }, kind = ButtonKind.Secondary, icon = AppIcons.Karte)
+            }
+            val direct = message.conversation is Conversation.Direct
+            when {
+                answer != null && !message.outgoing -> Text(mt.spotAnsweredOwn(formatTime(answer.timestampMillis)), style = MaterialTheme.typography.labelMedium, color = quiet)
+                answer != null && direct -> Text(mt.spotAnsweredBy(controller.senderLabel(answer), formatTime(answer.timestampMillis)), style = MaterialTheme.typography.labelMedium, color = quiet)
+                else -> {
+                    if (!message.outgoing || direct) {
+                        val line = MaterialTheme.colorScheme.outline
+                        Box(
+                            Modifier.fillMaxWidth().height(72.dp).drawBehind {
+                                drawRoundRect(
+                                    line,
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx()))),
+                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()),
+                                )
+                            },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(mt.spotNoPlaceYet, style = MaterialTheme.typography.labelMedium, color = quiet)
+                        }
+                    }
+                    if (!message.outgoing) {
+                        Text(mt.spotAnswerHint, style = MaterialTheme.typography.labelMedium, color = quiet)
+                        AppButton(mt.spotAnswer, {
+                            scope.launch {
+                                val r = controller.sendOwnPlace(message.conversation, app.anynear.mesh.ChatSpot.HERE)
+                                if (r != AppController.PlaceSend.Sent) onError(placeSendText(r))
+                            }
+                        }, kind = ButtonKind.Secondary, icon = AppIcons.Karte)
+                    }
+                }
+            }
         }
         // In a circle the question goes to everyone: who has answered since, and who is still open (ADR 0121 §13).
         val circle = (message.conversation as? Conversation.Circle)?.circleId
@@ -1448,6 +1516,114 @@ private fun placeSendText(result: AppController.PlaceSend): String = when (resul
     else -> texts.map.spotNeedsPlace
 }
 
+
+/** „Standort gegenseitig teilen“ (ADR 0121 §28): choose the level; the own place is shown at it from then on. */
+@Composable
+private fun MutualPlaceDialog(controller: AppController, conversation: Conversation, onDismiss: () -> Unit) {
+    val mt = texts.map
+    val name = (conversation as? Conversation.Direct)?.let { controller.peerName(it.peer) }.orEmpty()
+    var level by remember { mutableStateOf(app.anynear.location.ShareLevel.Area) }
+    AppDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(mt.mutualTitle(name)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(mt.mutualText, style = MaterialTheme.typography.bodyMedium)
+                listOf(
+                    Triple(app.anynear.location.ShareLevel.Area, mt.mutualArea, mt.mutualAreaText),
+                    Triple(app.anynear.location.ShareLevel.Exact, mt.mutualExact, mt.mutualExactText),
+                ).forEach { (l, title, text) ->
+                    AppRow(
+                        title = title, subtitle = text, onClick = { level = l },
+                        leading = { androidx.compose.material3.RadioButton(selected = level == l, onClick = { level = l }) },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            AppButton(mt.mutualSend, {
+                controller.askMutualPlace(conversation, level)
+                onDismiss()
+            }, kind = ButtonKind.Quiet)
+        },
+        dismissButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
+    )
+}
+
+/** The question and its answer as cards (ADR 0121 §28). The question takes the answer; answered, it says how. */
+@Composable
+private fun MutualPlaceCard(controller: AppController, message: ChatMessage, spot: app.anynear.mesh.ChatSpot, senderName: String?, color: Color) {
+    val mt = texts.map
+    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+    val who = senderName ?: controller.findPerson(message.fromPeer.orEmpty())?.name ?: controller.senderLabel(message)
+    val other = (message.conversation as? Conversation.Direct)?.let { controller.peerName(it.peer) } ?: who
+    val exact = spot.level == app.anynear.location.ShareLevel.Exact.wire
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (spot.kind == app.anynear.mesh.ChatSpot.SHARED) {
+            val agreed = (spot.level ?: 0) > 0
+            val all by controller.messages.collectAsState()
+            // An answer follows a question of the other side; anything else says that someone lowered later what both agreed on.
+            val answers = remember(all, message.localId) {
+                all.lastOrNull {
+                    it.conversation == message.conversation && it.timestampMillis < message.timestampMillis &&
+                        (it.spot?.kind == app.anynear.mesh.ChatSpot.SHARE || it.spot?.kind == app.anynear.mesh.ChatSpot.SHARED)
+                }?.let { it.spot?.kind == app.anynear.mesh.ChatSpot.SHARE && it.outgoing != message.outgoing } == true
+            }
+            if (!answers) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(AppIcons.Karte, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+                    Text(if (message.outgoing) mt.mutualLoweredOwn(other, agreed) else mt.mutualLoweredBy(who, agreed), style = MaterialTheme.typography.titleSmall, color = color)
+                }
+                Text(if (message.outgoing) mt.mutualLoweredOwnText(other) else mt.mutualLoweredText(who, agreed), style = MaterialTheme.typography.labelMedium, color = quiet)
+                // „Weiter zeigen“: giving more than one gets is the person's own choice, never the default.
+                val sharing = controller.locationSharing
+                val id = (message.conversation as? Conversation.Direct)?.let { controller.findPerson(it.peer)?.deviceId }
+                if (!message.outgoing && sharing != null && id != null) {
+                    val persons by sharing.persons.collectAsState()
+                    val newest = remember(all, message.localId) { all.lastOrNull { it.conversation == message.conversation && it.spot?.kind == app.anynear.mesh.ChatSpot.SHARED }?.localId == message.localId }
+                    val kept = remember(persons, newest) { sharing.kept(id).takeIf { newest } }
+                    kept?.let { AppButton(mt.mutualKeep(levelName(it)), { controller.keepShowingPlace(message.conversation) }, kind = ButtonKind.Quiet) }
+                }
+                return@Column
+            }
+            val accent = if (agreed) AppTheme.colors.safe else color
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(if (agreed) AppIcons.Haken else AppIcons.Schliessen, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
+                Text(
+                    when {
+                        agreed -> if (message.outgoing) mt.mutualAgreedOwn(exact) else mt.mutualAgreedBy(who, exact)
+                        else -> if (message.outgoing) mt.mutualRefusedOwn else mt.mutualRefusedBy(who)
+                    },
+                    style = MaterialTheme.typography.titleSmall, color = accent,
+                )
+            }
+            Text(if (!agreed && !message.outgoing) mt.mutualRefusedBack else mt.mutualChange, style = MaterialTheme.typography.labelMedium, color = quiet)
+            return@Column
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(AppIcons.Karte, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+            Text(if (message.outgoing) mt.mutualAskOwn(other, exact) else mt.mutualAskBy(who, exact), style = MaterialTheme.typography.titleSmall, color = color)
+        }
+        val all by controller.messages.collectAsState()
+        // Answered once the other side sent its answer after this question.
+        val answered = remember(all, message.localId) {
+            all.any {
+                it.conversation == message.conversation && it.timestampMillis > message.timestampMillis && it.outgoing != message.outgoing &&
+                    it.spot?.kind == app.anynear.mesh.ChatSpot.SHARED
+            }
+        }
+        when {
+            answered -> Unit
+            message.outgoing -> Text(mt.mutualOwnHint, style = MaterialTheme.typography.labelMedium, color = quiet)
+            else -> {
+                Text(mt.mutualAlready(who, exact), style = MaterialTheme.typography.labelMedium, color = quiet)
+                AppButton(mt.mutualYes(exact), { controller.answerMutualPlace(message.conversation, if (exact) app.anynear.location.ShareLevel.Exact else app.anynear.location.ShareLevel.Area) }, kind = ButtonKind.Secondary, icon = AppIcons.Haken)
+                if (exact) AppButton(mt.mutualOnlyArea, { controller.answerMutualPlace(message.conversation, app.anynear.location.ShareLevel.Area) }, kind = ButtonKind.Quiet)
+                AppButton(mt.mutualNo, { controller.answerMutualPlace(message.conversation, null) }, kind = ButtonKind.Quiet)
+            }
+        }
+    }
+}
 
 /** The cut-out of the map in a message with a place (ADR 0121 §13): it does not move; a tap opens the map there. */
 @Composable

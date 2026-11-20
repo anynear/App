@@ -59,6 +59,31 @@ internal class ApproximateLocation(private val context: Context) {
 
     @Volatile private var latest: Place? = null
 
+    private var moves: android.location.LocationListener? = null
+
+    /**
+     * Reports to [onPlace] when the phone has clearly moved (ADR 0121 §24), without locating by itself: from the mobile
+     * and Wi-Fi networks, and whatever another app has the phone locate anyway. In the background the system delivers
+     * only with „Immer“. [on] = false ends it.
+     */
+    @SuppressLint("MissingPermission")
+    fun watchMoves(on: Boolean, onPlace: (Place) -> Unit) {
+        val manager = context.getSystemService(LocationManager::class.java) ?: return
+        moves?.let { runCatching { manager.removeUpdates(it) } }
+        moves = null
+        if (!on || !allowed()) return
+        val listener = android.location.LocationListener { location ->
+            onPlace(Place(location.latitude, location.longitude, System.currentTimeMillis() - ageMillis(location), if (location.hasAccuracy()) location.accuracy.roundToInt() else null))
+        }
+        val providers = runCatching { manager.getProviders(true) }.getOrDefault(emptyList())
+        for (provider in listOf(LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)) {
+            if (provider !in providers) continue
+            runCatching { manager.requestLocationUpdates(provider, MOVE_MIN_MILLIS, MOVE_METERS, listener, android.os.Looper.getMainLooper()) }
+                .onFailure { Log.w(TAG, "Watching moves over $provider failed", it) }
+        }
+        moves = listener
+    }
+
     /** A place the service got while sharing: [place] answers with it as long as it is fresh. */
     fun remember(place: Place) {
         latest = place
@@ -115,6 +140,10 @@ internal class ApproximateLocation(private val context: Context) {
         const val TAG = "Location"
         const val RECENT_MILLIS = 10 * 60 * 1000L
         const val FRESH_MILLIS = 2 * 60 * 1000L
+
+        /** A move counts from this far, and is reported at most this often. */
+        const val MOVE_METERS = 150f
+        const val MOVE_MIN_MILLIS = 5 * 60 * 1000L
         const val TIMEOUT_MILLIS = 20_000L
     }
 }

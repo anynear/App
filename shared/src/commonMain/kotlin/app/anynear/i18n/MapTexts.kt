@@ -13,6 +13,14 @@ interface MapTexts {
     val pauseAllOn: String
     val pauseAllOff: String
     val defaultRow: String
+    val stepAll: String
+    val stepAllFooter: String
+    val stepCircles: String
+    val stepCirclesFooter: String
+    val stepPersons: String
+    val stepPersonsFooter: String
+    fun likeAll(level: String): String
+    fun likeCircles(level: String): String
     val ownSettings: String
     val ownSettingsNone: String
     val circles: String
@@ -44,6 +52,11 @@ interface MapTexts {
     val sharesWhen: String
     val sharesNothingYet: String
     fun inArea(place: String): String
+    /** The day a place is from, in words: 0 today, 1 yesterday, then days and weeks (ADR 0121 §24). */
+    fun dayAgo(days: Int): String
+    fun lastAt(time: String): String
+    val live: String
+    val tooOld: String
     val areaUnknown: String
     fun atPlace(place: String, time: String): String
     fun exactNoPlace(time: String): String
@@ -128,8 +141,6 @@ interface MapTexts {
     val sheetOpen: String
     val sheetClose: String
     fun sharingNotice(names: String): String
-    val alwaysTitle: String
-    val alwaysText: String
     val destination: String
     val destinationNone: String
     val destinationPick: String
@@ -138,6 +149,53 @@ interface MapTexts {
     val shareMineWarnArrive: String
     fun shareMineEndsAt(place: String): String
     val arrivedMessage: String
+    fun arrivedBy(name: String): String
+    val arrivedOwn: String
+    val arrivedDone: String
+    fun spotAskBy(name: String): String
+    val spotAskOwn: String
+    val spotNoPlaceYet: String
+    fun spotAnsweredOwn(time: String): String
+    fun spotAnsweredBy(name: String, time: String): String
+    fun spotBy(name: String): String
+    val spotByOwn: String
+    val noticeHere: String
+    fun noticeArrived(label: String?): String
+    val askedNotice: String
+    val mutualStart: String
+    fun mutualTitle(name: String): String
+    val mutualText: String
+    val mutualArea: String
+    val mutualAreaText: String
+    val mutualExact: String
+    val mutualExactText: String
+    val mutualSend: String
+    val mutualMessage: String
+    val mutualYesMessage: String
+    val mutualNoMessage: String
+    val mutualNotice: String
+    val mutualAnswerNotice: String
+    fun mutualAskBy(name: String, exact: Boolean): String
+    fun mutualAskOwn(name: String, exact: Boolean): String
+    fun mutualAlready(name: String, exact: Boolean): String
+    val mutualOwnHint: String
+    fun mutualYes(exact: Boolean): String
+    val mutualOnlyArea: String
+    val mutualNo: String
+    fun mutualAgreedBy(name: String, exact: Boolean): String
+    fun mutualAgreedOwn(exact: Boolean): String
+    fun mutualRefusedBy(name: String): String
+    val mutualRefusedOwn: String
+    val mutualRefusedBack: String
+    val mutualChange: String
+    val mutualLoweredMessage: String
+    val mutualEndedMessage: String
+    fun mutualLoweredBy(name: String, still: Boolean): String
+    fun mutualLoweredOwn(name: String, still: Boolean): String
+    fun mutualLoweredText(name: String, still: Boolean): String
+    fun mutualLoweredOwnText(name: String): String
+    fun mutualKeep(level: String): String
+    val mutualMark: String
     val pickHint: String
     val pickTake: String
     val spotMeetOnMap: String
@@ -154,6 +212,21 @@ interface MapTexts {
     val shareAllJoin: String
     val shareAllLeave: String
     val mapLoading: String
+    val phoneTitle: String
+    val needAlwaysTitle: String
+    val needAlwaysText: String
+    val needLocationTitle: String
+    val needLocationText: String
+    val needAllow: String
+    val needLater: String
+    val phoneAlways: String
+    val phoneAlwaysText: String
+    val phoneWhileOpen: String
+    val phoneWhileOpenText: String
+    val phoneNotAllowed: String
+    val phoneNotAllowedText: String
+    val phoneOff: String
+    val phoneOffText: String
     val placeFor: String
     val placeOnlyMe: String
     val placeForCircleText: String
@@ -184,28 +257,36 @@ interface MapTexts {
 internal object MapTextsDe : MapTexts {
     override val title = "Karte"
     override val visibleNobody = "Niemand sieht deinen Standort"
-    override val visibleWhen = "Dein Standort ist nur sichtbar, wenn etwas ist"
+    override val visibleWhen = "Dein Standort ist nur bei SOS sichtbar"
     override fun visibleTo(names: String) = "Sichtbar für $names"
-    override val visiblePaused = "Alles pausiert. Niemand sieht deinen Standort."
+    override val visiblePaused = "Pausiert. Du zeigst und siehst nichts Neues."
     override val whoSeesMe = "Wer sieht mich?"
     override val whoSeesMeText = "Nur du gibst deinen Standort frei, immer an einen Kreis oder eine Person. Hier siehst du alles auf einen Blick."
     override val pauseAll = "Alles pausieren"
-    override val pauseAllOn = "Pausiert. Niemand sieht deinen Standort, auch nicht, wenn etwas ist."
+    override val pauseAllOn = "Pausiert. Andere sehen nur, wo du zuletzt warst, und du siehst von anderen nichts Neues. SOS geht trotzdem, mit deinem Standort."
     override val pauseAllOff = "Deine Freigaben gelten wie eingestellt."
-    override val defaultRow = "Für alle, wenn nichts anderes eingestellt ist"
+    override val defaultRow = "Für alle gilt"
+    override val stepAll = "1. Für alle gilt"
+    override val stepAllFooter = "Das gilt für jeden Kreis und jede Person, solange darunter nichts anderes steht."
+    override val stepCircles = "2. Für deine Kreise gilt"
+    override val stepCirclesFooter = "Ein Kreis kann von „Für alle“ abweichen. Das gilt dann für alle in diesem Kreis."
+    override val stepPersons = "3. Für einzelne Personen gilt"
+    override val stepPersonsFooter = "Eine Person kann von ihren Kreisen abweichen. Was hier steht, geht vor."
+    override fun likeAll(level: String) = "Wie für alle: $level"
+    override fun likeCircles(level: String) = "Wie ihre Kreise: $level"
     override val ownSettings = "Anders eingestellt"
     override val ownSettingsNone = "Für alle gilt, was oben steht. Stellst du einen Kreis oder eine Person anders ein, steht das hier."
     override val circles = "Kreise"
     override val persons = "Personen"
     override val followsCircles = "Wie in den Kreisen"
     override val levelOff = "Aus"
-    override val levelWhen = "Wenn etwas ist"
-    override val levelArea = "Ungefähr immer, genau wenn etwas ist"
-    override val levelExact = "Genau immer"
+    override val levelWhen = "Nur bei SOS"
+    override val levelArea = "Ungefähr, genau bei SOS"
+    override val levelExact = "Genau"
     override val levelOffText = "Sieht deinen Standort nie."
     override val levelWhenText = "Sieht den genauen Standort nur, wenn du Hilfe rufst (SOS) oder auf ein Lebenszeichen nicht antwortest."
-    override val levelAreaText = "Sieht laufend, in welcher Gegend du bist (etwa 2 km), nie den Punkt. Wenn etwas ist, den genauen Standort."
-    override val levelExactText = "Sieht laufend, wo genau du bist."
+    override val levelAreaText = "Sieht, in welcher Gegend du zuletzt warst (etwa 2 km), nie den Punkt. Bei SOS den genauen Standort."
+    override val levelExactText = "Sieht, wo genau du zuletzt warst, mit Uhrzeit. Bei SOS live."
     override fun chooseLevel(name: String) = "Was sieht $name?"
     override val forHowLong = "Wie lange?"
     override val untilChanged = "Bis ich es ändere"
@@ -221,9 +302,19 @@ internal object MapTextsDe : MapTexts {
     override val noPeople = "Hier stehen die Menschen aus deinen Kreisen und Kontakten, sobald du welche hast."
     override val allCircles = "Alle"
     override val sharesOff = "Teilt keinen Standort"
-    override val sharesWhen = "Teilt nur, wenn etwas ist"
+    override val sharesWhen = "Teilt nur bei SOS"
     override val sharesNothingYet = "Hat noch nichts geteilt"
     override fun inArea(place: String) = "In der Gegend von $place"
+    override fun dayAgo(days: Int) = when {
+        days <= 0 -> "heute"
+        days == 1 -> "gestern"
+        days < 7 -> "vor $days Tagen"
+        days < 14 -> "vor 1 Woche"
+        else -> "vor ${days / 7} Wochen"
+    }
+    override fun lastAt(time: String) = "zuletzt $time"
+    override val live = "live"
+    override val tooOld = "Kein aktueller Standort"
     override val areaUnknown = "Ungefährer Standort"
     override fun atPlace(place: String, time: String) = "$place · $time"
     override fun exactNoPlace(time: String) = "Genauer Standort · $time"
@@ -247,7 +338,7 @@ internal object MapTextsDe : MapTexts {
     override fun newcomerTitle(name: String) = "$name ist neu in deinem Kreis"
     override fun newcomerText(name: String) = "Du teilst deinen Standort mit diesem Kreis. Soll $name auch sehen, wo du bist?"
     override val newcomerYes = "Ja, auch zeigen"
-    override val newcomerNo = "Nein, nur wenn etwas ist"
+    override val newcomerNo = "Nein, nur bei SOS"
     override fun guideTo(name: String) = "Zu $name führen"
     override fun guideText(distance: String, direction: String) = "$distance Richtung $direction. Norden ist oben."
     override val guideArea = "Der Standort ist nur ungefähr. Der Pfeil zeigt zur Mitte der Gegend."
@@ -308,8 +399,6 @@ internal object MapTextsDe : MapTexts {
     override val sheetOpen = "Liste öffnen"
     override val sheetClose = "Liste schließen"
     override fun sharingNotice(names: String) = "Du teilst deinen Standort mit $names"
-    override val alwaysTitle = "Auch nach einem Neustart des Handys teilen"
-    override val alwaysText = "Dafür braucht anynear die Erlaubnis „Immer“. Sonst geht das Teilen weiter, sobald du anynear wieder öffnest."
     override val destination = "Ziel"
     override val destinationNone = "Kein Ziel"
     override val destinationPick = "Auf der Karte wählen"
@@ -318,6 +407,53 @@ internal object MapTextsDe : MapTexts {
     override val shareMineWarnArrive = "Warnen, wenn ich nicht ankomme"
     override fun shareMineEndsAt(place: String) = "Endet von selbst bei: $place"
     override val arrivedMessage = "Ich bin angekommen."
+    override fun arrivedBy(name: String) = "$name ist angekommen"
+    override val arrivedOwn = "Du bist angekommen"
+    override val arrivedDone = "Der Standort wird nicht mehr geteilt."
+    override fun spotAskBy(name: String) = "$name fragt: Wo bist du?"
+    override val spotAskOwn = "Du fragst: Wo bist du?"
+    override val spotNoPlaceYet = "Noch kein Standort"
+    override fun spotAnsweredOwn(time: String) = "Du hast um $time geantwortet."
+    override fun spotAnsweredBy(name: String, time: String) = "$name hat um $time geantwortet."
+    override fun spotBy(name: String) = "Von $name"
+    override val spotByOwn = "Von dir"
+    override val noticeHere = "Hat den Standort gesendet"
+    override fun noticeArrived(label: String?) = if (label == null) "Ist angekommen" else "Ist angekommen: $label"
+    override val askedNotice = "Antworte in anynear auf der Karte."
+    override val mutualStart = "Standort gegenseitig teilen"
+    override fun mutualTitle(name: String) = "Standort mit $name teilen"
+    override val mutualText = "Was du wählst, sieht die Person ab jetzt von dir. Sie entscheidet, ob sie dir dasselbe zeigt."
+    override val mutualArea = "Ungefähr"
+    override val mutualAreaText = "Ihr seht voneinander den Ort, genau nur bei SOS."
+    override val mutualExact = "Genau"
+    override val mutualExactText = "Ihr seht voneinander den genauen Standort."
+    override val mutualSend = "Anfragen"
+    override val mutualMessage = "Ich möchte, dass wir gegenseitig unseren Standort sehen. Antworte in anynear."
+    override val mutualYesMessage = "Einverstanden, wir sehen gegenseitig unseren Standort."
+    override val mutualNoMessage = "Ich möchte meinen Standort nicht teilen."
+    override val mutualNotice = "Möchte, dass ihr euch gegenseitig seht"
+    override val mutualAnswerNotice = "Standort gegenseitig teilen: Es gibt etwas Neues"
+    override fun mutualAskBy(name: String, exact: Boolean) = "$name möchte, dass ihr euch gegenseitig ${if (exact) "genau" else "ungefähr"} seht"
+    override fun mutualAskOwn(name: String, exact: Boolean) = "Du hast $name gefragt: gegenseitig ${if (exact) "genau" else "ungefähr"} sehen"
+    override fun mutualAlready(name: String, exact: Boolean) = "$name zeigt dir den Standort schon ${if (exact) "genau" else "ungefähr"}. Du kannst deine Antwort jederzeit unter „Wer sieht mich?“ ändern."
+    override val mutualOwnHint = "Du zeigst deinen Standort schon so. Noch keine Antwort."
+    override fun mutualYes(exact: Boolean) = if (exact) "Ja, genau" else "Ja, ungefähr"
+    override val mutualOnlyArea = "Nur ungefähr"
+    override val mutualNo = "Nein"
+    override fun mutualAgreedBy(name: String, exact: Boolean) = "$name ist einverstanden: ${if (exact) "genau" else "ungefähr"}"
+    override fun mutualAgreedOwn(exact: Boolean) = "Du bist einverstanden: ${if (exact) "genau" else "ungefähr"}"
+    override fun mutualRefusedBy(name: String) = "$name möchte den Standort nicht teilen"
+    override val mutualRefusedOwn = "Du teilst deinen Standort nicht"
+    override val mutualRefusedBack = "Deine Freigabe ist wieder wie vor der Anfrage."
+    override val mutualChange = "Ändern kannst du das unter „Wer sieht mich?“."
+    override val mutualLoweredMessage = "Ich zeige dir meinen Standort nur noch ungefähr."
+    override val mutualEndedMessage = "Ich zeige dir meinen Standort nicht mehr."
+    override fun mutualLoweredBy(name: String, still: Boolean) = if (still) "$name zeigt dir den Standort nur noch ungefähr" else "$name zeigt dir den Standort nicht mehr"
+    override fun mutualLoweredOwn(name: String, still: Boolean) = if (still) "Du zeigst $name deinen Standort nur noch ungefähr" else "Du zeigst $name deinen Standort nicht mehr"
+    override fun mutualLoweredText(name: String, still: Boolean) = if (still) "Du zeigst $name jetzt auch nur ungefähr." else "Deine Freigabe an $name ist wieder wie vor der Anfrage."
+    override fun mutualLoweredOwnText(name: String) = "$name zeigt dir von selbst auch nicht mehr als du."
+    override fun mutualKeep(level: String) = "Weiter zeigen: $level"
+    override val mutualMark = "gegenseitig"
     override val pickHint = "Schieb die Karte, bis der Ort unter dem Kreis liegt."
     override val pickTake = "Diesen Ort nehmen"
     override val spotMeetOnMap = "Auf der Karte wählen"
@@ -334,6 +470,21 @@ internal object MapTextsDe : MapTexts {
     override val shareAllJoin = "Mitmachen"
     override val shareAllLeave = "Aussteigen"
     override val mapLoading = "Karte wird geladen"
+    override val phoneTitle = "Dein Handy"
+    override val needAlwaysTitle = "Standort „Immer“ erlauben"
+    override val needAlwaysText = "Mit „Ungefähr“ oder „Genau“ sehen die gewählten Personen, wo du zuletzt warst. Damit das stimmt, liest anynear deinen Standort auch, wenn die App nicht offen ist: immer dann, wenn sie eine Nachricht empfängt. Dafür braucht dein Handy die Einstellung „Immer zulassen“. Was hinausgeht, bestimmst nur du hier in anynear."
+    override val needLocationTitle = "Standort erlauben"
+    override val needLocationText = "Damit deine SOS-Kontakte bei einem Hilferuf sehen, wo du bist, braucht anynear deinen genauen Standort, während du die App benutzt. Ohne Hilferuf geht dabei nichts hinaus."
+    override val needAllow = "Weiter"
+    override val needLater = "Später"
+    override val phoneAlways = "Standort immer erlaubt"
+    override val phoneAlwaysText = "Alles gilt so, wie du es hier einstellst."
+    override val phoneWhileOpen = "Standort nur bei offener App"
+    override val phoneWhileOpenText = "SOS und laufendes Teilen gehen. Was du dauerhaft freigibst, aktualisiert sich nur, wenn du anynear öffnest. Antippen für „Immer zulassen“."
+    override val phoneNotAllowed = "Standort nicht erlaubt"
+    override val phoneNotAllowedText = "Niemand sieht deinen Standort, auch bei SOS nicht. Antippen zum Erlauben."
+    override val phoneOff = "Standort ist am Handy ausgeschaltet"
+    override val phoneOffText = "Niemand sieht deinen Standort, auch bei SOS nicht. Antippen für die Einstellungen."
     override val placeFor = "Für wen?"
     override val placeOnlyMe = "Nur ich"
     override val placeForCircleText = "Alle im Kreis kennen den Ort und sehen den Namen, wenn jemand dort ist, dessen genauen Standort sie sehen."
@@ -364,28 +515,36 @@ internal object MapTextsDe : MapTexts {
 internal object MapTextsEn : MapTexts {
     override val title = "Map"
     override val visibleNobody = "Nobody sees your location"
-    override val visibleWhen = "Your location is only visible when something is wrong"
+    override val visibleWhen = "Your location is only visible with SOS"
     override fun visibleTo(names: String) = "Visible to $names"
-    override val visiblePaused = "Everything is paused. Nobody sees your location."
+    override val visiblePaused = "Paused. You show and see nothing new."
     override val whoSeesMe = "Who sees me?"
     override val whoSeesMeText = "Only you share your location, always with a circle or a person. Here you see everything at a glance."
     override val pauseAll = "Pause everything"
-    override val pauseAllOn = "Paused. Nobody sees your location, not even when something is wrong."
+    override val pauseAllOn = "Paused. Others only see where you were last, and you see nothing new of others. SOS still works, with your location."
     override val pauseAllOff = "Your sharing applies as set."
-    override val defaultRow = "For everyone, unless set differently"
+    override val defaultRow = "For everyone"
+    override val stepAll = "1. For everyone"
+    override val stepAllFooter = "This applies to every circle and every person, as long as nothing else is set below."
+    override val stepCircles = "2. For your circles"
+    override val stepCirclesFooter = "A circle can differ from “For everyone”. That then applies to everyone in this circle."
+    override val stepPersons = "3. For single people"
+    override val stepPersonsFooter = "A person can differ from their circles. What is set here comes first."
+    override fun likeAll(level: String) = "Same as everyone: $level"
+    override fun likeCircles(level: String) = "Same as their circles: $level"
     override val ownSettings = "Set differently"
     override val ownSettingsNone = "What is set above applies to everyone. If you set a circle or a person differently, it shows here."
     override val circles = "Circles"
     override val persons = "People"
     override val followsCircles = "As in the circles"
     override val levelOff = "Off"
-    override val levelWhen = "When something is wrong"
-    override val levelArea = "Approximate always, precise when something is wrong"
-    override val levelExact = "Precise always"
+    override val levelWhen = "Only with SOS"
+    override val levelArea = "Approximate, precise with SOS"
+    override val levelExact = "Precise"
     override val levelOffText = "Never sees your location."
     override val levelWhenText = "Sees the precise location only if you call for help (SOS) or don't answer a check-in."
-    override val levelAreaText = "Always sees which area you are in (about 1 mile), never the point. When something is wrong, the precise location."
-    override val levelExactText = "Always sees exactly where you are."
+    override val levelAreaText = "Sees which area you were in last (about 1 mile), never the point. With SOS, the precise location."
+    override val levelExactText = "Sees exactly where you were last, with the time. With SOS, live."
     override fun chooseLevel(name: String) = "What does $name see?"
     override val forHowLong = "For how long?"
     override val untilChanged = "Until I change it"
@@ -401,9 +560,19 @@ internal object MapTextsEn : MapTexts {
     override val noPeople = "The people from your circles and contacts appear here once you have some."
     override val allCircles = "All"
     override val sharesOff = "Shares no location"
-    override val sharesWhen = "Shares only when something is wrong"
+    override val sharesWhen = "Shares only with SOS"
     override val sharesNothingYet = "Hasn't shared anything yet"
     override fun inArea(place: String) = "Around $place"
+    override fun dayAgo(days: Int) = when {
+        days <= 0 -> "today"
+        days == 1 -> "yesterday"
+        days < 7 -> "$days days ago"
+        days < 14 -> "1 week ago"
+        else -> "${days / 7} weeks ago"
+    }
+    override fun lastAt(time: String) = "last $time"
+    override val live = "live"
+    override val tooOld = "No recent location"
     override val areaUnknown = "Approximate location"
     override fun atPlace(place: String, time: String) = "$place · $time"
     override fun exactNoPlace(time: String) = "Precise location · $time"
@@ -427,7 +596,7 @@ internal object MapTextsEn : MapTexts {
     override fun newcomerTitle(name: String) = "$name is new in your circle"
     override fun newcomerText(name: String) = "You share your location with this circle. Should $name see where you are, too?"
     override val newcomerYes = "Yes, show too"
-    override val newcomerNo = "No, only when something is wrong"
+    override val newcomerNo = "No, only with SOS"
     override fun guideTo(name: String) = "Guide me to $name"
     override fun guideText(distance: String, direction: String) = "$distance to the $direction. North is up."
     override val guideArea = "The location is only approximate. The arrow points to the middle of the area."
@@ -488,8 +657,6 @@ internal object MapTextsEn : MapTexts {
     override val sheetOpen = "Open the list"
     override val sheetClose = "Close the list"
     override fun sharingNotice(names: String) = "You are sharing your location with $names"
-    override val alwaysTitle = "Keep sharing after the phone restarts"
-    override val alwaysText = "anynear needs the permission “Always” for that. Otherwise sharing continues as soon as you open anynear again."
     override val destination = "Destination"
     override val destinationNone = "No destination"
     override val destinationPick = "Choose on the map"
@@ -498,6 +665,53 @@ internal object MapTextsEn : MapTexts {
     override val shareMineWarnArrive = "Warn if I don't arrive"
     override fun shareMineEndsAt(place: String) = "Ends by itself at: $place"
     override val arrivedMessage = "I have arrived."
+    override fun arrivedBy(name: String) = "$name has arrived"
+    override val arrivedOwn = "You have arrived"
+    override val arrivedDone = "The location is no longer shared."
+    override fun spotAskBy(name: String) = "$name asks: Where are you?"
+    override val spotAskOwn = "You ask: Where are you?"
+    override val spotNoPlaceYet = "No location yet"
+    override fun spotAnsweredOwn(time: String) = "You answered at $time."
+    override fun spotAnsweredBy(name: String, time: String) = "$name answered at $time."
+    override fun spotBy(name: String) = "From $name"
+    override val spotByOwn = "From you"
+    override val noticeHere = "Sent a location"
+    override fun noticeArrived(label: String?) = if (label == null) "Has arrived" else "Has arrived: $label"
+    override val askedNotice = "Answer on the map in anynear."
+    override val mutualStart = "Share location with each other"
+    override fun mutualTitle(name: String) = "Share location with $name"
+    override val mutualText = "What you choose, the person sees of you from now on. They decide whether to show you the same."
+    override val mutualArea = "Approximate"
+    override val mutualAreaText = "You see each other's town, precisely only with SOS."
+    override val mutualExact = "Precise"
+    override val mutualExactText = "You see each other's precise location."
+    override val mutualSend = "Ask"
+    override val mutualMessage = "I would like us to see each other's location. Answer in anynear."
+    override val mutualYesMessage = "Agreed, we see each other's location."
+    override val mutualNoMessage = "I don't want to share my location."
+    override val mutualNotice = "Would like you to see each other"
+    override val mutualAnswerNotice = "Sharing location with each other: there is news"
+    override fun mutualAskBy(name: String, exact: Boolean) = "$name would like you to see each other ${if (exact) "precisely" else "approximately"}"
+    override fun mutualAskOwn(name: String, exact: Boolean) = "You asked $name: see each other ${if (exact) "precisely" else "approximately"}"
+    override fun mutualAlready(name: String, exact: Boolean) = "$name already shows you their location ${if (exact) "precisely" else "approximately"}. You can change your answer at any time under “Who sees me?”."
+    override val mutualOwnHint = "You already show your location this way. No answer yet."
+    override fun mutualYes(exact: Boolean) = if (exact) "Yes, precise" else "Yes, approximate"
+    override val mutualOnlyArea = "Only approximate"
+    override val mutualNo = "No"
+    override fun mutualAgreedBy(name: String, exact: Boolean) = "$name agrees: ${if (exact) "precise" else "approximate"}"
+    override fun mutualAgreedOwn(exact: Boolean) = "You agree: ${if (exact) "precise" else "approximate"}"
+    override fun mutualRefusedBy(name: String) = "$name does not want to share their location"
+    override val mutualRefusedOwn = "You don't share your location"
+    override val mutualRefusedBack = "Your sharing is back to what it was before the request."
+    override val mutualChange = "You can change this under “Who sees me?”."
+    override val mutualLoweredMessage = "I now show you my location only approximately."
+    override val mutualEndedMessage = "I no longer show you my location."
+    override fun mutualLoweredBy(name: String, still: Boolean) = if (still) "$name now shows you their location only approximately" else "$name no longer shows you their location"
+    override fun mutualLoweredOwn(name: String, still: Boolean) = if (still) "You now show $name your location only approximately" else "You no longer show $name your location"
+    override fun mutualLoweredText(name: String, still: Boolean) = if (still) "You now show $name only approximately, too." else "Your sharing with $name is back to what it was before the request."
+    override fun mutualLoweredOwnText(name: String) = "$name automatically shows you no more than you do."
+    override fun mutualKeep(level: String) = "Keep showing: $level"
+    override val mutualMark = "mutual"
     override val pickHint = "Move the map until the place is under the circle."
     override val pickTake = "Take this place"
     override val spotMeetOnMap = "Choose on the map"
@@ -514,6 +728,21 @@ internal object MapTextsEn : MapTexts {
     override val shareAllJoin = "Join"
     override val shareAllLeave = "Leave"
     override val mapLoading = "Loading the map"
+    override val phoneTitle = "Your phone"
+    override val needAlwaysTitle = "Allow location “all the time”"
+    override val needAlwaysText = "With “Approximate” or “Precise” the people you chose see where you were last. To keep that right, anynear also reads your location when the app is not open: whenever it receives a message. Your phone needs the setting “Allow all the time” for that. What goes out is decided only by you, here in anynear."
+    override val needLocationTitle = "Allow location"
+    override val needLocationText = "So that your SOS contacts see where you are when you call for help, anynear needs your precise location while you use the app. Without a call for help nothing goes out."
+    override val needAllow = "Continue"
+    override val needLater = "Later"
+    override val phoneAlways = "Location always allowed"
+    override val phoneAlwaysText = "Everything applies as you set it here."
+    override val phoneWhileOpen = "Location only while the app is open"
+    override val phoneWhileOpenText = "SOS and running shares work. What you share for good only updates when you open anynear. Tap for “Allow all the time”."
+    override val phoneNotAllowed = "Location not allowed"
+    override val phoneNotAllowedText = "Nobody sees your location, not even with SOS. Tap to allow."
+    override val phoneOff = "Location is switched off on the phone"
+    override val phoneOffText = "Nobody sees your location, not even with SOS. Tap for the settings."
     override val placeFor = "For whom?"
     override val placeOnlyMe = "Only me"
     override val placeForCircleText = "Everyone in the circle knows the place and sees its name when someone is there whose precise location they see."
