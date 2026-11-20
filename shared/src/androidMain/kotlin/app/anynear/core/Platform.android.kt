@@ -11,8 +11,12 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-// Own BouncyCastle instance instead of the stripped-down „BC“ from the Android system.
-internal actual val cryptoProvider: CryptographyProvider = CryptographyProvider.JDK(BouncyCastleProvider())
+// Own BouncyCastle instance instead of the stripped-down „BC“ from the Android system. Created on first use, not when
+// this file loads: loading its classes takes seconds on a weak phone, and the start does not need it.
+internal actual val cryptoProvider: CryptographyProvider by lazy { CryptographyProvider.JDK(BouncyCastleProvider()) }
+
+// The system's providers (Conscrypt), already loaded with every app process.
+internal actual val localCryptoProvider: CryptographyProvider by lazy { CryptographyProvider.JDK() }
 
 /**
  * Machine with the Docker relays. In the emulator that is always 10.0.2.2; a real phone reaches it only via

@@ -63,7 +63,7 @@ import kotlin.time.Clock
 /** Where older versions staged a backup file for restoring at the next start (ADR 0027, removed by ADR 0105). */
 private const val OLD_RESTORE_DIR = "restore"
 
-internal val APP_BINARY_DIRS = listOf(AttachmentFiles.DIR_NAME, AvatarImages.DIR_NAME, DraftStore.DIR_NAME, CoreBlobs.DIR_NAME, PersonalFiles.DIR_NAME, CircleFiles.DIR_NAME)
+internal val APP_BINARY_DIRS = listOf(AttachmentFiles.DIR_NAME, AvatarImages.DIR_NAME, DraftStore.DIR_NAME, CoreBlobs.DIR_NAME, PersonalFiles.DIR_NAME, CircleFiles.DIR_NAME, app.anynear.location.MapTiles.DIR_NAME)
 
 /** Wires up the real building blocks. Create once per process. */
 @OptIn(FlowPreview::class)
@@ -193,6 +193,38 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
     val memberDirectory = MemberDirectory(scope, core.members)
     // Check-ins (ADR 0083): in a circle of choice; the core computes the deadlines. The controller comes later.
     var controllerRef: AppController? = null
+    // Who sees the own location (ADR 0121): the answer is a setting of the person; a place goes along only with a
+    // check-in nobody confirmed.
+    val locationSharing = app.anynear.location.LocationSharing(scope, store, hooks, now = { Clock.System.now().toEpochMilliseconds() })
+    locationSharing.start()
+    // The places the person named (ADR 0121 §13); where the phone was how often stays on this device.
+    val savedPlaces = app.anynear.location.SavedPlaces(
+        scope, store, now = { Clock.System.now().toEpochMilliseconds() }, nextMidnight = { app.anynear.ui.nextLocalHour(it, 0) },
+    )
+    savedPlaces.start()
+    val circlePlaces = app.anynear.location.CirclePlaces(scope, core).also { it.start() }
+    val placeSharer = app.anynear.location.PlaceSharer(
+        scope, app.anynear.location.CorePlaceSource(core), locationSharing, store,
+        ownDeviceId = { core.identity.value?.deviceId }, now = { Clock.System.now().toEpochMilliseconds() }, saved = savedPlaces,
+    )
+    // Detailed map (ADR 0121 §11): tiles on the phone, fetched from the anynear network where it offers them.
+    val mapTiles = app.anynear.location.MapTiles(
+        scope, binaryDirs.getValue(app.anynear.location.MapTiles.DIR_NAME),
+        source = if (core.hasMaps) object : app.anynear.location.MapTileSource {
+            override suspend fun roots(): List<ByteArray>? = core.mapLists()
+            override suspend fun fetch(objectId: String): ByteArray? = core.mapPackage(objectId)
+        } else null,
+    )
+    // Calling the helpers (ADR 0083 §2, ADR 0121 §13).
+    val sos = app.anynear.sos.Sos(
+        scope, app.anynear.sos.CoreSosSource(core), store, hooks, locationSharing,
+        now = { Clock.System.now().toEpochMilliseconds() },
+        nameOf = { person ->
+            app.anynear.people.ContactNames.active(profile.contactNameEntries.value)[person]
+                ?: memberDirectory.members.value.firstOrNull { it.personId == person }?.name.orEmpty()
+        },
+    )
+    sos.start()
     val lifeSigns = LifeSigns(
         scope, CoreLifeSignSource(core), store, hooks,
         now = { Clock.System.now().toEpochMilliseconds() },
@@ -209,7 +241,16 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
         },
         me = { core.identity.value?.personId },
         isSupport = { id -> controllerRef?.isSupportCircle(id) == true },
+        sharing = locationSharing,
+        alarmIsCall = true,
+        circlesOf = { person -> memberDirectory.members.value.filter { it.personId == person && it.circleId != app.anynear.people.MemberDirectory.DIRECT_CONTACTS }.map { it.circleId }.distinct() },
+        trailBefore = sos::trailBefore,
     ) { logSink.log(LogLevel.INFO, "App", it, null) }
+    // A check-in nobody confirmed is a call for the helpers (ADR 0083 §5.4): as loud as check-ins of that circle, with
+    // the place only if the circle may see it, and „Alles gut“ confirms the check-in.
+    sos.lifeSignLoudness = lifeSigns::loudness
+    sos.sharesPlaceWith = lifeSigns::sharesPlace
+    sos.confirmCheckIn = { planId -> lifeSigns.confirm(planId) }
     lifeSigns.start()
     // Stand-in names of the search in both languages: they never replace a remembered name of a radio.
     val pairedDevices = PairedDeviceRepository(
@@ -257,8 +298,25 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
         alerts = alerts,
         usageStats = usageStats,
         lifeSigns = lifeSigns,
+        locationSharing = locationSharing,
+        placeSharer = placeSharer,
+        mapTiles = mapTiles,
+        sos = sos,
+        savedPlaces = savedPlaces,
+        circlePlaces = circlePlaces,
     )
     controllerRef = controller
+    placeSharer.targets = { controller.shareTargets() }
+    sos.membersOf = { circle -> controller.people.value.filter { circle in it.circleIds }.mapNotNull { it.deviceId } }
+    // Arrived at the destination of a sharing (ADR 0121 §13): the check-in ends, and the conversation reads it.
+    placeSharer.onArrived = { share ->
+        share.planId?.let { lifeSigns.end(it) }
+        val conversation = share.circleId?.let { app.anynear.mesh.Conversation.Circle(it) }
+            ?: share.personId?.let { id -> controller.people.value.firstOrNull { it.deviceId == id }?.let { app.anynear.mesh.Conversation.Direct(it.peer) } }
+        conversation?.let { controller.send(it, app.anynear.i18n.texts.map.arrivedMessage) }
+        controller.showOnMap(null)
+    }
+    placeSharer.start()
     host.target = controller.coreHost
     return controller
 }

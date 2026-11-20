@@ -84,7 +84,6 @@ import org.jetbrains.compose.resources.decodeToImageBitmap
 // and settings. There are no replies here.
 
 /** Without check-ins (no core yet): nothing runs. */
-private val NoLifeSigns = MutableStateFlow(emptyList<AliveStatus>())
 
 private fun nowMillis() = Clock.System.now().toEpochMilliseconds()
 
@@ -118,20 +117,14 @@ internal fun AlertsScreen(alerts: Alerts, lifeSigns: LifeSigns?, circles: StateF
     val (ackedActive, active) = allActive.partition { AlertAcks.isAcked(acked, it.id) }
     val replaced = replacedIds(list)
     // Rarely needed, so in the ⋮ menu instead of on the page (ADR 0101); a running check-in stays at the top.
-    var startingLifeSign by remember { mutableStateOf(false) }
-    val lifeSignStatuses by (lifeSigns?.statuses ?: NoLifeSigns).collectAsState()
-    val ownRunning = lifeSignStatuses.any { it.own && it.phase != AliveStatus.ENDED }
-    val menu = listOfNotNull(
-        if (lifeSigns != null && !ownRunning) MenuAction(texts.lifeSigns.start, AppIcons.Uhr) { startingLifeSign = true } else null,
-        MenuAction(texts.alerts.createChannel, AppIcons.Plus) { creating = true },
-    )
+    // Check-ins moved to the map (ADR 0121 §1); „Meldungen“ keeps what comes from outside.
+    val menu = listOf(MenuAction(texts.alerts.createChannel, AppIcons.Plus) { creating = true })
     Column(Modifier.fillMaxSize()) {
         AppHeader(texts.alerts.title, menu = menu)
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            if (lifeSigns != null) LifeSignsSection(lifeSigns, circles, onCreateCircle, startingLifeSign, onStartingDone = { startingLifeSign = false })
             if (allActive.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionTitle(texts.alerts.activeSection)
@@ -553,11 +546,15 @@ private fun ChannelSettingsSection(alerts: Alerts, channel: AlertChannel) {
         AlertPriority.Info to texts.alerts.loudAlways,
         null to texts.alerts.loudNever,
     )
-    val soundOptions = listOf(
+    val soundNames = mapOf(
         AlertSound.Alarm to texts.alerts.soundAlarm,
         AlertSound.Official to texts.alerts.soundOfficial,
+        AlertSound.Warning to texts.alerts.soundWarning,
         AlertSound.Hint to texts.alerts.soundHint,
     )
+    // The official sound stays with official warnings, the calmer warning with own channels.
+    val soundOptions = AlertSound.choicesFor(channel.curated).map { it to soundNames.getValue(it) }
+    val currentSound = AlertSound.allowedFor(channel.curated, settings.sound)
     AppSection(texts.alerts.onThisDevice, footer = texts.alerts.loudFooter.takeIf { settings.notify }) {
         AppRow(
             title = texts.alerts.notifications,
@@ -567,7 +564,7 @@ private fun ChannelSettingsSection(alerts: Alerts, channel: AlertChannel) {
         )
         if (settings.notify) {
             AppRow(title = texts.alerts.loudFrom, subtitle = loudOptions.first { it.first == settings.loudFrom }.second, icon = AppIcons.Regler, chevron = true, onClick = { loudChoice = true })
-            AppRow(title = texts.alerts.sound, subtitle = soundOptions.first { it.first == settings.sound }.second, icon = AppIcons.Abspielen, chevron = true, onClick = { soundChoice = true })
+            AppRow(title = texts.alerts.sound, subtitle = soundNames.getValue(currentSound), icon = AppIcons.Abspielen, chevron = true, onClick = { soundChoice = true })
         }
         AppRow(
             title = texts.alerts.testAlarm,
@@ -580,7 +577,7 @@ private fun ChannelSettingsSection(alerts: Alerts, channel: AlertChannel) {
     if (loudChoice) ChoiceDialog(texts.alerts.loudFrom, loudOptions, settings.loudFrom, onDismiss = { loudChoice = false }) {
         alerts.setSettings(channel, settings.copy(loudFrom = it))
     }
-    if (soundChoice) ChoiceDialog(texts.alerts.sound, soundOptions, settings.sound, onDismiss = { soundChoice = false }) {
+    if (soundChoice) ChoiceDialog(texts.alerts.sound, soundOptions, currentSound, onDismiss = { soundChoice = false }) {
         alerts.setSettings(channel, settings.copy(sound = it))
     }
     problems?.let { TestAlarmDialog(alerts, it, onDismiss = { problems = null }) }

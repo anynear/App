@@ -121,6 +121,11 @@ internal fun PersonDetailScreen(
             AppButton(texts.people.shareContact, { sharing = true }, Modifier.fillMaxWidth(), kind = ButtonKind.Quiet, icon = AppIcons.Teilen)
         }
 
+        // What this person sees of my location (ADR 0121 §13).
+        person?.deviceId?.let { id ->
+            LocationLevelRow(controller, name, personId = id, personCircles = person.circleIds.filter { it != app.anynear.people.MemberDirectory.DIRECT_CONTACTS })
+        }
+
         // Only when something last came from the person, and by which route; no statement about now.
         AppSection(texts.people.lastReached, footer = texts.people.lastReachedFooter) {
             val at = reach.lastHeardMillis

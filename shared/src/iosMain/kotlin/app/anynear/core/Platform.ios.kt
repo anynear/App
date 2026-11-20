@@ -14,6 +14,8 @@ import platform.Foundation.serverTrust
 
 internal actual val cryptoProvider: CryptographyProvider = CryptographyProvider.Default
 
+internal actual val localCryptoProvider: CryptographyProvider get() = cryptoProvider
+
 /**
  * Host with the Docker relays. The simulator shares the network with the Mac (127.0.0.1); a real iPhone
  * reaches it only via its Wi-Fi address from `app.devRelayHost` (local.properties).

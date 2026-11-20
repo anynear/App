@@ -185,6 +185,8 @@ class AlertNotifier(private val context: Context) {
         AlertSound.Official -> texts.alerts.soundOfficial
         AlertSound.Hint -> texts.alerts.soundHint
         AlertSound.Question -> texts.alerts.soundQuestion
+        AlertSound.Sos -> texts.alerts.soundSos
+        AlertSound.Warning -> texts.alerts.soundWarning
     }
 
     companion object {

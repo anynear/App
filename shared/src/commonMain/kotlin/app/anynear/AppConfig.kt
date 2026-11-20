@@ -29,6 +29,14 @@ object AppConfig {
     const val APP_PAGE_URL_DE = "https://anynear.app/de/app-laden/"
     const val APP_PAGE_URL_EN = "https://anynear.app/en/get-the-app/"
 
+    /** Legal pages of the website by language, linked under „Über anynear“ (§ 5 DDG, Art. 13 GDPR). */
+    const val LEGAL_NOTICE_URL_DE = "https://anynear.app/de/impressum/"
+    const val LEGAL_NOTICE_URL_EN = "https://anynear.app/en/legal/"
+    const val PRIVACY_URL_DE = "https://anynear.app/de/datenschutz/"
+    const val PRIVACY_URL_EN = "https://anynear.app/en/privacy/"
+    const val TERMS_URL_DE = "https://anynear.app/de/nutzungsbedingungen/"
+    const val TERMS_URL_EN = "https://anynear.app/en/terms/"
+
     /** Opens the app TestFlight on iOS (ADR 0096 §6). */
     const val TESTFLIGHT_URL = "itms-beta://"
 
@@ -59,6 +67,19 @@ object AppConfig {
      * first is [SUPPORT_LINK_URL], this one here is the fallback.
      */
     val SUPPORT_CONTACT_LINK: String? = "https://anynear.app/c#qAABAVggro9NwRU2zyAA-5xRZy0U48TOfL5kGHDZABeekQ1utVkCb2FueW5lYXIgU3VwcG9ydANYIMaQxOzgmTT_-VwDRC6yHLdYOya-uEp6TQTpodJKQ_q-BFggvcvp_7PbSPpvn7NZgwhMyP-xL9EQj1I4ME2zwQSYnXgFWCBcjZlP2w-YrAKcMHAyOoMOhXX-xldLtLkuesGNXF_1qAZYd4JYMqQBWCBcjZlP2w-YrAKcMHAyOoMOhXX-xldLtLkuesGNXF_1qAIEBRps0twtBhpq8ahxWECm6kvVaxdW8yYOgIVdDpEfBdGRTezljVWrNWbtpLYekP0Fzn01VUbkZC2--GJFmT05pgoG4BA__4O1Sd9m3uoDCFggQFwlvXXLrQTmBmyg9vtLWOhXUZrZv1UQwyVt24GS8wE"
+
+    /**
+     * Detailed map (ADR 0121 §11): the two spaces the tiles are published in, with their grants for anyone. Public,
+     * not secrets; the owner keys live only in the secrets of the relay repository, whose release publishes the tiles
+     * (`relay publish-maps`). [MAP_SPACE] holds the root list and is listed (grant: read, list); [MAP_DATA_SPACE]
+     * holds the list of every region and the tiles, read by object ID only (grant: read). Created with `relay keygen`
+     * and `relay issue-grant`. Grants issued on 20.11.2026, valid until the end of 2099. With a value `""` the map
+     * draws what ships with the app and what is on the phone, and fetches nothing; all four are needed.
+     */
+    const val MAP_SPACE = "zFOqMrcZfgV93_EWkLMkjmjmviR_CATWDaGozi7XVME"
+    const val MAP_GRANT = "glgypAFYIMxTqjK3GX4Ffd_xFpCzJI5o5r4kfwgE1g2hqM4u11TBAgMFGvR_vawGGmr_i3BYQBK9owvmjk_0zQk09ccQF-EhNJ_n-kz45NiYgxZAMHAziMLpL-UY6-tV8wDkXWT0Tk1BgJYoI8UMdVi_qYyHmAE"
+    const val MAP_DATA_SPACE = "YhuKS5WoQIkXcJ-1H2O9v_Rkm3Pp7LMpyo_TleEn9sg"
+    const val MAP_DATA_GRANT = "glgypAFYIGIbikuVqECJF3CftR9jvb_0ZJtz6eyzKcqP05XhJ_bIAgEFGvR_vbAGGmr_i3RYQGLSHZ7GXFMwsoL7kddV6Oq2qF1GS8NYmYIV5uk8qPkx3RNTRFLGTyzWSJeCM5UhbUZVj7eMEObqX5b7zj2YuQ0"
 
     /**
      * Invitation link of the curated channel with official warnings from NINA (ADR 0062 §7, implementation plan §5).

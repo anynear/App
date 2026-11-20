@@ -13,6 +13,7 @@ import app.anynear.mesh.ReplyRef
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -192,7 +193,25 @@ internal fun ChatScreen(
     var error by remember(conversation) { mutableStateOf<String?>(null) }
     // Attachment too large or too many: hint about the plan that allows more (ADR 0076 §1a).
     var attachmentLimit by remember(conversation) { mutableStateOf<AboLimit?>(null) }
+    val placeRunning = rememberPlaceRunning(controller, conversation)
     var attachMenu by remember { mutableStateOf(false) }
+    var meeting by remember { mutableStateOf(false) }
+    var sharingPlace by remember { mutableStateOf(false) }
+    var sharingAll by remember { mutableStateOf(false) }
+    // A check-in for this circle or this person, from the „+“ (ADR 0121 §13, §23).
+    val lifeSignTarget = lifeSignTargetOf(controller, conversation)
+    var startingLifeSign by remember { mutableStateOf(false) }
+    if (startingLifeSign && lifeSignTarget != null) controller.lifeSigns?.let { signs ->
+        val circleList by controller.circles.collectAsState()
+        val person = lifeSignTarget.takeIf { it.startsWith(app.anynear.lifesigns.LifeSigns.PERSON_PREFIX) }?.removePrefix(app.anynear.lifesigns.LifeSigns.PERSON_PREFIX)
+        LifeSignStartDialog(
+            signs, circleList, onDismiss = { startingLifeSign = false },
+            fixedCircle = lifeSignTarget.takeIf { person == null }, fixedPerson = person, fixedName = signs.circle(lifeSignTarget),
+        )
+    }
+    if (sharingAll && conversation is Conversation.Circle) ShareAllDialog(controller, conversation.circleId, onDismiss = { sharingAll = false })
+    if (sharingPlace) ShareMyPlaceDialog(controller, conversation, onDismiss = { sharingPlace = false })
+    if (meeting) MeetingPointDialog(controller, conversation, onDismiss = { meeting = false })
     // Shared from another app or forwarded into this chat (also while it is open): into the draft, which then is
     // stored as usual. Only after the stored draft is loaded, so that loading does not displace it.
     val additions by controller.draftAdditions.collectAsState()
@@ -360,6 +379,7 @@ internal fun ChatScreen(
                 trailing = {
                     Row {
                         if (!searching) HeaderAction(AppIcons.Suche, texts.chat.searchInChat) { searching = true }
+                        if (placeRunning) HeaderAction(AppIcons.Karte, texts.map.runningHere) { controller.showMapFor(conversation) }
                         onShare?.let { HeaderAction(AppIcons.Teilen, texts.chat.inviteToThisCircle, it) }
                     }
                 },
@@ -406,6 +426,8 @@ internal fun ChatScreen(
                 return@Column
             }
 
+            // Check-ins of this circle as cards between the messages, by the time they started (ADR 0121 §22).
+            val lifeSignCards = rememberLifeSignCards(controller, conversation, messages)
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
@@ -413,7 +435,7 @@ internal fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 // No message yet: a calm sentence instead of an empty surface.
-                if (messages.none { it.system == null }) {
+                if (messages.none { it.system == null } && lifeSignCards.isEmpty()) {
                     item(key = "empty") {
                         Text(
                             if (isDirect) texts.chat.firstMessageTo(title) else texts.chat.circleReadsAlong(title),
@@ -425,6 +447,8 @@ internal fun ChatScreen(
                     }
                 }
                 items(messages, key = { it.localId }) { message ->
+                    // Inside the item of the message that follows, so that the positions of the messages stay as they are.
+                    lifeSignCards[message.localId]?.forEach { LifeSignCard(controller, it, Modifier.padding(bottom = 6.dp)) }
                     val note = message.system
                     if (note != null) {
                         // Invite again, as long as the removed person is not already back in the circle.
@@ -463,6 +487,8 @@ internal fun ChatScreen(
                     }
                     if (message.localId == replySoonAfter) SystemLine(texts.support.replySoon, onReinvite = null)
                 }
+                // Check-ins started after the last message.
+                lifeSignCards[""]?.let { tail -> items(tail, key = { "alive:" + it.plan.id }) { LifeSignCard(controller, it) } }
             }
 
             error?.let {
@@ -554,6 +580,48 @@ internal fun ChatScreen(
                             onClick = {
                                 attachMenu = false
                                 picker.pickFiles()
+                            },
+                        )
+                        // A place for everyone in the conversation, and the question where the others are (ADR 0121 §8).
+                        DropdownMenuItem(
+                            text = { Text(texts.map.shareMine) },
+                            leadingIcon = { Icon(AppIcons.Karte, contentDescription = null) },
+                            onClick = {
+                                attachMenu = false
+                                sharingPlace = true
+                            },
+                        )
+                        if (conversation is Conversation.Circle) DropdownMenuItem(
+                            text = { Text(texts.map.shareAll) },
+                            leadingIcon = { Icon(AppIcons.Kreis, contentDescription = null) },
+                            onClick = {
+                                attachMenu = false
+                                sharingAll = true
+                            },
+                        )
+                        // Not in a support circle and not with a radio without anynear.
+                        if (lifeSignTarget != null && controller.lifeSigns != null) DropdownMenuItem(
+                            text = { Text(texts.lifeSigns.startInChat) },
+                            leadingIcon = { Icon(AppIcons.Haken, contentDescription = null) },
+                            onClick = {
+                                attachMenu = false
+                                startingLifeSign = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(texts.map.spotMeetHere) },
+                            leadingIcon = { Icon(AppIcons.Karte, contentDescription = null) },
+                            onClick = {
+                                attachMenu = false
+                                meeting = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(texts.map.spotAsk) },
+                            leadingIcon = { Icon(AppIcons.Person, contentDescription = null) },
+                            onClick = {
+                                attachMenu = false
+                                controller.askWhere(conversation)
                             },
                         )
                         // Only if there is a picture in the clipboard right now; it is only read on tapping.
@@ -776,7 +844,8 @@ private fun MessageBubble(
     // Invitations as a card instead of as a link; the stored text keeps the link.
     val invites = remember(message.text) { findInviteLinks(message.text) }
     // With an introduction (ADR 0116) the card says it all; the text is only the stand-in for older apps.
-    val visibleText = remember(message.text, invites, message.intro) { if (message.intro != null) "" else withoutInviteLinks(message.text, invites) }
+    // The same for a place (ADR 0121 §8): the card shows it.
+    val visibleText = remember(message.text, invites, message.intro, message.spot) { if (message.intro != null || message.spot != null) "" else withoutInviteLinks(message.text, invites) }
     // Speech bubble with a "tip" towards the sender's side (design: 18 dp, tip 6 dp).
     val shape = if (outgoing) RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp) else RoundedCornerShape(18.dp, 18.dp, 18.dp, 6.dp)
     // Not sent and out by no path: light background with a red border so that it stands out.
@@ -831,6 +900,7 @@ private fun MessageBubble(
                         )
                     }
                     if (message.attachments.isNotEmpty()) MessageAttachments(controller, message.attachments, onError)
+                    message.spot?.let { SpotCard(controller, message, it, senderName, if (outgoing && !failed) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface, onError) }
                     val textColor = if (outgoing && !failed) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface
                     if (visibleText.isNotEmpty()) {
                         if (message.attachments.any { it.transcribed }) TextPreviewLabel(visibleText, textColor.copy(alpha = 0.75f))
@@ -1259,6 +1329,351 @@ internal fun UnreachableNotice(name: String, onRemove: () -> Unit, onKeep: () ->
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AppButton(texts.people.unreachableRemove, onRemove, kind = ButtonKind.Danger)
             AppButton(texts.people.unreachableKeep, onKeep, kind = ButtonKind.Quiet)
+        }
+    }
+}
+
+
+/** „Treffpunkt hier“ (ADR 0121 §8): the place the person stands at, with a name if it wants, for everyone in the conversation. */
+@Composable
+private fun MeetingPointDialog(controller: AppController, conversation: Conversation, onDismiss: () -> Unit) {
+    val mt = texts.map
+    val scope = rememberCoroutineScope()
+    var name by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
+    if (picking) {
+        PlacePickerDialog(controller, mt.spotMeet, onDismiss = { picking = false }) { lat, lon ->
+            controller.sendMeetingPoint(conversation, lat, lon, name)
+            picking = false
+            onDismiss()
+        }
+        return
+    }
+    AppDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(mt.spotMeetHere) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(mt.spotMeetExplain)
+                androidx.compose.material3.OutlinedTextField(
+                    value = name, onValueChange = { name = it.take(60) }, singleLine = true, label = { Text(mt.spotMeetName) }, modifier = Modifier.fillMaxWidth(),
+                )
+                note?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                // Somewhere else than where the person stands: chosen on the map.
+                AppButton(mt.spotMeetOnMap, { picking = true }, kind = ButtonKind.Secondary, icon = AppIcons.Karte)
+            }
+        },
+        confirmButton = {
+            AppButton(mt.spotMeetSend, {
+                busy = true
+                scope.launch {
+                    when (val r = controller.sendOwnPlace(conversation, app.anynear.mesh.ChatSpot.MEET, name)) {
+                        AppController.PlaceSend.Sent -> onDismiss()
+                        else -> note = placeSendText(r)
+                    }
+                    busy = false
+                }
+            }, enabled = !busy)
+        },
+        dismissButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
+    )
+}
+
+/**
+ * A place in a message (ADR 0121 §8) as a card: a meeting point or someone's place opens the map, which leads there;
+ * „Wo bist du?“ offers to send the own place once.
+ */
+@Composable
+private fun SpotCard(controller: AppController, message: ChatMessage, spot: app.anynear.mesh.ChatSpot, senderName: String?, color: Color, onError: (String) -> Unit) {
+    val mt = texts.map
+    val scope = rememberCoroutineScope()
+    val ask = spot.kind == app.anynear.mesh.ChatSpot.ASK
+    if (spot.kind == app.anynear.mesh.ChatSpot.ALL) {
+        ShareAllCard(controller, message, spot, senderName, color)
+        return
+    }
+    val title = when (spot.kind) {
+        app.anynear.mesh.ChatSpot.MEET -> spot.label?.let { mt.spotMeetText(it) } ?: mt.spotMeet
+        app.anynear.mesh.ChatSpot.ASK -> mt.spotAsk
+        else -> if (message.outgoing) mt.spotHereOwn else mt.spotHere(senderName ?: controller.findPerson(message.fromPeer.orEmpty())?.name ?: "?")
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(AppIcons.Karte, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+            Text(title, style = MaterialTheme.typography.titleSmall, color = color)
+        }
+        val lat = spot.latitude
+        val lon = spot.longitude
+        if (lat != null && lon != null) {
+            val focus = AppController.MapFocus(lat, lon, if (spot.kind == app.anynear.mesh.ChatSpot.MEET) spot.label ?: mt.spotMeet else title, message.fromPeer.takeIf { spot.kind == app.anynear.mesh.ChatSpot.HERE })
+            SpotMap(controller, lat, lon, focus.label) { controller.showOnMap(focus) }
+            if (spot.atMillis > 0) Text(mt.spotFrom(formatTime(spot.atMillis)), style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.75f))
+        } else if (ask && !message.outgoing) {
+            Text(mt.spotAnswerHint, style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.75f))
+            AppButton(mt.spotAnswer, {
+                scope.launch {
+                    val r = controller.sendOwnPlace(message.conversation, app.anynear.mesh.ChatSpot.HERE)
+                    if (r != AppController.PlaceSend.Sent) onError(placeSendText(r))
+                }
+            }, kind = ButtonKind.Secondary, icon = AppIcons.Karte)
+        }
+        // In a circle the question goes to everyone: who has answered since, and who is still open (ADR 0121 §13).
+        val circle = (message.conversation as? Conversation.Circle)?.circleId
+        if (ask && circle != null) {
+            val all by controller.messages.collectAsState()
+            val people by controller.people.collectAsState()
+            val asked = people.filter { circle in it.circleIds && it.deviceId != null && it.peer != message.fromPeer }
+            val since = remember(all, message.localId) {
+                all.filter { it.conversation == message.conversation && it.timestampMillis > message.timestampMillis }
+            }
+            val answered = asked.filter { p -> since.any { !it.outgoing && it.fromPeer?.let { peer -> app.anynear.people.Person.find(people, peer)?.peer } == p.peer } }
+            // Asked by someone else, I count too.
+            val me = if (message.outgoing) 0 else 1
+            val mine = if (!message.outgoing && since.any { it.outgoing }) 1 else 0
+            Text(mt.answered(answered.size + mine, asked.size + me), style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.85f))
+            val open = (asked - answered.toSet()).map { it.name }
+            if (open.isNotEmpty()) Text(mt.answeredOpen(open.joinToString(", ")), style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.75f))
+        }
+    }
+}
+
+
+/** What to tell the person when its place could not be sent. */
+private fun placeSendText(result: AppController.PlaceSend): String = when (result) {
+    AppController.PlaceSend.LocationOff -> texts.map.spotLocationOff
+    AppController.PlaceSend.Unknown -> texts.map.spotNoFix
+    AppController.PlaceSend.Failed -> texts.map.askFailed
+    else -> texts.map.spotNeedsPlace
+}
+
+
+/** The cut-out of the map in a message with a place (ADR 0121 §13): it does not move; a tap opens the map there. */
+@Composable
+internal fun SpotMap(controller: AppController, latitude: Double, longitude: Double, label: String, onOpen: () -> Unit) {
+    val outlines by androidx.compose.runtime.produceState<app.anynear.location.Outlines?>(null) { value = app.anynear.location.Outlines.shared() }
+    val packs by (controller.mapTiles?.loaded ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, app.anynear.location.MapPack>()) }).collectAsState()
+    val ground by androidx.compose.runtime.produceState(emptyList<app.anynear.location.MapPack>()) { value = app.anynear.location.MapPack.bundled() }
+    val camera = remember(latitude, longitude) { MapCamera().apply { start = latitude to longitude } }
+    val o = outlines
+    // The tiles around the place, if the phone has them or the network offers them.
+    LaunchedEffect(latitude, longitude) {
+        controller.mapTiles?.want(
+            listOf(app.anynear.location.MapPack.tileAt(app.anynear.location.MapPack.REGION, latitude, longitude), app.anynear.location.MapPack.tileAt(app.anynear.location.MapPack.NEAR, latitude, longitude)),
+            kotlin.time.Clock.System.now().toEpochMilliseconds(),
+        )
+    }
+    val here = remember(packs, latitude, longitude) {
+        val keys = setOf(app.anynear.location.MapPack.tileAt(app.anynear.location.MapPack.REGION, latitude, longitude), app.anynear.location.MapPack.tileAt(app.anynear.location.MapPack.NEAR, latitude, longitude))
+        packs.filterKeys { it in keys }.values.toList()
+    }
+    Box(
+        Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface)
+            .clickable(onClickLabel = texts.map.spotShowOnMap, onClick = onOpen),
+    ) {
+        if (o != null) MapView(o, camera, listOf(MapMarker("spot", label, latitude, longitude, place = true)), emptyList(), emptyMap(), packs = here, ground = ground, interactive = false)
+    }
+}
+
+
+/**
+ * Is something about locations running in this conversation right now (ADR 0121 §13)? I share my place with it for a
+ * time, or someone in it shows me a place right now. The header then carries the map icon, which leads to the map.
+ */
+@Composable
+private fun rememberPlaceRunning(controller: AppController, conversation: Conversation): Boolean {
+    val sharer = controller.placeSharer ?: return false
+    val sharing = controller.locationSharing ?: return false
+    val places by sharer.places.collectAsState()
+    val until by sharing.until.collectAsState()
+    val people by controller.people.collectAsState()
+    val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+    val members = when (conversation) {
+        is Conversation.Circle -> people.filter { conversation.circleId in it.circleIds }
+        is Conversation.Direct -> listOfNotNull(app.anynear.people.Person.find(people, conversation.peer))
+        else -> emptyList()
+    }
+    val mine = when (conversation) {
+        is Conversation.Circle -> (until["c:${conversation.circleId}"] ?: 0) > now
+        is Conversation.Direct -> members.any { m -> (until["p:${m.deviceId}"] ?: 0) > now }
+        else -> false
+    }
+    val theirs = members.any { m -> places[m.deviceId]?.let { it.place != null && it.untilMillis !in 1..now && it.level == app.anynear.location.ShareLevel.Exact && it.untilMillis > 0 } == true }
+    // A running sign of life in this circle is such an action, too (19.11.2026).
+    val lifeSign = (conversation as? Conversation.Circle)?.let { c ->
+        val statuses by (controller.lifeSigns?.statuses ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }).collectAsState()
+        statuses.any { it.plan.circleId == c.circleId && it.plan.peer == null && it.phase != app.anynear.anmp.core.AliveStatus.ENDED }
+    } ?: (conversation as? Conversation.Direct)?.let {
+        val statuses by (controller.lifeSigns?.statuses ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }).collectAsState()
+        val peer = members.firstOrNull()?.deviceId
+        peer != null && statuses.any { it.plan.peer == peer && it.phase != app.anynear.anmp.core.AliveStatus.ENDED }
+    } ?: false
+    return mine || theirs || lifeSign
+}
+
+
+/**
+ * The check-ins of the circle of [conversation] (ADR 0083 §5), sorted into the chat by the time they started: under the
+ * ID of the message that follows, under `""` those after the last message. They come from the check-in itself, not from
+ * a message, so the card is there over radio and for a check-in started with an older version, too. The core keeps a
+ * check-in for a week after its end; then the card goes.
+ */
+@Composable
+private fun rememberLifeSignCards(controller: AppController, conversation: Conversation, messages: List<ChatMessage>): Map<String, List<app.anynear.anmp.core.AliveStatus>> {
+    val target = lifeSignTargetOf(controller, conversation) ?: return emptyMap()
+    val statuses by (controller.lifeSigns?.statuses ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }).collectAsState()
+    return remember(statuses, messages, target) { lifeSignCardsOf(statuses.filter { app.anynear.lifesigns.LifeSigns.targetOf(it.plan) == target }, messages.map { it.localId to it.timestampMillis }) }
+}
+
+/**
+ * What a check-in started in [conversation] goes to ([app.anynear.lifesigns.LifeSigns.targetOf]): the circle, or the
+ * person of a direct conversation. `null` where there is none: a support circle, a radio without anynear.
+ */
+@Composable
+private fun lifeSignTargetOf(controller: AppController, conversation: Conversation): String? {
+    val people by controller.people.collectAsState()
+    return when (conversation) {
+        is Conversation.Circle -> conversation.circleId.takeIf { !controller.isSupportCircle(it) }
+        is Conversation.Direct -> app.anynear.people.Person.find(people, conversation.peer)?.deviceId?.takeIf { !controller.isRadioOnly(conversation.peer) }
+            ?.let { app.anynear.lifesigns.LifeSigns.PERSON_PREFIX + it }
+        else -> null
+    }
+}
+
+/** Sorts [statuses] before the first of [messages] (ID and time, oldest first) that is newer than their start; `""` after all. */
+internal fun lifeSignCardsOf(statuses: List<app.anynear.anmp.core.AliveStatus>, messages: List<Pair<String, Long>>): Map<String, List<app.anynear.anmp.core.AliveStatus>> =
+    statuses.sortedBy { it.plan.start }.groupBy { s -> messages.firstOrNull { it.second > s.plan.start }?.first ?: "" }
+
+/**
+ * A check-in in the chat of its circle (ADR 0121 §22): whose it is and until when, and how it stands right now. A tap
+ * leads to what runs: the own question „Alles gut?“, the call for the helpers if nobody confirmed, otherwise the map
+ * of the circle.
+ */
+@Composable
+private fun LifeSignCard(controller: AppController, status: app.anynear.anmp.core.AliveStatus, modifier: Modifier = Modifier) {
+    val lifeSigns = controller.lifeSigns ?: return
+    val lt = texts.lifeSigns
+    val plan = status.plan
+    val calls by (controller.sos?.calls ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }).collectAsState()
+    val call = calls.firstOrNull { it.plan == plan.id && !it.ended }
+    val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+    val phase = status.phase
+    val ended = phase == app.anynear.anmp.core.AliveStatus.ENDED
+    val alarm = !ended && (phase == app.anynear.anmp.core.AliveStatus.ALARM || call != null)
+    val state = when {
+        ended -> if (plan.state == app.anynear.anmp.AnmpAliveState.TIMEOUT) lt.cardTimedOut else lt.cardEnded
+        alarm -> if (call?.reason == app.anynear.anmp.core.AliveStatus.REASON_UNREACHABLE || (call == null && status.reason == app.anynear.anmp.core.AliveStatus.REASON_UNREACHABLE)) lt.cardUnreachable else lt.cardMissed
+        phase == app.anynear.anmp.core.AliveStatus.ASK -> lt.cardAsk
+        phase == app.anynear.anmp.core.AliveStatus.HINT -> lt.cardHint
+        !status.own && lifeSigns.meAway(status) -> lt.cardAway
+        status.own -> lt.cardNext(formatFutureDayAndTime(plan.due, now))
+        else -> lt.cardRunning(formatTime(plan.confirmedAt.takeIf { it > 0 } ?: plan.lastAt))
+    }
+    val accent = when {
+        alarm -> AppTheme.colors.alarm
+        ended -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> AppTheme.colors.safe
+    }
+    val open: () -> Unit = {
+        when {
+            // With one person there is no map of a circle to lead to.
+            plan.peer != null && (ended || (call == null && !status.own)) -> Unit
+            ended -> controller.showMapFor(Conversation.Circle(plan.circleId))
+            call != null && !call.own -> controller.sos?.open(call.id)
+            call != null -> controller.sos?.open()
+            status.own -> lifeSigns.openFullScreen()
+            else -> controller.showMapFor(Conversation.Circle(plan.circleId))
+        }
+    }
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.widthIn(max = 320.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(1.5.dp, accent.copy(alpha = if (ended) 0.25f else 0.7f), RoundedCornerShape(16.dp))
+                .clickable(onClickLabel = lt.cardOpen, role = Role.Button, onClick = open).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(AppIcons.Karte, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
+                Text(
+                    if (status.own) lt.cardOwn(formatFutureDayAndTime(plan.until, plan.start)) else lt.cardOf(lifeSigns.name(plan.owner), formatFutureDayAndTime(plan.until, plan.start)),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+            }
+            if (plan.label.isNotBlank()) Text(lt.cardLabel(plan.label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(state, style = MaterialTheme.typography.bodyMedium, fontWeight = if (alarm) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal, color = if (alarm) accent else MaterialTheme.colorScheme.onSurface)
+            // Where the phone is, if nobody confirmed and the person shares it for that case.
+            val place = (call?.position ?: plan.position)?.takeIf { alarm && !status.own }
+            if (place != null) SpotMap(controller, place.latitude, place.longitude, lifeSigns.name(plan.owner), open)
+            if (!ended) Text(lt.cardOpen, style = MaterialTheme.typography.labelLarge, color = accent, modifier = Modifier.align(Alignment.End))
+        }
+    }
+}
+
+
+/** „Alle teilen“ (ADR 0121 §13): how long everyone in the circle is invited to share; the starter joins by itself. */
+@Composable
+private fun ShareAllDialog(controller: AppController, circleId: String, onDismiss: () -> Unit) {
+    val mt = texts.map
+    var minutes by remember { mutableStateOf(120) }
+    ActionsDialog(mt.shareAll, onDismiss = onDismiss) {
+        Text(mt.shareAllText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp))
+        Text(mt.forHowLong, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp))
+        Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(60, 120, 240, 480, 720).forEach { m ->
+                androidx.compose.material3.FilterChip(selected = minutes == m, onClick = { minutes = m }, label = { Text(if (m < 120) mt.minutes(m) else mt.hours(m / 60)) })
+            }
+        }
+        Text(mt.openOnly, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
+        AppButton(
+            mt.shareAllStart,
+            {
+                controller.inviteAllToShare(circleId, minutes)
+                onDismiss()
+            },
+            Modifier.fillMaxWidth().padding(16.dp), kind = ButtonKind.Main,
+        )
+    }
+}
+
+/**
+ * The invitation „Alle teilen“ in the chat (ADR 0121 §13): nobody shares before agreeing. „Mitmachen“ shares the own
+ * place with the circle until the end, „Aussteigen“ stops it any time; the card says who takes part.
+ */
+@Composable
+private fun ShareAllCard(controller: AppController, message: ChatMessage, spot: app.anynear.mesh.ChatSpot, senderName: String?, color: Color) {
+    val mt = texts.map
+    val sharing = controller.locationSharing ?: return
+    val circleId = (message.conversation as? Conversation.Circle)?.circleId ?: return
+    val until = spot.untilMillis ?: return
+    val levels by sharing.circles.collectAsState()
+    val untils by sharing.until.collectAsState()
+    val places by (controller.placeSharer?.places ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, app.anynear.location.SharedPlace>()) }).collectAsState()
+    val people by controller.people.collectAsState()
+    val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+    val over = until <= now
+    // I take part while this circle is set to the exact place until this very end.
+    val joined = !over && levels[circleId] == app.anynear.location.ShareLevel.Exact && untils["c:$circleId"] == until
+    val members = people.filter { circleId in it.circleIds && it.deviceId != null }
+    // Who agreed counts, also while its phone has no place yet (e.g. indoors without a fix).
+    val taking = members.filter { m -> places[m.deviceId]?.let { it.level == app.anynear.location.ShareLevel.Exact && kotlin.math.abs(it.untilMillis - until) < 2000 } == true }
+    var note by remember { mutableStateOf<String?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(AppIcons.Kreis, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+            Text(if (over) mt.shareAllOver else mt.shareAllUntil(formatTime(until)), style = MaterialTheme.typography.titleSmall, color = color)
+        }
+        if (!over) {
+            Text(mt.shareAllTaking(taking.size + if (joined) 1 else 0, members.size + 1), style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.85f))
+            if (taking.isNotEmpty()) Text(taking.joinToString(", ") { it.name }, style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.75f))
+            if (joined) {
+                AppButton(mt.shareAllLeave, { controller.leaveSharing(circleId) }, kind = ButtonKind.Secondary)
+            } else {
+                Text(mt.shareAllHint, style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.75f))
+                AppButton(mt.shareAllJoin, { if (!controller.joinSharing(circleId, until)) note = mt.spotNeedsPlace }, kind = ButtonKind.Secondary, icon = AppIcons.Karte)
+            }
+            AppButton(mt.spotShowOnMap, { controller.showMapFor(message.conversation) }, kind = ButtonKind.Quiet, icon = AppIcons.Karte)
+            note?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error) }
         }
     }
 }

@@ -8,6 +8,14 @@ import kotlin.io.encoding.Base64
 /** Crypto of the platform for data on the device (Android: JDK with BouncyCastle, iOS: Apple). Protocol crypto is in the ANMP core. */
 internal expect val cryptoProvider: CryptographyProvider
 
+/**
+ * Crypto for the local key and cipher ([LocalKey], [app.anynear.data.LocalCipher]), which the app needs on the main
+ * thread before the first screen: HMAC-SHA256 and AES-GCM of the platform. On Android that is the system's own
+ * provider, because setting up BouncyCastle takes seconds on a weak phone; elsewhere it is [cryptoProvider].
+ * Both give the same bytes (`LocalCryptoTest`).
+ */
+internal expect val localCryptoProvider: CryptographyProvider
+
 /** Host of the local development relays as seen from the emulator, simulator or phone on Wi-Fi. */
 internal expect val devRelayHost: String
 

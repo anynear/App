@@ -79,6 +79,13 @@ class Alerts(
         visibleAlerts(list, channels, region?.kreis)
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    /** Official warnings everywhere in the country, for the map (ADR 0121 §7): the ones with an area, also outside the own district. */
+    val areaAlerts: StateFlow<List<Alert>> = source.alerts.map { list -> list.filter { it.area.isNotEmpty() } }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /** District key → name, for the map; loaded with the table of the regions. */
+    suspend fun kreisNames(): Map<String, String> = (table ?: regionTable().also { table = it }).kreisNames
+
     /** Number on the tab: unread alerts from priority warning on. */
     val unreadCount: StateFlow<Int> = combine(alerts, _seen, source.channels) { list, seen, channels -> unreadCount(list, seen, channels) }
         .stateIn(scope, SharingStarted.Eagerly, 0)
@@ -435,7 +442,7 @@ class Alerts(
                 text = texts.alerts.testText(channel.name),
                 priority = AlertPriority.Alarm,
                 loudness = AlertLoudness.Loud,
-                sound = settings.sound,
+                sound = AlertSound.allowedFor(channel.curated, settings.sound),
                 timestampMillis = now(),
                 test = true,
             ),
@@ -508,7 +515,8 @@ fun notificationOf(alert: Alert, channel: AlertChannel, settings: ChannelSetting
         text = alert.text.ifBlank { alert.source ?: channel.name },
         priority = alert.priority,
         loudness = loudnessOf(alert, settings),
-        sound = settings.sound,
+        // A sound the channel may not have (e.g. „Amtlich“ on an own channel, chosen before) falls back to its default.
+        sound = AlertSound.allowedFor(channel.curated, settings.sound),
         timestampMillis = alert.timestampMillis,
         replacesKey = alert.replaces,
     )

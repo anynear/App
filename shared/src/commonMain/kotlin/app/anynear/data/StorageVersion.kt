@@ -13,7 +13,7 @@ object StorageVersion {
     /** First version under anynear. */
     const val FIRST = 1
 
-    const val CURRENT = 8
+    const val CURRENT = 9
 
     /** Beta key and time of its last check; no longer needed since version 2 (download without sign-in). */
     internal val OLD_BETA_SECRETS = listOf("beta_key", "beta_key_checked")
@@ -42,6 +42,9 @@ object StorageVersion {
         // 7 → 8: Own names for other people are a new key `contact_names` (person's setting, ADR 0050); people read
         // with their profile name as before. `Person` and `CircleMember` only gain `profileName` in memory. There is
         // nothing to rewrite.
+        Migration { },
+        // 8 → 9: Messages in the history have `spot` (ADR 0121 §8) with default `null`: older entries read as "no
+        // place"; there is nothing to rewrite.
         Migration { },
     )
 

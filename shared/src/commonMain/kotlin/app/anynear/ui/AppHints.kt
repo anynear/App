@@ -3,6 +3,7 @@ package app.anynear.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import app.anynear.anmp.core.AliveStatus
 import app.anynear.app.AppController
 import app.anynear.app.RadioSoftwareState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
  * hint and rescue on top of each other were confusing); if a more important one is needed, the other disappears.
  * Order = priority.
  */
-internal enum class AppHint { RADIO_SOFTWARE_RUN, USB_RESCUE, RADIO_AREA, DEVICE_SETUP, RADIO_IN_USE, PAIRING, RADIO_SOFTWARE_NOTICE }
+internal enum class AppHint { RADIO_SOFTWARE_RUN, USB_RESCUE, RADIO_AREA, DEVICE_SETUP, RADIO_IN_USE, PAIRING, RADIO_SOFTWARE_NOTICE, LOCATION_SHARE }
 
 /** The hint whose turn it is; `null`: none, then the general ones may show (app update, background …). */
 internal fun pickHint(
@@ -24,6 +25,7 @@ internal fun pickHint(
     linkOpen: Boolean,
     radioInUse: Boolean = false,
     radioArea: Boolean = false,
+    locationShare: Boolean = false,
 ): AppHint? = when {
     softwareRun -> AppHint.RADIO_SOFTWARE_RUN
     rescueOpen -> AppHint.USB_RESCUE
@@ -35,6 +37,8 @@ internal fun pickHint(
     radioInUse -> AppHint.RADIO_IN_USE
     pairing -> AppHint.PAIRING
     softwareNotice -> AppHint.RADIO_SOFTWARE_NOTICE
+    // The question about the location after the update (ADR 0121 §10) can wait for everything else.
+    locationShare -> AppHint.LOCATION_SHARE
     else -> null
 }
 
@@ -48,6 +52,10 @@ internal fun currentHint(controller: AppController, linkOpen: Boolean): AppHint?
     val pairing by controller.pairingHint.collectAsState()
     val radioInUse by controller.radioInUsePrompt.collectAsState()
     val radioArea by controller.radioAreaNeeded.collectAsState()
+    val locationQuestion by controller.locationQuestion.collectAsState()
+    // Not on top of a check-in that asks or warns: that comes first.
+    val lifeSigns by (controller.lifeSigns?.statuses ?: NoLifeSigns).collectAsState()
+    val lifeSignBusy = lifeSigns.any { it.phase == AliveStatus.ASK || it.phase == AliveStatus.HINT || it.phase == AliveStatus.ALARM }
     return pickHint(
         softwareRun = run is RadioSoftwareState.Installing || run is RadioSoftwareState.Done || run is RadioSoftwareState.Failed,
         rescueOpen = rescueOpen && controller.usbRescue != null,
@@ -57,8 +65,10 @@ internal fun currentHint(controller: AppController, linkOpen: Boolean): AppHint?
         linkOpen = linkOpen,
         radioInUse = radioInUse,
         radioArea = radioArea,
+        locationShare = locationQuestion && !lifeSignBusy,
     )
 }
 
 private val NoRun = MutableStateFlow<RadioSoftwareState>(RadioSoftwareState.Idle)
 private val NoNotice = MutableStateFlow<Any?>(null)
+private val NoLifeSigns = MutableStateFlow<List<AliveStatus>>(emptyList())

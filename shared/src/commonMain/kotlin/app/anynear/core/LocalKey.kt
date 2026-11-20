@@ -5,6 +5,7 @@ import app.anynear.data.LocalCipher
 import app.anynear.data.SecretStore
 import app.anynear.data.secureRandomBytes
 import dev.whyoleg.cryptography.BinarySize.Companion.bits
+import dev.whyoleg.cryptography.CryptographyProvider
 import dev.whyoleg.cryptography.algorithms.HKDF
 import dev.whyoleg.cryptography.algorithms.SHA256
 
@@ -35,8 +36,9 @@ object LocalKey {
         secrets.get(CoreSecretKeys.DEVICE_X)?.takeIf { it.size == KEY_SIZE }
             ?: secureRandomBytes(KEY_SIZE).also { secrets.put(CoreSecretKeys.DEVICE_X, it) }
 
-    internal fun rawKey(deviceX: ByteArray): ByteArray =
-        cryptoProvider.get(HKDF)
+    /** [provider] only differs in tests, which compare the platform's result with BouncyCastle's. */
+    internal fun rawKey(deviceX: ByteArray, provider: CryptographyProvider = localCryptoProvider): ByteArray =
+        provider.get(HKDF)
             .secretDerivation(SHA256, 256.bits, AnmpInfo.SALT.encodeToByteArray(), AnmpInfo.LOCAL_STORAGE.encodeToByteArray())
             .deriveSecretToByteArrayBlocking(deviceX)
 

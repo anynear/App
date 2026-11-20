@@ -94,8 +94,8 @@ import app.anynear.mesh.LinkState
 
 private enum class Tab(val icon: ImageVector) {
     Chats(AppIcons.Nachrichten),
-    /** Circles only (ADR 0100); contacts are under „Neue Nachricht“. */
-    Circles(AppIcons.Kreis),
+    /** The own people on the map (ADR 0121 §1); circles live in „Nachrichten“. */
+    Map(AppIcons.Karte),
     Files(AppIcons.Dokument),
 
     /** Alerts and channels (ADR 0062); replaces „Mehr“, whose entries are in the ⋮ menu. */
@@ -105,7 +105,7 @@ private enum class Tab(val icon: ImageVector) {
     val title: String
         get() = when (this) {
             Chats -> texts.setup.tabChats
-            Circles -> texts.setup.tabCircles
+            Map -> texts.setup.tabMap
             Files -> texts.setup.tabFiles
             Alerts -> texts.alerts.title
         }
@@ -128,6 +128,8 @@ private sealed interface Detail {
     data object OwnProfile : Detail
     data class Connections(val start: ConnectionsPage = ConnectionsPage.Main) : Detail
     data object Settings : Detail
+    /** „Wer sieht mich?“ (ADR 0121 §4.5). */
+    data object WhoSeesMe : Detail
     data object Help : Detail
     data object Troubleshooting : Detail
     data object About : Detail
@@ -168,7 +170,10 @@ fun App(controller: AppController) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize()) {
                 // Status bar in the colour of the header area (icons follow the system mode, see MainActivity).
-                Box(Modifier.fillMaxWidth().background(AppTheme.colors.header).windowInsetsTopHeight(WindowInsets.statusBars))
+                // While a call for the helpers runs, the red line is on every page (19.11.2026), and the status bar with it.
+                val sosRunning = sosRunning(controller) && setupDone && !revoked && !eraseWaiting
+                Box(Modifier.fillMaxWidth().background(if (sosRunning) AppTheme.colors.alarm else AppTheme.colors.header).windowInsetsTopHeight(WindowInsets.statusBars))
+                if (sosRunning) SosBanner(controller)
                 // On the Mac and the iPad the window is much wider than a phone: content as a centred
                 // column, otherwise buttons and input fields stretch across the full width.
                 // The main view divides up the width itself (sidebar, see MainScreen).
@@ -285,11 +290,17 @@ private fun MainScreen(controller: AppController) {
     // Notification of an alert tapped: into the channel.
     LaunchedEffect(openChannelRequest) {
         openChannelRequest?.let {
-            tab = Tab.Alerts
+            // A call for the helpers (ADR 0083 §2): straight to the call.
+            if (it.startsWith(app.anynear.sos.Sos.CHANNEL_PREFIX)) {
+                controller.sos?.open(it.removePrefix(app.anynear.sos.Sos.CHANNEL_PREFIX))
+                alerts?.consumeOpenRequest()
+                return@let
+            }
+            // Check-ins (ADR 0083) are on the map (ADR 0121 §1), not in a channel.
+            tab = if (it.startsWith(LifeSigns.CHANNEL_PREFIX)) Tab.Map else Tab.Alerts
             open = null
             openPublic = null
             newMessage = false
-            // Check-ins (ADR 0083) are at the top of „Meldungen“, not in a channel.
             details = if (it.startsWith(LifeSigns.CHANNEL_PREFIX)) emptyList() else listOf(Detail.AlertChannel(it))
             // Question or ongoing notification tapped: straight to the big button.
             if (it.startsWith(LifeSigns.CHANNEL_PREFIX)) controller.lifeSigns?.openFullScreen()
@@ -315,6 +326,18 @@ private fun MainScreen(controller: AppController) {
             openPublic = null
             newMessage = false
             details = listOf(Detail.Settings)
+        }
+    }
+    // A card in a chat asks for the map (ADR 0121 §8): the tab opens with the place as destination.
+    val mapFocus by controller.mapFocus.collectAsState()
+    val mapCircle by controller.mapCircle.collectAsState()
+    LaunchedEffect(mapFocus, mapCircle.second) {
+        if (mapFocus != null || mapCircle.second != 0L) {
+            tab = Tab.Map
+            open = null
+            openPublic = null
+            details = emptyList()
+            newMessage = false
         }
     }
     val selectTab: (Tab) -> Unit = { entry ->
@@ -345,7 +368,7 @@ private fun MainScreen(controller: AppController) {
                 AppCommand.Settings -> details = listOf(Detail.Settings)
                 AppCommand.Help -> details = listOf(Detail.Help)
                 AppCommand.ShowChats -> selectTab(Tab.Chats)
-                AppCommand.ShowCircles -> selectTab(Tab.Circles)
+                AppCommand.ShowCircles -> selectTab(Tab.Map)
                 AppCommand.ShowFiles -> selectTab(Tab.Files)
                 AppCommand.ShowAlerts -> selectTab(Tab.Alerts)
                 AppCommand.Back -> goBack()
@@ -426,7 +449,11 @@ private fun MainScreen(controller: AppController) {
                     ) {
                         CompositionLocalProvider(
                             LocalBelowHeader provides banner,
-                            LocalHeaderStatus provides { RadioHeaderStatus(controller, onClick = { if (details.lastOrNull() !is Detail.Connections) showDetail(Detail.Connections()) }) },
+                            LocalHeaderStatus provides {
+                                // Calling the helpers is one tap away on every main page (ADR 0121 §13).
+                                SosHeaderButton(controller)
+                                RadioHeaderStatus(controller, onClick = { if (details.lastOrNull() !is Detail.Connections) showDetail(Detail.Connections()) })
+                            },
                             LocalHeaderMenu provides { MainMenu(controller, onOpen = openMenuTarget) },
                             LocalHeaderTasks provides { FinderHeaderTask(controller) },
                         ) {
@@ -465,6 +492,7 @@ private fun MainScreen(controller: AppController) {
                                 Detail.OwnProfile -> ProfileScreen(controller, onBack = closeDetail)
                                 is Detail.Connections -> ConnectionsScreen(controller, onBack = closeDetail, start = detail.start)
                                 Detail.Settings -> SettingsPageScreen(controller, onBack = closeDetail)
+                                Detail.WhoSeesMe -> WhoSeesMeScreen(controller, onBack = closeDetail)
                                 Detail.Help -> HelpScreen(controller, onBack = closeDetail, onOpenChat = openChat)
                                 Detail.Troubleshooting -> TroubleshootingScreen(controller, onBack = closeDetail, onOpenChat = openChat)
                                 Detail.About -> AboutScreen(controller, onBack = closeDetail)
@@ -584,8 +612,13 @@ private fun MainScreen(controller: AppController) {
                                             }
                                         },
                                     )
-                                    // Circles (ADR 0100): first the circle detail, from there into the chat.
-                                    tab == Tab.Circles -> CirclesScreen(controller, onOpenCircle = { showDetail(Detail.CircleInfo(it)) }, onOpenChat = openChatHere)
+                                    // The map (ADR 0121 §1): the own people, who sees me, check-ins.
+                                    tab == Tab.Map -> MapScreen(
+                                        controller,
+                                        onOpenChat = openChat,
+                                        onWhoSeesMe = { showDetail(Detail.WhoSeesMe) },
+                                        onCreateCircle = { creatingCircle = true },
+                                    )
                                     tab == Tab.Files -> FilesScreen(
                                         controller,
                                         onOpenPersonal = { showDetail(Detail.FilesPersonal) },
@@ -607,7 +640,9 @@ private fun MainScreen(controller: AppController) {
     }
     if (creatingCircle) CreateCircleDialog(controller, onDismiss = { creatingCircle = false }, onCreated = { openChat(Conversation.Circle(it)) })
     InviteDialog(controller)
+    SosScreenHost(controller)
     PendingPairingDialog(controller)
+    PendingLoginDialog(controller)
     UnknownDeviceDialog(controller)
     ReplaceDeviceDialog(controller)
     PasswordRequestDialog(controller)
@@ -626,6 +661,7 @@ private fun MainScreen(controller: AppController) {
         AppHint.RADIO_IN_USE -> RadioInUseDialog(controller)
         AppHint.PAIRING -> PairingTroubleDialog(controller)
         AppHint.RADIO_SOFTWARE_NOTICE -> RadioSoftwareNotice(controller)
+        AppHint.LOCATION_SHARE -> LocationShareDialog(controller)
         null -> if (!linkOpen) {
             AppUpdateDialog(controller)
             OldAppDialog(controller)

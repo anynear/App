@@ -127,9 +127,22 @@ class StorageVersionTest {
     fun version8ChangesNothingStored() {
         val history = """[{"localId":"a","conversation":{"type":"circle","circleId":"k"},"fromNodeNum":0,"text":"Hallo","timestampMillis":1,"outgoing":false}]"""
         val raw = Raw(mapOf(StorageVersion.KEY to "7", "messages" to history, "read_until" to """{"c:k":1}"""))
-        assertEquals(8, StorageVersion.migrate(StorageVersion.Stores(raw, InMemorySecretStore()) { emptySet() }))
+        assertEquals(StorageVersion.CURRENT, StorageVersion.migrate(StorageVersion.Stores(raw, InMemorySecretStore()) { emptySet() }))
         assertEquals(history, raw.map["messages"])
         assertEquals("""{"c:k":1}""", raw.map["read_until"])
         assertEquals(null, raw.map["contact_names"])
+    }
+
+    /** 8 → 9: messages have `spot` (ADR 0121 §8) with default `null`; a history without it reads as before. */
+    @Test
+    fun version9ReadsMessagesWithoutAPlace() {
+        val history = """[{"localId":"a","conversation":{"type":"circle","circleId":"k"},"fromNodeNum":0,"text":"Hallo","timestampMillis":1,"outgoing":false}]"""
+        val raw = Raw(mapOf(StorageVersion.KEY to "8", "messages" to history))
+        assertEquals(9, StorageVersion.migrate(StorageVersion.Stores(raw, InMemorySecretStore()) { emptySet() }))
+        assertEquals(history, raw.map["messages"])
+        val read = kotlinx.serialization.json.Json.decodeFromString<List<app.anynear.mesh.ChatMessage>>(history)
+        assertEquals(null, read.single().spot)
+        val with = read.single().copy(spot = app.anynear.mesh.ChatSpot(app.anynear.mesh.ChatSpot.MEET, 50.1, 8.6, 1, label = "Eingang"))
+        assertEquals(with, kotlinx.serialization.json.Json.decodeFromString<app.anynear.mesh.ChatMessage>(kotlinx.serialization.json.Json.encodeToString(app.anynear.mesh.ChatMessage.serializer(), with)))
     }
 }

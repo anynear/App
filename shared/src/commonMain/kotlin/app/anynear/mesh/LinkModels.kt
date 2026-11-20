@@ -203,7 +203,34 @@ data class ChatMessage(
     val replyTo: ReplyRef? = null,
     /** The sender passed on a message it got („Weitergeleitet“, ADR 0118); no origin. */
     val passedOn: Boolean = false,
+    /** A meeting point, „Wo bist du?“ or the answer (ADR 0121 §8); [text] is only the stand-in for older apps. */
+    val spot: ChatSpot? = null,
 )
+
+/**
+ * A place in a conversation (ADR 0121 §8): [kind] 1 meeting point, 2 „Wo bist du?“ (no place), 3 the sender's place.
+ * [latitude], [longitude] in degrees, [atMillis] when located, [label] the name of a meeting point.
+ */
+@Serializable
+data class ChatSpot(
+    val kind: Int,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val atMillis: Long = 0,
+    val accuracyMeters: Int? = null,
+    val label: String? = null,
+    /** [ALL]: until when everyone who joins shares, ms. */
+    val untilMillis: Long? = null,
+) {
+    companion object {
+        const val MEET = 1
+        const val ASK = 2
+        const val HERE = 3
+
+        /** „Alle teilen“ (ADR 0121 §13): an invitation to share in the circle until [untilMillis]. */
+        const val ALL = 4
+    }
+}
 
 /**
  * Reference of an answer (ADR 0092): ANMP message ID [mid] of the answered message and [tag] of its author's

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import app.anynear.app.AppController
 import app.anynear.app.BackgroundRestriction
 import app.anynear.app.CommunityOffer
+import app.anynear.location.ShareLevel
 import app.anynear.mesh.LinkState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,7 +63,8 @@ internal fun guideSteps(controller: AppController, withRadio: Boolean): List<Gui
         doNotDisturbMissing = alerts?.accessMissing?.value == true,
         withRadio = withRadio,
         radioPaired = controller.pairedDevice.value != null,
-        locationNeeded = !controller.radioAreas.locationAllowed.value,
+        // Also when the approximate location is allowed already but the question who sees it is open (ADR 0121 §10).
+        locationNeeded = !controller.radioAreas.locationAllowed.value || controller.locationSharing?.let { it.default.value == null } == true,
     )
 }
 
@@ -215,31 +217,79 @@ private fun AlertsStep(controller: AppController, stepLabel: String?, onDone: ()
 }
 
 /**
- * The approximate location (ADR 0054 §1b): for warnings in the own district and so that the radio uses the settings of
- * the area. Leads on once allowed; the system asks after the button.
+ * The location (ADR 0054 §1b, ADR 0121 §10): approximately for warnings in the own district and so that the radio uses
+ * the settings of the area, and the question whether the helpers see where the person is when something is wrong.
+ * „Ja“ asks the system for the exact location, „Nein“ for the approximate one as before. Leads on once the system
+ * has answered; after the answer „Weiter“ leads on in any case.
  */
 @Composable
 private fun LocationStep(controller: AppController, stepLabel: String?, onDone: () -> Unit, onBack: () -> Unit) {
+    val sharing = controller.locationSharing
     val allowed by controller.radioAreas.locationAllowed.collectAsState()
+    val precise by (sharing?.allowed ?: NoPreciseLocation).collectAsState()
+    val answer by (sharing?.default ?: NoShareLevel).collectAsState()
     var asked by remember { mutableStateOf(false) }
-    LaunchedEffect(allowed) { if (allowed && asked) onDone() }
-    PermissionStep(
-        icon = AppIcons.Funk,
-        stepLabel = stepLabel,
-        title = texts.setup.locationTitle,
-        text = texts.setup.locationText,
-        note = texts.setup.locationNote,
-        action = if (allowed) texts.common.next else texts.setup.locationAllow,
-        onAction = {
-            if (allowed) onDone() else {
+    // The system asks after the button; once it has answered with yes, go on.
+    LaunchedEffect(allowed, precise) { if (asked && (allowed || precise)) onDone() }
+    fun approximate() {
+        if (allowed) onDone() else {
+            asked = true
+            controller.allowLocationForRadioArea()
+        }
+    }
+    if (sharing == null) {
+        // Without the question (no platform behind it): the step as it was, only the approximate location.
+        PermissionStep(
+            icon = AppIcons.Funk,
+            stepLabel = stepLabel,
+            title = texts.setup.locationTitle,
+            text = texts.setup.locationText,
+            note = texts.setup.locationNote,
+            action = if (allowed) texts.common.next else texts.setup.locationAllow,
+            onAction = ::approximate,
+            onLater = onDone,
+            onBack = onBack,
+        )
+        return
+    }
+    val lt = texts.location
+    StepHeader(AppIcons.Funk, stepLabel, lt.setupTitle)
+    Text(lt.setupText, style = MaterialTheme.typography.bodyLarge)
+    Text(lt.questionText, style = MaterialTheme.typography.bodyLarge)
+    Text(lt.setupLaterNote, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(8.dp))
+    when {
+        // Answered, here or on another own device: only the permission of this device is left, or nothing.
+        answer != null -> AppButton(texts.common.next, {
+            val wanted = if (answer == ShareLevel.WhenNeeded) precise else allowed
+            if (wanted || asked) onDone() else {
                 asked = true
-                controller.allowLocationForRadioArea()
+                if (answer == ShareLevel.WhenNeeded) sharing.allow() else controller.allowLocationForRadioArea()
             }
-        },
-        onLater = onDone,
-        onBack = onBack,
-    )
+        }, Modifier.fillMaxWidth(), kind = ButtonKind.Main)
+        else -> {
+            AppButton(lt.yes, {
+                asked = true
+                // Asks the system for the exact location; with it already allowed there is nothing more to ask.
+                sharing.answer(ShareLevel.WhenNeeded)
+                if (precise) onDone()
+            }, Modifier.fillMaxWidth(), kind = ButtonKind.Main)
+            AppButton(lt.setupNo, {
+                sharing.answer(ShareLevel.Off)
+                approximate()
+            }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary)
+        }
+    }
+    AppButton(texts.common.later, {
+        // Decided here for now: the question does not come again right after the setup.
+        if (answer == null) sharing.postpone()
+        onDone()
+    }, Modifier.fillMaxWidth(), kind = ButtonKind.Quiet)
+    GuideBackButton(onBack)
 }
+
+private val NoPreciseLocation: StateFlow<Boolean> = MutableStateFlow(false)
+private val NoShareLevel: StateFlow<ShareLevel?> = MutableStateFlow(null)
 
 /** Android: access to „Nicht stören“, so that alarms ring there too. The same sentences as the hint (AlarmAccessDialog). */
 @Composable

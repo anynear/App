@@ -5,5 +5,7 @@
 "NSMicrophoneUsageDescription" = "Damit du Sprachnachrichten aufnehmen kannst.";
 "NSSpeechRecognitionUsageDescription" = "Damit der Anfang deiner Sprachnachricht als Text auch über Funk ankommt. Die Erkennung läuft nur auf deinem iPhone.";
 "NSFaceIDUsageDescription" = "anynear öffnet deine Passwörter nur mit Face ID oder dem Gerätecode.";
-"NSLocationWhenInUseUsageDescription" = "anynear bestimmt deinen ungefähren Standort nur auf deinem iPhone, um dir amtliche Warnungen für deinen Kreis zu zeigen. Dein Standort verlässt das iPhone nicht.";
+"NSLocationWhenInUseUsageDescription" = "anynear bestimmt deinen Standort, um dir amtliche Warnungen für deinen Landkreis zu zeigen. Andere sehen ihn nur, wenn du ihn für einen Kreis oder eine Person freigibst.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "anynear ortet auch im Hintergrund, solange du deinen Standort teilst oder deine Helfer rufst. Mit „Immer“ geht das Teilen nach einem Neustart des iPhones von selbst weiter.";
+"Share" = "Für Treffpunkt, „Wo bist du?“ und die Freigabe „genau“ braucht anynear deinen genauen Standort.";
 "NSPhotoLibraryUsageDescription" = "Damit anynear in deinen Fotos nach wichtigen Dokumenten suchen kann. Die Suche läuft nur auf deinem iPhone.";

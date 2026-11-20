@@ -5,5 +5,7 @@
 "NSMicrophoneUsageDescription" = "So you can record voice messages.";
 "NSSpeechRecognitionUsageDescription" = "So the start of your voice message also arrives as text over radio. Recognition runs only on your iPhone.";
 "NSFaceIDUsageDescription" = "anynear only opens your passwords with Face ID or your passcode.";
-"NSLocationWhenInUseUsageDescription" = "anynear uses your approximate location only on your iPhone to show you official warnings for your district. Your location never leaves your iPhone.";
+"NSLocationWhenInUseUsageDescription" = "anynear uses your location to show you official warnings for your district. Others only see it if you share it with a circle or a person.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "anynear also locates in the background while you share your location or call your helpers. With “Always”, sharing continues by itself after the iPhone restarts.";
+"Share" = "For meeting points, “Where are you?” and sharing “precise”, anynear needs your precise location.";
 "NSPhotoLibraryUsageDescription" = "So anynear can look for important documents in your photos. The search runs only on your iPhone.";

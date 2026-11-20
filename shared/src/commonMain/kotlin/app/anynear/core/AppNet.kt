@@ -34,7 +34,12 @@ object AppNet {
         } else {
             // Curated channels (ADR 0062 §7): only what is listed here counts as official.
             val base = AnmpCoreConfig.default(EMBEDDED_NET_LIST)
-            AnmpCoreConfig(base.networkId, base.networkKey, base.embeddedList, curatedChannels = listOfNotNull(AppConfig.OFFICIAL_ALERTS_LINK))
+            AnmpCoreConfig(
+                base.networkId, base.networkKey, base.embeddedList, curatedChannels = listOfNotNull(AppConfig.OFFICIAL_ALERTS_LINK),
+                // Detailed map (ADR 0121 §11); empty values leave it off.
+                mapSpace = AppConfig.MAP_SPACE, mapGrant = AppConfig.MAP_GRANT,
+                mapDataSpace = AppConfig.MAP_DATA_SPACE, mapDataGrant = AppConfig.MAP_DATA_GRANT,
+            )
         }
 
     /** Connection to the relays: by IP with a pinned key; in the development network via the ports on the computer. */

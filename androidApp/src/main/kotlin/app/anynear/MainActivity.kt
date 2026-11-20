@@ -56,6 +56,22 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    // Exact location for „wenn etwas ist“ (ADR 0121 §10): Android asks for exact and approximate together and lets the
+    // person choose. If no prompt comes any more, go to settings.
+    // „Immer“ (ADR 0121 §13): from Android 11 on the system shows its settings page for it instead of a dialog.
+    private val backgroundLocationLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { app.hooks.refreshPermissions() }
+
+    private val preciseLocationLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            app.hooks.refreshPermissions()
+            val noDialog = SystemClock.elapsedRealtime() - locationAskedAt < NO_DIALOG_MILLIS
+            val exact = result[Manifest.permission.ACCESS_FINE_LOCATION] == true
+            if (!exact && noDialog && !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                app.hooks.openAppSettings()
+            }
+        }
+
     // Local network (Android 17+): asked only when searching for a radio on purpose; declined, Android shows its own
     // device picker instead, so no detour to the settings.
     private val localNetworkPermissionLauncher =
@@ -90,6 +106,13 @@ class MainActivity : ComponentActivity() {
         app.hooks.locationPermissionRequester = {
             locationAskedAt = SystemClock.elapsedRealtime()
             locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+        app.hooks.preciseLocationRequester = {
+            locationAskedAt = SystemClock.elapsedRealtime()
+            preciseLocationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+        app.hooks.backgroundLocationRequester = {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
         }
         app.hooks.store?.launcher = storeUpdateLauncher
         setContent { App(app.controller) }
@@ -202,6 +225,8 @@ class MainActivity : ComponentActivity() {
         app.hooks.permissionRequester = null
         app.hooks.notificationPermissionRequester = null
         app.hooks.locationPermissionRequester = null
+        app.hooks.preciseLocationRequester = null
+        app.hooks.backgroundLocationRequester = null
         app.hooks.localNetworkPermissionRequester = null
         app.hooks.onLocalNetworkResult()
         app.hooks.store?.let { if (it.launcher === storeUpdateLauncher) it.launcher = null }

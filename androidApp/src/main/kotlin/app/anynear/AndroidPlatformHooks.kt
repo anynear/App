@@ -28,6 +28,7 @@ import app.anynear.app.CheckInNotification
 import app.anynear.app.Reminder
 import app.anynear.app.PlatformHooks
 import app.anynear.i18n.texts
+import app.anynear.location.Place
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,9 +71,38 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
     /** Like [permissionRequester], only for the approximate location (official warnings). */
     var locationPermissionRequester: (() -> Unit)? = null
 
+    /** Like [locationPermissionRequester], for the exact location (ADR 0121 §10). */
+    var preciseLocationRequester: (() -> Unit)? = null
+
     private val location = ApproximateLocation(context)
     private val _locationAllowed = MutableStateFlow(location.allowed())
     override val locationAllowed: StateFlow<Boolean> = _locationAllowed.asStateFlow()
+    private val _preciseAllowed = MutableStateFlow(location.preciseAllowed())
+    override val preciseLocationAllowed: StateFlow<Boolean> = _preciseAllowed.asStateFlow()
+
+    /** Asks for „Immer“ (ADR 0121 §13); set by the activity. */
+    var backgroundLocationRequester: (() -> Unit)? = null
+    private val _backgroundAllowed = MutableStateFlow(location.backgroundAllowed())
+    override val backgroundLocationAllowed: StateFlow<Boolean> = _backgroundAllowed.asStateFlow()
+    private val _placeUpdates = kotlinx.coroutines.flow.MutableSharedFlow<Place>(extraBufferCapacity = 4, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    override val placeUpdates: kotlinx.coroutines.flow.Flow<Place> = _placeUpdates
+
+    /** A place from [LocationShareService], while a place is shared. */
+    fun onPlace(place: Place) {
+        location.remember(place)
+        _placeUpdates.tryEmit(place)
+    }
+
+    private val sharingReasons = mutableMapOf<String, String>()
+
+    override fun setLocationInUse(reason: String, text: String?) {
+        if (text == null) sharingReasons.remove(reason) else sharingReasons[reason] = text
+        if (sharingReasons.isEmpty()) LocationShareService.stop(context) else LocationShareService.start(context, sharingReasons.values.last())
+    }
+
+    override fun requestBackgroundLocation() {
+        if (location.backgroundAllowed()) refreshPermissions() else backgroundLocationRequester?.invoke()
+    }
 
     private val notifier = MessageNotifier(context)
 
@@ -162,6 +192,8 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
         _localNetwork.value = hasLocalNetworkPermission()
         _notificationNeeded.value = notificationPermissionMissing()
         _locationAllowed.value = location.allowed()
+        _preciseAllowed.value = location.preciseAllowed()
+        _backgroundAllowed.value = location.backgroundAllowed()
     }
 
     override fun requestLocation() {
@@ -169,6 +201,32 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
     }
 
     override suspend fun approximateLocation(): GeoPoint? = location.read()
+
+    override fun requestPreciseLocation() {
+        if (location.preciseAllowed()) refreshPermissions() else preciseLocationRequester?.invoke()
+    }
+
+    override suspend fun currentPlace(): Place? = location.place()
+
+    override fun batteryPercent(): Int? =
+        context.getSystemService(android.os.BatteryManager::class.java)?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it in 0..100 }
+
+    override fun dial(number: String) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "Telefon: keine Telefon-App")
+        }
+    }
+
+    override fun openMap(latitude: Double, longitude: Double, label: String) {
+        val uri = Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude(${Uri.encode(label)})")
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "Karte: keine Karten-App")
+        }
+    }
 
     override fun locationServicesOn(): Boolean = location.servicesOn()
 

@@ -32,6 +32,10 @@ import app.anynear.data.ObservedKeyValueStore
 import app.anynear.anmp.core.PairResult
 import app.anynear.anmp.core.EraseResult
 import app.anynear.anmp.core.AnmpCore
+import app.anynear.anmp.core.AnmpLogin
+import app.anynear.anmp.core.LoginInfo
+import app.anynear.anmp.core.LoginLink
+import app.anynear.anmp.core.LoginResult
 import app.anynear.anmp.core.UpdateDemand
 import app.anynear.ui.daysBetween
 import app.anynear.anmp.core.RadioHost
@@ -99,6 +103,7 @@ import app.anynear.mesh.UsbRadio
 import app.anynear.mesh.platformUsbRescue
 import app.anynear.mesh.ChannelSetupResult
 import app.anynear.mesh.ChatMessage
+import app.anynear.mesh.ChatSpot
 import app.anynear.mesh.LinkPreview
 import app.anynear.chats.LinkDraft
 import io.ktor.client.HttpClient
@@ -272,7 +277,124 @@ class AppController(
     private val usageStats: UsageStats? = null,
     /** Check-ins (ADR 0083); `null` in tests without a platform. */
     val lifeSigns: LifeSigns? = null,
+    /** Who sees the own location (ADR 0121); `null` in tests without a platform. */
+    val locationSharing: app.anynear.location.LocationSharing? = null,
+    /** Sends the own place and keeps what others share (ADR 0121 §3–§5); `null` in tests without a platform. */
+    val placeSharer: app.anynear.location.PlaceSharer? = null,
+    /** Tiles of the detailed map (ADR 0121 §11); `null` in tests without a platform. */
+    val mapTiles: app.anynear.location.MapTiles? = null,
+    /** Calling the helpers (ADR 0083 §2); `null` in tests without a platform. */
+    val sos: app.anynear.sos.Sos? = null,
+    /** The places the person named (ADR 0121 §13); `null` in tests without a platform. */
+    val savedPlaces: app.anynear.location.SavedPlaces? = null,
+    val circlePlaces: app.anynear.location.CirclePlaces? = null,
 ) {
+    /** The place that rides along with a direct message (ADR 0121 §20), in the form of the core. */
+    private fun corePlace(r: app.anynear.location.PlaceSharer.Riding): app.anynear.anmp.core.PlaceShare = app.anynear.anmp.core.PlaceShare(
+        r.level.wire, app.anynear.anmp.core.AlivePosition(r.place.latitude, r.place.longitude, r.place.atMillis, r.place.accuracyMeters),
+        r.radiusMeters, r.untilMillis, r.label, r.sinceMillis,
+    )
+
+    private fun coreSpot(s: ChatSpot): app.anynear.anmp.core.MessageSpot = app.anynear.anmp.core.MessageSpot(
+        s.kind,
+        if (s.latitude != null && s.longitude != null) app.anynear.anmp.core.AlivePosition(s.latitude, s.longitude, s.atMillis, s.accuracyMeters) else null,
+        s.label,
+        s.untilMillis,
+    )
+
+    /** A place the map shall show and lead to (ADR 0121 §8): set by a card in a chat, read by the tab „Karte“. */
+    data class MapFocus(val latitude: Double, val longitude: Double, val label: String, val peer: String? = null)
+
+    private val _mapFocus = MutableStateFlow<MapFocus?>(null)
+    val mapFocus: StateFlow<MapFocus?> = _mapFocus.asStateFlow()
+
+    /** The circle the map shall show when it opens, e.g. from the map icon in the header of a chat; `null` for everyone. */
+    private val _mapCircle = MutableStateFlow<Pair<String?, Long>>(null to 0L)
+    val mapCircle: StateFlow<Pair<String?, Long>> = _mapCircle.asStateFlow()
+
+    /** Opens the map for [conversation]: its circle as the filter (ADR 0121 §13). */
+    fun showMapFor(conversation: Conversation) {
+        _mapCircle.value = (conversation as? Conversation.Circle)?.circleId to nowMillis()
+    }
+
+    fun showOnMap(focus: MapFocus?) {
+        _mapFocus.value = focus
+    }
+
+    /** Why the own place could not be sent, so that the app says the right thing (ADR 0121 §8). */
+    enum class PlaceSend { Sent, NotAllowed, LocationOff, Unknown, Failed }
+
+    /**
+     * Sends where this phone is into [conversation]: as a meeting point ([ChatSpot.MEET], with [label]) or as the
+     * answer to „Wo bist du?“ ([ChatSpot.HERE]). Needs the exact location: without the permission the system is asked
+     * and nothing is sent; with the location switched off on the device its settings open.
+     */
+    suspend fun sendOwnPlace(conversation: Conversation, kind: Int, label: String? = null): PlaceSend {
+        val sharing = locationSharing ?: return PlaceSend.Failed
+        if (!hooks.locationServicesOn()) {
+            hooks.openLocationSettings()
+            return PlaceSend.LocationOff
+        }
+        if (!sharing.allowed.value) {
+            sharing.allow()
+            return PlaceSend.NotAllowed
+        }
+        val place = sharing.place() ?: return PlaceSend.Unknown
+        val mt = app.anynear.i18n.texts.map
+        val link = "https://www.openstreetmap.org/?mlat=${place.latitude}&mlon=${place.longitude}#map=17/${place.latitude}/${place.longitude}"
+        val text = (if (kind == ChatSpot.MEET) mt.spotMeetText(label?.trim().orEmpty()) else mt.spotHereText) + "\n" + link
+        val sent = send(conversation, text, spot = ChatSpot(kind, place.latitude, place.longitude, place.atMillis, place.accuracyMeters, label?.trim()?.takeIf { it.isNotEmpty() }))
+        return if (sent is SendResult.Rejected) PlaceSend.Failed else PlaceSend.Sent
+    }
+
+    /** Sends a meeting point chosen on the map into [conversation] (ADR 0121 §13): no own location needed for it. */
+    fun sendMeetingPoint(conversation: Conversation, latitude: Double, longitude: Double, label: String?): Boolean {
+        val mt = app.anynear.i18n.texts.map
+        val name = label?.trim()?.takeIf { it.isNotEmpty() }
+        val link = "https://www.openstreetmap.org/?mlat=$latitude&mlon=$longitude#map=17/$latitude/$longitude"
+        return send(conversation, mt.spotMeetText(name.orEmpty()) + "\n" + link, spot = ChatSpot(ChatSpot.MEET, latitude, longitude, nowMillis(), null, name)) !is SendResult.Rejected
+    }
+
+    /**
+     * „Alle teilen“ (ADR 0121 §13): invites everyone in [circleId] to share their place for [minutes], and joins
+     * oneself. Nobody else shares anything before agreeing.
+     */
+    fun inviteAllToShare(circleId: String, minutes: Int): Boolean {
+        val until = nowMillis() + minutes * 60_000L
+        val mt = app.anynear.i18n.texts.map
+        val sent = send(Conversation.Circle(circleId), mt.shareAllMessage(app.anynear.ui.formatTimeText(until)), spot = ChatSpot(ChatSpot.ALL, untilMillis = until)) !is SendResult.Rejected
+        if (sent) joinSharing(circleId, until)
+        return sent
+    }
+
+    /** „Mitmachen“: the own place goes to the members of [circleId] until [untilMillis]; `false` without the permission, which is asked for then. */
+    fun joinSharing(circleId: String, untilMillis: Long): Boolean {
+        val sharing = locationSharing ?: return false
+        if (!hooks.locationServicesOn()) {
+            hooks.openLocationSettings()
+            return false
+        }
+        sharing.setLevel(circleId, app.anynear.location.ShareLevel.Exact, untilMillis, members = people.value.filter { circleId in it.circleIds }.mapNotNull { it.deviceId })
+        scope.launch { placeSharer?.sync() }
+        return sharing.allowed.value
+    }
+
+    /** „Aussteigen“: the circle is back at what it was before. */
+    fun leaveSharing(circleId: String) {
+        locationSharing?.setLevel(circleId, null)
+        scope.launch { placeSharer?.sync() }
+    }
+
+    /** „Wo bist du?“ into [conversation] (ADR 0121 §8): the others answer with their place if they want. */
+    fun askWhere(conversation: Conversation): Boolean =
+        send(conversation, app.anynear.i18n.texts.map.spotAsk, spot = ChatSpot(ChatSpot.ASK)) !is SendResult.Rejected
+
+    /** The persons the own place can go to: everyone with anynear from the own circles and contacts (ADR 0121 §5). */
+    fun shareTargets(): List<app.anynear.location.ShareTarget> = people.value.mapNotNull { p ->
+        val id = p.deviceId ?: return@mapNotNull null
+        app.anynear.location.ShareTarget(id, p.name, p.circleIds.filter { it != MemberDirectory.DIRECT_CONTACTS })
+    }
+
     /** Order of the storages (ADR 0091 §7): chosen on this device, for all storages; not synced to other devices. */
     private val _filesSort = MutableStateFlow(FileSort.of(store.getString(FILES_SORT_KEY)))
     val filesSort: StateFlow<FileSort> = _filesSort.asStateFlow()
@@ -1008,6 +1130,25 @@ class AppController(
         combine(_backgroundRestriction, profile.backgroundHintPostponedUntil, setupDone) { restriction, until, done ->
             restriction?.takeIf { done && Clock.System.now().toEpochMilliseconds() >= until }
         }.stateIn(scope, SharingStarted.Eagerly, null)
+
+    /** The answers of the person's other devices have had time to arrive (ADR 0106), so nobody is asked twice. */
+    private val settled = MutableStateFlow(false)
+
+    /**
+     * Time to ask „Sollen deine Helfer sehen, wo du bist, wenn etwas ist?“ (ADR 0121 §10): set up, not answered here
+     * or on another own device, not postponed. The setup asks in its own step; whoever had the app before the update
+     * is asked once.
+     */
+    val locationQuestion: StateFlow<Boolean> = locationSharing?.let { sharing ->
+        scope.launch {
+            setupDone.first { it }
+            delay(LOCATION_QUESTION_DELAY)
+            settled.value = true
+        }
+        combine(settled, sharing.default, sharing.postponedUntil) { ready, level, until ->
+            ready && level == null && Clock.System.now().toEpochMilliseconds() >= until
+        }.stateIn(scope, SharingStarted.Eagerly, false)
+    } ?: MutableStateFlow(false)
 
     /** Card „Benachrichtigungen erlauben“ in messages: only after setup, with an explanation instead of a system prompt at startup. */
     val notificationHint: StateFlow<Boolean> =
@@ -2486,6 +2627,14 @@ class AppController(
             is CoreEvent.AliveChanged -> Unit
             // Only the iOS notification extension reports these (wakeFetch); the running core emits AliveChanged.
             is CoreEvent.AliveWake -> Unit
+            is CoreEvent.SosWake -> Unit
+            // Shared places (ADR 0121): [app.anynear.location.PlaceSharer] reads them from the core itself.
+            is CoreEvent.PlaceChanged -> Unit
+            // Read by [app.anynear.location.CirclePlaces].
+            is CoreEvent.CirclePlacesChanged -> Unit
+            is CoreEvent.PlaceAsked -> Unit
+            // Calls for the helpers (ADR 0083 §2): [app.anynear.sos.Sos] reads them from the core itself.
+            is CoreEvent.SosChanged -> Unit
             is CoreEvent.Have -> onHave(event.hash, event.ref)
             is CoreEvent.ReadElsewhere -> {
                 val conversation = conversationOf(event.conversation)
@@ -2567,6 +2716,7 @@ class AppController(
             remoteId = e.mid,
             replyTo = replyRef(e.replyTo, e.replyFrom),
             passedOn = e.passedOn,
+            spot = e.spot?.let { sp -> ChatSpot(sp.kind, sp.position?.latitude, sp.position?.longitude, sp.position?.at ?: 0, sp.position?.accuracy, sp.label, sp.until) },
             signed = e.opened?.let(b64::encode),
             space = e.space.ifEmpty { null },
             intro = e.intro?.let { ContactIntro(it.id, it.person, it.name, it.byPerson, it.until, it.card) },
@@ -3049,6 +3199,8 @@ class AppController(
         reply: ReplyRef? = null,
         /** Passes on a message one got („Weiterleiten“, ADR 0118): marked „Weitergeleitet“. */
         passedOn: Boolean = false,
+        /** A meeting point, „Wo bist du?“ or the answer (ADR 0121 §8); [text] is what older apps show. */
+        spot: ChatSpot? = null,
     ): SendResult {
         var body = text.trim()
         if (body.isEmpty() && drafts.isEmpty()) return SendResult.Rejected(texts.status.messageEmpty)
@@ -3074,7 +3226,7 @@ class AppController(
             if (current != null && current != conversation.peer) {
                 val moved = Conversation.Direct(current)
                 _openRequest.value = moved
-                return send(moved, text, drafts, transcript, linkDraft, reply, passedOn)
+                return send(moved, text, drafts, transcript, linkDraft, reply, passedOn, spot)
             }
         }
 
@@ -3083,7 +3235,7 @@ class AppController(
         if (conversation is Conversation.Direct && conversation.peer in addingContacts.value && !reachableNow(conversation.peer)) {
             scope.launch {
                 if (awaitReachable(conversation.peer, CONTACT_SAVE_WAIT)) {
-                    (send(conversation, text, drafts, transcript, linkDraft, reply, passedOn) as? SendResult.Rejected)?.let { _notice.value = it.reason }
+                    (send(conversation, text, drafts, transcript, linkDraft, reply, passedOn, spot) as? SendResult.Rejected)?.let { _notice.value = it.reason }
                 } else {
                     _notice.value = texts.status.personUnreachable
                 }
@@ -3167,6 +3319,7 @@ class AppController(
                 link = linkPreview,
                 replyTo = reply,
                 passedOn = passedOn,
+                spot = spot,
             ),
         )
         if (radioAvailable) {
@@ -3176,8 +3329,12 @@ class AppController(
             // silently there (hardware test 11.11.2026).
             val anmpDevices = (conversation as? Conversation.Direct)?.let { person?.let { p -> radioDevicesOf(p, memberDirectory.members.value) } }.orEmpty()
             when {
-                conversation is Conversation.Circle -> scope.launch { core.queueRadioText(conversation.circleId, null, localId, now, radioBody, reply?.mid, reply?.tag) }
-                anmpDevices.isNotEmpty() -> scope.launch { anmpDevices.forEach { core.queueRadioText(null, it.deviceId, localId, now, radioBody, reply?.mid, reply?.tag) } }
+                conversation is Conversation.Circle -> scope.launch { core.queueRadioText(conversation.circleId, null, localId, now, radioBody, reply?.mid, reply?.tag, spot?.let(::coreSpot)) }
+                anmpDevices.isNotEmpty() -> {
+                    // Over radio the place the person sees anyway rides along: no packet of its own (ADR 0121 §20).
+                    val ride = person?.deviceId?.let { placeSharer?.riding(it, radio = true) }?.let(::corePlace)
+                    scope.launch { anmpDevices.forEach { core.queueRadioText(null, it.deviceId, localId, now, radioBody, reply?.mid, reply?.tag, spot?.let(::coreSpot), ride) } }
+                }
                 radioTarget != null -> outbox.enqueue(localId, radioBody, radioTarget, "")
             }
         }
@@ -3254,6 +3411,7 @@ class AppController(
             remoteId = e.mid,
             relayed = e.relayed,
             replyTo = replyRef(e.replyTo, e.replyFrom),
+            spot = e.spot?.let { sp -> ChatSpot(sp.kind, sp.position?.latitude, sp.position?.longitude, sp.position?.at ?: 0, sp.position?.accuracy, sp.label, sp.until) },
         )
         if (!messageStore.addRadio(incoming, e.fromNode, e.packetKey)) return
         onReceived(conversation)
@@ -3503,10 +3661,13 @@ class AppController(
             }
             PreparedLink(l.url, l.title, l.description, l.site, image)
         }
+        // Direct: what the reader sees of the own place goes along if it is news (ADR 0121 §20).
+        val ride = if (circleId == null) device?.let { placeSharer?.riding(it, radio = false) } else null
         val out = when {
-            circleId != null -> core.sendCircle(circleId, ready.text, prepared, mid = localId, timestampMillis = ready.timestampMillis, link = preparedLink, replyTo = ready.replyTo?.mid, replyFrom = ready.replyTo?.tag, passedOn = ready.passedOn)
-            else -> core.sendDirect(device!!, ready.text, prepared, mid = localId, timestampMillis = ready.timestampMillis, link = preparedLink, replyTo = ready.replyTo?.mid, replyFrom = ready.replyTo?.tag, passedOn = ready.passedOn)
+            circleId != null -> core.sendCircle(circleId, ready.text, prepared, mid = localId, timestampMillis = ready.timestampMillis, link = preparedLink, replyTo = ready.replyTo?.mid, replyFrom = ready.replyTo?.tag, passedOn = ready.passedOn, spot = ready.spot?.let(::coreSpot))
+            else -> core.sendDirect(device!!, ready.text, prepared, mid = localId, timestampMillis = ready.timestampMillis, link = preparedLink, replyTo = ready.replyTo?.mid, replyFrom = ready.replyTo?.tag, passedOn = ready.passedOn, spot = ready.spot?.let(::coreSpot), place = ride?.let(::corePlace))
         }
+        if (out != null && ride != null && device != null) placeSharer?.rode(device, ride)
         if (out == null) {
             if (ready.via.isEmpty()) messageStore.markFailed(localId)
             return
@@ -3800,6 +3961,13 @@ class AppController(
         // Settings link (ADR 0089): only „Alle Daten löschen“ so far; before the setup there is nothing to delete.
         if (isSettingsLink(url)) {
             if (setupDone.value && resetAvailable && url.substringAfter('#', "") == "erase") _eraseRequest.value = true
+            return null
+        }
+        // Login with anynear (ADR 0122): nothing is sent before the person picks the number and unlocks.
+        if (core.isLoginLink(url)) {
+            if (!setupDone.value) return texts.login.notSetUp
+            val l = core.parseLoginLink(url) ?: return texts.login.invalid
+            _pendingLogin.value = l
             return null
         }
         // Code of a new own device (ADR 0042 §5): only after confirmation with the device lock.
@@ -4398,6 +4566,38 @@ class AppController(
         }
     }
 
+    private val _pendingLogin = MutableStateFlow<LoginLink?>(null)
+
+    /** Opened or scanned login link (ADR 0122) that waits for „Bei … anmelden?“. */
+    val pendingLogin: StateFlow<LoginLink?> = _pendingLogin.asStateFlow()
+
+    fun dismissLogin() {
+        _pendingLogin.value = null
+    }
+
+    /** Service, domain and the three numbers of a login; reads only. */
+    suspend fun loginInfo(link: LoginLink): LoginInfo = core.loginInfo(link)
+
+    /** Default of „Dein Name dort“: the profile name, shortened to what the service takes. */
+    fun loginDefaultName(): String = AnmpLogin.defaultName(profile.ownName.value)
+
+    /** Confirms the login after the device lock; `null` when signed in, otherwise the message to show. */
+    suspend fun confirmLogin(info: LoginInfo, n: Int, name: String): String? {
+        val r = core.confirmLogin(info, n, name)
+        log("login: ${r.status}")
+        return when (r.status) {
+            LoginResult.OK -> null
+            LoginResult.WRONG_NUMBER -> texts.login.wrongNumber
+            LoginResult.EXPIRED -> texts.login.expired
+            LoginResult.REJECTED -> texts.login.rejected
+            LoginResult.TOO_MANY -> texts.login.tooMany
+            LoginResult.NO_CHAIN -> texts.login.noChain
+            LoginResult.BAD_NAME -> texts.login.badName
+            LoginResult.INVALID -> texts.login.invalid
+            else -> texts.login.offline
+        }
+    }
+
     fun isPairLink(text: String): Boolean = Regex("""anynear\.(?:app|net)/p/?#""").containsMatchIn(text)
 
     fun removeDevice(deviceId: String) {
@@ -4808,6 +5008,18 @@ class AppController(
         hooks.share(if (name.isEmpty()) url else texts.status.shareOwnContact(name, url))
     }
 
+    /**
+     * Invite someone from the phone's contacts (ADR 0003): a text message to [number] with the own contact link via
+     * [sms], otherwise (no number, no SMS on this device) the share menu. The number is not stored and goes nowhere
+     * else. Returns `false` while the own contact link is not ready yet.
+     */
+    fun inviteFromPhoneContact(number: String?, sms: (number: String, text: String) -> Boolean): Boolean {
+        val url = ownContactLink.value ?: return false
+        val text = texts.status.phoneInvite(profile.ownName.value.trim(), url)
+        if (number == null || !sms(number, text)) hooks.share(text)
+        return true
+    }
+
     sealed interface AddContactResult {
         /** [peer]: the person, to open the conversation right away. */
         data class Added(val name: String, val peer: String) : AddContactResult
@@ -4969,6 +5181,9 @@ class AppController(
 
         /** For this long after „Später“ the app does not ask again about the battery setting. */
         private val BACKGROUND_HINT_PAUSE = 3.days
+
+        /** After the start the settings of the person's other devices arrive first; only then the location question (ADR 0121 §10). */
+        private val LOCATION_QUESTION_DELAY = 20.seconds
 
         /** This many unread messages are shown by a notification, older ones only as a number. */
         private const val NOTIFICATION_LINES = 6

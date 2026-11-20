@@ -69,6 +69,8 @@ interface AlertTexts {
     val soundAlarm: String
     val soundOfficial: String
     val soundHint: String
+    val soundWarning: String
+    val soundSos: String
     val soundQuestion: String
     val rename: String
     val leave: String
@@ -231,6 +233,8 @@ internal object AlertTextsDe : AlertTexts {
     override val soundAlarm = "Alarm"
     override val soundOfficial = "Amtlich"
     override val soundHint = "Hinweis"
+    override val soundWarning = "Warnton"
+    override val soundSos = "Hilfe rufen"
     override val soundQuestion = "Lebenszeichen"
     override val rename = "Umbenennen"
     override val leave = "Kanal verlassen"
@@ -384,6 +388,8 @@ internal object AlertTextsEn : AlertTexts {
     override val soundAlarm = "Alarm"
     override val soundOfficial = "Official"
     override val soundHint = "Chime"
+    override val soundWarning = "Warning"
+    override val soundSos = "Call for help"
     override val soundQuestion = "Check-in"
     override val rename = "Rename"
     override val leave = "Leave channel"

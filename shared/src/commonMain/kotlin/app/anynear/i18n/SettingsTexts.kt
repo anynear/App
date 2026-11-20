@@ -210,6 +210,10 @@ interface SettingsTexts {
     val license: String
     val licenseShort: String
     val licenseText: String
+    val legal: String
+    val legalNotice: String
+    val terms: String
+    val legalFooter: String
     val notificationsOnOff: String
     val myProfile: String
     val myProfileHint: String
@@ -452,7 +456,11 @@ internal object SettingsTextsDe : SettingsTexts {
     override val backgroundStopped = "Wurde im Hintergrund beendet. Tippen, um es zu erlauben."
     override val license = "Lizenz"
     override val licenseShort = "Freie Software, GPL-3.0-or-later"
-    override val licenseText = "$APP ist freie Software. Der Quellcode steht unter der GNU General Public License, Version 3 oder neuer (GPL-3.0-or-later). Du darfst ihn nach deren Bedingungen nutzen, ändern und weitergeben. Der Name $APP und die Logos sind davon ausgenommen.\n\nAmtliche Warnungen: Kreise und Gemeindemittelpunkte aus dem Gemeindeverzeichnis (GV-ISys), Gebietsstand 31.12.2025, © Statistisches Bundesamt (Destatis), 2026; Koordinaten: Bundesamt für Kartographie und Geodäsie (BKG)."
+    override val licenseText = "$APP ist freie Software. Der Quellcode steht unter der GNU General Public License, Version 3 oder neuer (GPL-3.0-or-later). Du darfst ihn nach deren Bedingungen nutzen, ändern und weitergeben. Der Name $APP und die Logos sind davon ausgenommen.\n\nAmtliche Warnungen: Kreise und Gemeindemittelpunkte aus dem Gemeindeverzeichnis (GV-ISys), Gebietsstand 31.12.2025, © Statistisches Bundesamt (Destatis), 2026; Koordinaten: Bundesamt für Kartographie und Geodäsie (BKG).\n\nKarte: Grenzen der Gemeinden und Kreise aus den Verwaltungsgebieten 1:250 000 (VG250), Stand 01.01.2026, © BKG (2026) dl-de/by-2-0, vereinfacht. Straßen, Wege, Gewässer und Ortsnamen: © OpenStreetMap-Mitwirkende, Open Database License (openstreetmap.org/copyright). Welt und Europa: Natural Earth (gemeinfrei)."
+    override val legal = "Rechtliches"
+    override val legalNotice = "Impressum"
+    override val terms = "Nutzungsbedingungen"
+    override val legalFooter = "Öffnet die Seite auf anynear.app."
     override val notificationsOnOff = "An oder aus"
     override val myProfile = "Mein Profil"
     override val myProfileHint = "Mein Profil · Name, Bild, Kontakt teilen"
@@ -694,7 +702,11 @@ internal object SettingsTextsEn : SettingsTexts {
     override val backgroundStopped = "Was closed in the background. Tap to allow it."
     override val license = "License"
     override val licenseShort = "Free software, GPL-3.0-or-later"
-    override val licenseText = "$APP is free software. The source code is licensed under the GNU General Public License, version 3 or later (GPL-3.0-or-later). You may use, change and share it under its terms. The name $APP and the logos are excluded.\n\nOfficial warnings: districts and municipality center points from the municipality directory GV-ISys, as of 31 Dec 2025, © Federal Statistical Office of Germany (Destatis), 2026; coordinates: Federal Agency for Cartography and Geodesy (BKG)."
+    override val licenseText = "$APP is free software. The source code is licensed under the GNU General Public License, version 3 or later (GPL-3.0-or-later). You may use, change and share it under its terms. The name $APP and the logos are excluded.\n\nOfficial warnings: districts and municipality center points from the municipality directory GV-ISys, as of 31 Dec 2025, © Federal Statistical Office of Germany (Destatis), 2026; coordinates: Federal Agency for Cartography and Geodesy (BKG).\n\nMap: borders of municipalities and districts from the administrative areas 1:250 000 (VG250), as of 1 Jan 2026, © BKG (2026) dl-de/by-2-0, simplified. Roads, paths, water and place names: © OpenStreetMap contributors, Open Database License (openstreetmap.org/copyright). World and Europe: Natural Earth (public domain)."
+    override val legal = "Legal"
+    override val legalNotice = "Legal notice"
+    override val terms = "Terms of use"
+    override val legalFooter = "Opens the page on anynear.app."
     override val notificationsOnOff = "On or off"
     override val myProfile = "My profile"
     override val myProfileHint = "My profile · name, picture, share contact"

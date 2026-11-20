@@ -212,6 +212,25 @@ internal object AppIcons {
         dot(18.9f, 17f, 2.2f)
     }
 
+    /** Map and location: a pin with a dot. */
+    val Karte: ImageVector = icon("Karte") {
+        line {
+            moveTo(12f, 21f)
+            curveToRelative(-4f, -4.2f, -6.5f, -7.4f, -6.5f, -10.5f)
+            arcToRelative(6.5f, 6.5f, 0f, true, true, 13f, 0f)
+            curveToRelative(0f, 3.1f, -2.5f, 6.3f, -6.5f, 10.5f)
+            close()
+        }
+        dot(12f, 10.5f, 2.2f)
+    }
+
+    val Minus: ImageVector = icon("Minus") {
+        line {
+            moveTo(5f, 12f)
+            lineTo(19f, 12f)
+        }
+    }
+
     /** Contacts: person. */
     val Person: ImageVector = icon("Person") {
         line {

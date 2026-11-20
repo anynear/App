@@ -1,6 +1,6 @@
 package app.anynear.data
 
-import app.anynear.core.cryptoProvider
+import app.anynear.core.localCryptoProvider
 import dev.whyoleg.cryptography.algorithms.AES
 import kotlin.io.encoding.Base64
 
@@ -12,7 +12,7 @@ import kotlin.io.encoding.Base64
  * Runs blocking because settings are read synchronously at start.
  */
 class LocalCipher(rawKey: ByteArray) {
-    private val cipher = cryptoProvider.get(AES.GCM).keyDecoder()
+    private val cipher = localCryptoProvider.get(AES.GCM).keyDecoder()
         .decodeFromByteArrayBlocking(AES.Key.Format.RAW, rawKey)
         .cipher()
 

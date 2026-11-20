@@ -23,10 +23,18 @@
     <!-- Android 8–11 -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
 
     <!-- Official warnings: district from the approximate location, only while the app is open, stays on the phone -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Exact location: on Android 8–11 for the Bluetooth search. On all versions for the place that goes to the helpers
+         when nobody confirms a check-in and the person allowed it (ADR 0121 §10). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- While the person shares where it is or calls its helpers, the phone keeps locating with the app in the
+         background: a foreground service with its own notification (ADR 0121 §13, §14). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- „Immer“: only for the levels that share all the time, so that sharing continues after a restart of the phone
+         without opening the app. Asked for where the person chooses such a level, never in the setup. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <!-- Foreground service keeps the BLE connection in the background (mandatory from Android 14 on) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -92,7 +100,7 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode"
             android:windowSoftInputMode="adjustResize">
             <!-- Invitation links (/k#…), contact links (/c#…), device links (/p#…), channel links (/a#…,
-                 ADR 0062) and the settings link (/s#erase, ADR 0089) open the app directly (ADR 0036): created on
+                 ADR 0062), login links (/l#…, ADR 0122) and the settings link (/s#erase, ADR 0089) open the app directly (ADR 0036): created on
                  anynear.app, also recognized on anynear.net (ADR 0061, decision 4). Verified via
                  /.well-known/assetlinks.json of both hosts (website, relays). Exact paths, not prefixes: „/a“ as a prefix
                  also caught website pages such as /app-laden/ and /app/download/. -->
@@ -110,6 +118,8 @@
                 <data android:path="/p/" />
                 <data android:path="/a" />
                 <data android:path="/a/" />
+                <data android:path="/l" />
+                <data android:path="/l/" />
                 <data android:path="/s" />
                 <data android:path="/s/" />
             </intent-filter>
@@ -171,6 +181,12 @@
                 <action android:name="no.nordicsemi.android.dfu.broadcast.BROADCAST_ACTION" />
             </intent-filter>
         </service>
+
+        <!-- Runs only while a place is shared or a call for the helpers runs (ADR 0121 §13, §14). -->
+        <service
+            android:name=".LocationShareService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <service
             android:name=".MeshConnectionService"
