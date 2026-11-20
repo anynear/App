@@ -126,7 +126,9 @@ private fun statusLine(shared: SharedPlace?, outlines: Outlines?, now: Long, kno
     val mt = texts.map
     if (shared == null) return mt.sharesNothingYet
     val over = shared.untilMillis in 1..now
-    val place = shared.place?.takeIf { !over }
+    // A place nobody brought up to date for four weeks is not shown any more (ADR 0121 §24).
+    val place = shared.place?.takeIf { !over }?.takeIf { !app.anynear.location.PlaceAge.gone(it.atMillis, nextLocalHour(now, 0)) }
+    if (shared.place != null && !over && place == null) return mt.tooOld
     if (place == null) {
         return when {
             shared.level == ShareLevel.Off -> mt.sharesOff
@@ -141,10 +143,19 @@ private fun statusLine(shared: SharedPlace?, outlines: Outlines?, now: Long, kno
         return if (shared.isArea || shared.sinceMillis <= 0) mt.atSavedArea(name) else mt.atSaved(name, formatTime(shared.sinceMillis))
     }
     val town = outlines?.townAt(place.latitude, place.longitude)?.name
-    val ago = agoText(place.atMillis, now)
+    // A level is brought up to date only when something happens (ADR 0121 §24), so the line says from when the place
+    // is: for an area only the day, never the time (when someone entered a cell would say more than the cell does);
+    // for the exact place the time today and the day before that; while an action runs it is live.
+    val midnight = nextLocalHour(now, 0)
+    val days = app.anynear.location.PlaceAge.days(place.atMillis, midnight)
+    val running = shared.untilMillis > now
+    val ago = when {
+        running -> mt.live
+        days == 0 -> mt.lastAt(formatTime(place.atMillis))
+        else -> mt.dayAgo(days)
+    }
     return when {
-        // No time for an area (19.11.2026): when someone entered a cell would say more than the cell does.
-        shared.isArea -> if (town != null) mt.inArea(town) else mt.areaUnknown
+        shared.isArea -> (if (town != null) mt.inArea(town) else mt.areaUnknown) + " · " + mt.dayAgo(days)
         town != null -> mt.atPlace(town, ago)
         else -> mt.exactNoPlace(ago)
     }
@@ -182,7 +193,8 @@ internal fun MapScreen(
     val ownImage by controller.ownImage.collectAsState()
     val focus by controller.mapFocus.collectAsState()
     // The map opens where the phone is or was last (20.11.2026): the whole country is much more to draw.
-    val camera = remember { MapCamera().apply { start = controller.placeSharer?.lastOwn() } }
+    // Coming back from another page the map is where the person left it (20.11.2026).
+    val camera = remember { MapMemory.camera ?: MapCamera().apply { start = controller.placeSharer?.lastOwn() }.also { MapMemory.camera = it } }
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     // Opened from the map icon of a chat: this circle as the filter.
     val asked by controller.mapCircle.collectAsState()
@@ -209,18 +221,20 @@ internal fun MapScreen(
     val shown = people.filter { it.deviceId != null && (filter == null || filter in it.circleIds) }
     val active = remember(areaAlerts, now) { activeAlerts(areaAlerts, now) }
     val warnings = remember(active) { active.flatMap { a -> a.area.map { MapWarning(it.take(5), a.priority) } }.distinct() }
+    // Everything paused (20.11.2026): the map steps back, the others stand where they were last known.
+    val pausedAll by (controller.locationSharing?.paused ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
     val markers = buildList {
         for (p in shown) {
             val s = places[p.deviceId]?.takeIf { it.untilMillis !in 1..now } ?: continue
-            val place = s.place ?: continue
-            add(MapMarker(p.peer, p.name, place.latitude, place.longitude, s.radiusMeters, stale = s.radiusMeters == null && now - place.atMillis > HOUR, image = p.image))
+            val place = s.place?.takeIf { !app.anynear.location.PlaceAge.gone(it.atMillis, nextLocalHour(now, 0)) } ?: continue
+            add(MapMarker(p.peer, p.name, place.latitude, place.longitude, s.radiusMeters, stale = pausedAll || s.radiusMeters == null && now - place.atMillis > HOUR, image = p.image))
         }
         focus?.let { add(MapMarker(FOCUS_MARKER, it.label, it.latitude, it.longitude, place = true)) }
         own?.let { add(MapMarker(OWN_MARKER, ownName.ifBlank { mt.you }, it.latitude, it.longitude, own = true, stale = now - it.atMillis > HOUR, image = ownImage)) }
     }
     // Once, when the first places are known: show them all.
     // Opened at the own place: stay there, close; showing everyone at once is the button „Alle zeigen“ (20.11.2026).
-    var fitted by remember { mutableStateOf(camera.start != null) }
+    var fitted by remember { mutableStateOf(camera.start != null || camera.scale > 0) }
     var locating by remember { mutableStateOf(false) }
     LaunchedEffect(markers.size, outlines) {
         if (!fitted && markers.isNotEmpty() && camera.width > 0f) {
@@ -267,6 +281,7 @@ internal fun MapScreen(
             if (o != null) {
                 MapView(o, camera, markers, warnings, kreisNames, packs = packs.values, ground = ground, onMarker = { id -> if (id != OWN_MARKER && id != FOCUS_MARKER) selected = id })
                 MapMarkers(controller, camera, markers) { id -> if (id != OWN_MARKER && id != FOCUS_MARKER) selected = id }
+                if (pausedAll) Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)))
                 Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     MapButton(AppIcons.Plus, mt.zoomIn) { camera.zoom(1.8f) }
                     MapButton(AppIcons.Minus, mt.zoomOut) { camera.zoom(1 / 1.8f) }
@@ -664,7 +679,8 @@ internal fun LevelDialog(
             levels.forEach { level ->
                 AppRow(
                     title = levelName(level), subtitle = levelText(level), trailing = { if (current == level) Icon(AppIcons.Haken, contentDescription = null) },
-                    onClick = { if (level.always) picked = level else onChoose(level, 0) },
+                    // A level has no end (ADR 0121 §24): sharing for a time is the action „Standort teilen“.
+                    onClick = { onChoose(level, 0) },
                 )
             }
             if (followLabel != null) AppRow(title = followLabel, trailing = { if (current == null) Icon(AppIcons.Haken, contentDescription = null) }, onClick = { onChoose(null, 0) })
@@ -677,6 +693,47 @@ internal fun LevelDialog(
             AppRow(title = mt.untilTonight, onClick = { onChoose(chosen, now + 8 * HOUR) })
             Text(mt.openOnly, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
         }
+    }
+}
+
+/**
+ * The phone's permission follows the level (ADR 0121 §24): as soon as a level needs more than the phone allows, the
+ * app says in a sentence what for and leads to the system's question. „Nur bei SOS“ needs the exact location while the
+ * app is used; „Ungefähr“ and „Genau“ need „Immer“, because they are brought up to date when the app is woken.
+ * Asked once per step; who says „Später“ finds the same under „Dein Handy“.
+ */
+@Composable
+internal fun PhonePermissionPrompt(sharing: LocationSharing) {
+    val mt = texts.map
+    val default by sharing.default.collectAsState()
+    val circles by sharing.circles.collectAsState()
+    val persons by sharing.persons.collectAsState()
+    val allowed by sharing.allowed.collectAsState()
+    val background by sharing.background.collectAsState()
+    val all = listOfNotNull(default) + circles.values + persons.values
+    val wantsAlways = all.any { it.always }
+    val wantsAny = all.any { it != ShareLevel.Off }
+    val phone = remember(allowed, background, wantsAlways, wantsAny) { sharing.phone() }
+    val missing = when {
+        wantsAlways && phone != LocationSharing.Phone.Always -> 2
+        wantsAny && (phone == LocationSharing.Phone.NotAllowed || phone == LocationSharing.Phone.SwitchedOff) -> 1
+        else -> 0
+    }
+    // What was asked already, for this visit of the page: a higher step asks again, the same one does not.
+    var asked by remember { mutableStateOf(0) }
+    if (missing > asked) {
+        AppDialog(
+            onDismissRequest = { asked = missing },
+            title = { Text(if (missing == 2) mt.needAlwaysTitle else mt.needLocationTitle) },
+            text = { Text(if (missing == 2) mt.needAlwaysText else mt.needLocationText) },
+            confirmButton = {
+                AppButton(mt.needAllow, {
+                    asked = missing
+                    sharing.fixPhone()
+                })
+            },
+            dismissButton = { AppButton(mt.needLater, { asked = missing }, kind = ButtonKind.Quiet) },
+        )
     }
 }
 
@@ -975,6 +1032,24 @@ internal fun LocationLevelRow(controller: AppController, name: String, circleId:
     }
 }
 
+/** „Dein Handy“ (ADR 0121 §24): what the phone allows right now and what follows from it; a tap leads to the way to change it. */
+@Composable
+internal fun PhoneLocationRow(sharing: LocationSharing) {
+    val mt = texts.map
+    val allowed by sharing.allowed.collectAsState()
+    val background by sharing.background.collectAsState()
+    val now = rememberMinute()
+    val phone = remember(allowed, background, now) { sharing.phone() }
+    val (title, text) = when (phone) {
+        LocationSharing.Phone.Always -> mt.phoneAlways to mt.phoneAlwaysText
+        LocationSharing.Phone.WhileOpen -> mt.phoneWhileOpen to mt.phoneWhileOpenText
+        LocationSharing.Phone.NotAllowed -> mt.phoneNotAllowed to mt.phoneNotAllowedText
+        LocationSharing.Phone.SwitchedOff -> mt.phoneOff to mt.phoneOffText
+    }
+    val ok = phone == LocationSharing.Phone.Always
+    AppRow(title = title, subtitle = text, icon = if (ok) AppIcons.Haken else AppIcons.Achtung, chevron = !ok, onClick = if (ok) null else ({ sharing.fixPhone() }))
+}
+
 /**
  * „Wer sieht mich?“ (ADR 0121 §4.5): everything at a glance, one line per circle and person, „Alles pausieren“ and
  * the device the location comes from.
@@ -1003,45 +1078,41 @@ internal fun WhoSeesMeScreen(controller: AppController, onBack: () -> Unit) {
         AppHeader(mt.whoSeesMe, leading = { HeaderBackButton(onBack) })
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Text(mt.whoSeesMeText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            PhonePermissionPrompt(sharing)
             AppSection {
                 AppRow(
                     title = mt.pauseAll, subtitle = if (paused) mt.pauseAllOn else mt.pauseAllOff, icon = AppIcons.Anhalten,
                     trailing = { Switch(checked = paused, onCheckedChange = sharing::setPaused) }, onClick = { sharing.setPaused(!paused) },
                 )
-                AppRow(title = mt.defaultRow, subtitle = levelName(default ?: ShareLevel.Off), icon = AppIcons.Karte, chevron = true, onClick = { editingDefault = true })
             }
-            // Where something else than the general setting holds, at a glance (19.11.2026).
-            AppSection(mt.ownSettings, footer = if (levels.isEmpty() && persons.isEmpty()) mt.ownSettingsNone else null) {
-                levels.forEach { (id, level) ->
-                    val c = circles.firstOrNull { it.id == id } ?: return@forEach
-                    AppRow(
-                        title = c.name, subtitle = levelName(level) + untilText("c:$id"),
-                        leading = { CircleAvatar(controller, c.id, c.image, 40.dp) }, chevron = true, onClick = { editing = id to true },
-                    )
-                }
-                persons.forEach { (id, level) ->
-                    val p = people.firstOrNull { it.deviceId == id } ?: return@forEach
-                    AppRow(
-                        title = p.name, subtitle = levelName(level) + untilText("p:$id"),
-                        leading = { PersonAvatar(controller, p.peer, p.image, 40.dp) }, chevron = true, onClick = { editing = id to false },
-                    )
-                }
+            // Three steps, each one going before the one above (20.11.2026): everyone, then a circle, then a person.
+            val base = levelName(default ?: ShareLevel.Off)
+            AppSection(mt.stepAll, footer = mt.stepAllFooter) {
+                AppRow(title = base, icon = AppIcons.Karte, chevron = true, onClick = { editingDefault = true })
             }
-            if (shownCircles.isNotEmpty()) AppSection(mt.circles) {
+            if (shownCircles.isNotEmpty()) AppSection(mt.stepCircles, footer = mt.stepCirclesFooter) {
                 shownCircles.forEach { c ->
+                    val own = levels[c.id]
                     AppRow(
-                        title = c.name, subtitle = levelName(sharing.level(c.id)) + untilText("c:${c.id}"),
+                        title = c.name, subtitle = if (own != null) levelName(own) + untilText("c:${c.id}") else mt.likeAll(base),
                         leading = { CircleAvatar(controller, c.id, c.image, 40.dp) }, chevron = true, onClick = { editing = c.id to true },
                     )
                 }
             }
             val withApp = people.filter { it.deviceId != null }
-            if (withApp.isNotEmpty()) AppSection(mt.persons) {
+            if (withApp.isNotEmpty()) AppSection(mt.stepPersons, footer = mt.stepPersonsFooter) {
                 withApp.forEach { p ->
                     val id = p.deviceId!!
-                    val level = sharing.levelFor(id, p.circleIds.filter { it != MemberDirectory.DIRECT_CONTACTS })
+                    val own = persons[id]
+                    val inCircles = p.circleIds.filter { it != MemberDirectory.DIRECT_CONTACTS }
+                    val level = levelName(sharing.levelFor(id, inCircles))
                     AppRow(
-                        title = p.name, subtitle = levelName(level) + (if (persons[id] != null) untilText("p:$id") else ""),
+                        title = p.name,
+                        subtitle = when {
+                            own != null -> levelName(own) + untilText("p:$id") + (if (sharing.agreed(id) != null) " · " + mt.mutualMark else "")
+                            inCircles.any { levels[it] != null } -> mt.likeCircles(level)
+                            else -> mt.likeAll(level)
+                        },
                         leading = { PersonAvatar(controller, p.peer, p.image, 40.dp) }, chevron = true, onClick = { editing = id to false },
                     )
                 }
@@ -1051,14 +1122,6 @@ internal fun WhoSeesMeScreen(controller: AppController, onBack: () -> Unit) {
                 val here = source == null || source == myDevice
                 AppRow(title = if (here) mt.sourceThis else mt.sourceOther, icon = AppIcons.Karte)
                 if (!here) AppRow(title = mt.sourceUseThis, icon = AppIcons.Haken, onClick = { sharing.setSource(myDevice) })
-                // The levels that share all the time go on after a restart of the phone only with „Immer“.
-                val background by sharing.background.collectAsState()
-                if (allowed && !background && (levels.values.any { it.always } || persons.values.any { it.always })) {
-                    AppRow(title = mt.alwaysTitle, subtitle = mt.alwaysText, icon = AppIcons.Karte, chevron = true, onClick = sharing::allowBackground)
-                }
-                if (!allowed && (default != ShareLevel.Off || levels.isNotEmpty() || persons.isNotEmpty())) {
-                    AppRow(title = texts.location.allowTitle, subtitle = texts.location.allowText, icon = AppIcons.Achtung, chevron = true, onClick = sharing::allow)
-                }
             }
         }
     }

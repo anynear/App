@@ -276,7 +276,7 @@ class LifeSigns(
 
     /** What the person lets [target] (a circle or a person, [targetOf]) see of its place. */
     private fun levelOf(target: String): ShareLevel? = sharing?.let { s ->
-        if (target.startsWith(PERSON_PREFIX)) target.removePrefix(PERSON_PREFIX).let { s.levelFor(it, circlesOf(it)) } else s.level(target)
+        if (target.startsWith(PERSON_PREFIX)) target.removePrefix(PERSON_PREFIX).let { s.levelFor(it, circlesOf(it), evenPaused = true) } else s.level(target)
     }
 
     // --- Place „wenn etwas ist“ (ADR 0121 §10) ------------------------------------------------
@@ -285,7 +285,8 @@ class LifeSigns(
     private var placeTriedAt = 0L
 
     /** Do the helpers in [circleId] see where the person is, if nobody confirms? */
-    fun sharesPlace(circleId: String): Boolean = sharing?.takeIf { !it.paused.value }?.let { levelOf(circleId) }.let { it != null && it != ShareLevel.Off }
+    // Also while everything is paused (20.11.2026): a check-in nobody confirms is a call for help, and that always goes.
+    fun sharesPlace(circleId: String): Boolean = sharing?.let { levelOf(circleId) }.let { it != null && it != ShareLevel.Off }
 
     /** Opens the place of someone else's check-in in the maps app of the system; only after a tap. */
     fun openMap(status: AliveStatus) {

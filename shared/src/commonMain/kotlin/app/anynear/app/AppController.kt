@@ -143,6 +143,7 @@ import app.anynear.mesh.SystemNote
 import app.anynear.mesh.Transport
 import app.anynear.mesh.ownReaction
 import app.anynear.mesh.previewText
+import app.anynear.mesh.spotLine
 import app.anynear.people.CircleMember
 import app.anynear.people.ContactNames
 import app.anynear.people.Member
@@ -300,6 +301,7 @@ class AppController(
         if (s.latitude != null && s.longitude != null) app.anynear.anmp.core.AlivePosition(s.latitude, s.longitude, s.atMillis, s.accuracyMeters) else null,
         s.label,
         s.untilMillis,
+        s.level,
     )
 
     /** A place the map shall show and lead to (ADR 0121 §8): set by a card in a chat, read by the tab „Karte“. */
@@ -324,6 +326,9 @@ class AppController(
     /** Why the own place could not be sent, so that the app says the right thing (ADR 0121 §8). */
     enum class PlaceSend { Sent, NotAllowed, LocationOff, Unknown, Failed }
 
+    /** How long [sendOwnPlace] waits for the person's answer to the system's question about the location. */
+    private val PLACE_PERMISSION_WAIT_MILLIS = 120_000L
+
     /**
      * Sends where this phone is into [conversation]: as a meeting point ([ChatSpot.MEET], with [label]) or as the
      * answer to „Wo bist du?“ ([ChatSpot.HERE]). Needs the exact location: without the permission the system is asked
@@ -336,8 +341,11 @@ class AppController(
             return PlaceSend.LocationOff
         }
         if (!sharing.allowed.value) {
+            // Asked right here (20.11.2026): once the person allows it, the place goes out without a second tap.
+            // Declined or left open, the answer is the hint as before.
             sharing.allow()
-            return PlaceSend.NotAllowed
+            val allowed = kotlinx.coroutines.withTimeoutOrNull(PLACE_PERMISSION_WAIT_MILLIS) { sharing.allowed.first { it } }
+            if (allowed != true) return PlaceSend.NotAllowed
         }
         val place = sharing.place() ?: return PlaceSend.Unknown
         val mt = app.anynear.i18n.texts.map
@@ -382,6 +390,48 @@ class AppController(
     /** „Aussteigen“: the circle is back at what it was before. */
     fun leaveSharing(circleId: String) {
         locationSharing?.setLevel(circleId, null)
+        scope.launch { placeSharer?.sync() }
+    }
+
+    /**
+     * „Standort gegenseitig teilen“ (ADR 0121 §28) with the person of [conversation]: from now on it sees the own place
+     * at [level], and is asked to show the same. `false` if that is not a person with anynear or nothing went out.
+     */
+    fun askMutualPlace(conversation: Conversation, level: app.anynear.location.ShareLevel): Boolean {
+        val id = (conversation as? Conversation.Direct)?.let { findPerson(it.peer)?.deviceId } ?: return false
+        val sharing = locationSharing ?: return false
+        val mt = app.anynear.i18n.texts.map
+        if (send(conversation, mt.mutualMessage, spot = ChatSpot(ChatSpot.SHARE, level = level.wire)) is SendResult.Rejected) return false
+        sharing.askMutual(id, level)
+        scope.launch { placeSharer?.sync() }
+        return true
+    }
+
+    /** The answer to [askMutualPlace] of the other person: [level] is what it sees from now on, `null` for no. */
+    fun answerMutualPlace(conversation: Conversation, level: app.anynear.location.ShareLevel?): Boolean {
+        val id = (conversation as? Conversation.Direct)?.let { findPerson(it.peer)?.deviceId } ?: return false
+        val sharing = locationSharing ?: return false
+        val mt = app.anynear.i18n.texts.map
+        if (send(conversation, if (level == null) mt.mutualNoMessage else mt.mutualYesMessage, spot = ChatSpot(ChatSpot.SHARED, level = level?.wire ?: 0)) is SendResult.Rejected) return false
+        if (level != null) {
+            sharing.agreeMutual(id, level)
+            scope.launch { placeSharer?.sync() }
+        }
+        return true
+    }
+
+    /** The own place was lowered below what both agreed on (ADR 0121 §28): the other side reads it in the chat. */
+    fun tellMutualLowered(personId: String, level: Int) {
+        val person = people.value.firstOrNull { it.deviceId == personId } ?: return
+        val mt = app.anynear.i18n.texts.map
+        send(Conversation.Direct(person.peer), if (level == 0) mt.mutualEndedMessage else mt.mutualLoweredMessage, spot = ChatSpot(ChatSpot.SHARED, level = level))
+        scope.launch { placeSharer?.sync() }
+    }
+
+    /** „Weiter zeigen“ on the card that says the other side lowered: the own place stays as it was, on its own. */
+    fun keepShowingPlace(conversation: Conversation) {
+        val id = (conversation as? Conversation.Direct)?.let { findPerson(it.peer)?.deviceId } ?: return
+        locationSharing?.keepShowing(id)
         scope.launch { placeSharer?.sync() }
     }
 
@@ -970,6 +1020,8 @@ class AppController(
 
     fun setInForeground(visible: Boolean) {
         inForeground.value = visible
+        // Opened: what the levels show of the own place is brought up to date (ADR 0121 §24).
+        if (visible) placeSharer?.touch()
         link.setInForeground(visible)
         // In the background, query each mailbox at only one relay and, without news, only again after a minute (battery).
         core.setBackground(!visible)
@@ -1444,7 +1496,7 @@ class AppController(
                 title = title,
                 isCircle = conversation is Conversation.Circle,
                 lines = (
-                    unread.map { MessageNotification.Line(senderLabel(it), it.previewText, it.timestampMillis, it.fromPeer, personImageBytes(it.fromPeer)) } +
+                    unread.map { MessageNotification.Line(senderLabel(it), it.spotLine ?: it.previewText, it.timestampMillis, it.fromPeer, personImageBytes(it.fromPeer)) } +
                         reactions.map {
                             MessageNotification.Line(peerName(it.reactor), texts.chat.reactedTo(it.emoji, it.targetText), it.timestampMillis, it.reactor, personImageBytes(it.reactor))
                         }
@@ -2561,7 +2613,11 @@ class AppController(
 
     private suspend fun onCoreEvent(event: CoreEvent) {
         when (event) {
-            is CoreEvent.Message -> onCoreMessage(event)
+            is CoreEvent.Message -> {
+                // Something came in, the app is awake anyway: a good moment for the own place (ADR 0121 §24).
+                placeSharer?.touch()
+                onCoreMessage(event)
+            }
             is CoreEvent.Reaction -> onCoreReaction(event)
             is CoreEvent.Deleted -> onCoreDeleted(event)
             is CoreEvent.Receipt -> event.mids.forEach { mid ->
@@ -2635,6 +2691,9 @@ class AppController(
             is CoreEvent.PlaceAsked -> Unit
             // Calls for the helpers (ADR 0083 §2): [app.anynear.sos.Sos] reads them from the core itself.
             is CoreEvent.SosChanged -> Unit
+            // Read by [app.anynear.sos.Sos].
+            is CoreEvent.SosAsked -> Unit
+            is CoreEvent.SosContactsChanged -> Unit
             is CoreEvent.Have -> onHave(event.hash, event.ref)
             is CoreEvent.ReadElsewhere -> {
                 val conversation = conversationOf(event.conversation)
@@ -2716,7 +2775,7 @@ class AppController(
             remoteId = e.mid,
             replyTo = replyRef(e.replyTo, e.replyFrom),
             passedOn = e.passedOn,
-            spot = e.spot?.let { sp -> ChatSpot(sp.kind, sp.position?.latitude, sp.position?.longitude, sp.position?.at ?: 0, sp.position?.accuracy, sp.label, sp.until) },
+            spot = e.spot?.let { sp -> ChatSpot(sp.kind, sp.position?.latitude, sp.position?.longitude, sp.position?.at ?: 0, sp.position?.accuracy, sp.label, sp.until, sp.level) },
             signed = e.opened?.let(b64::encode),
             space = e.space.ifEmpty { null },
             intro = e.intro?.let { ContactIntro(it.id, it.person, it.name, it.byPerson, it.until, it.card) },
@@ -2729,6 +2788,17 @@ class AppController(
         if (e.forwarded) e.mid?.let { core.confirmReceipt(e.fromDevice, it, AnmpArrived.INTERNET) }
         val read = !own && readOnArrival(conversation, message.timestampMillis)
         val added = messageStore.addOnline(e.objectId, message, read)
+        // The answer to „Standort gegenseitig teilen“ (ADR 0121 §28): after a no the own place goes back to what it was.
+        if (added && !own && conversation is Conversation.Direct) message.spot?.takeIf { it.kind == ChatSpot.SHARED }?.let { answer ->
+            findPerson(conversation.peer)?.deviceId?.let { id ->
+                // The answer to the own question, or the other side lowering later what both agreed on.
+                val sharing = locationSharing
+                if (sharing != null) {
+                    if (sharing.mutualOpen(id)) sharing.mutualAnswered(id, answer.level ?: 0) else sharing.remoteLowered(id, answer.level ?: 0)
+                }
+                scope.launch { placeSharer?.sync() }
+            }
+        }
         if (message.attachments.isNotEmpty() || message.link?.image != null) downloadWake.trySend(Unit)
         // A person that still asks to become a contact (ADR 0116): one notice for the request, none per message.
         if (added && !read && !e.fromRequest) onReceived(conversation)
@@ -3204,6 +3274,9 @@ class AppController(
     ): SendResult {
         var body = text.trim()
         if (body.isEmpty() && drafts.isEmpty()) return SendResult.Rejected(texts.status.messageEmpty)
+        // Sending is a moment the phone is in the hand anyway: the own place is brought up to date for those who see it
+        // (ADR 0121 §24).
+        placeSharer?.touch()
         if (drafts.size > AttachmentLimits.MAX_PER_MESSAGE) {
             return SendResult.Rejected(texts.status.tooManyAttachments(AttachmentLimits.MAX_PER_MESSAGE))
         }
@@ -3411,7 +3484,7 @@ class AppController(
             remoteId = e.mid,
             relayed = e.relayed,
             replyTo = replyRef(e.replyTo, e.replyFrom),
-            spot = e.spot?.let { sp -> ChatSpot(sp.kind, sp.position?.latitude, sp.position?.longitude, sp.position?.at ?: 0, sp.position?.accuracy, sp.label, sp.until) },
+            spot = e.spot?.let { sp -> ChatSpot(sp.kind, sp.position?.latitude, sp.position?.longitude, sp.position?.at ?: 0, sp.position?.accuracy, sp.label, sp.until, sp.level) },
         )
         if (!messageStore.addRadio(incoming, e.fromNode, e.packetKey)) return
         onReceived(conversation)

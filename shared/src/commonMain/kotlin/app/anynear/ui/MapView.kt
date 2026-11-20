@@ -69,6 +69,11 @@ internal data class MapWarning(val prefix: String, val priority: AlertPriority)
 
 /** Where the map looks: the centre in Mercator units (0…1) and how many pixels the whole world is wide. */
 @Stable
+/** The map of the app as the person left it (20.11.2026): coming back from another page it is where it was, not at the start. */
+internal object MapMemory {
+    var camera: MapCamera? = null
+}
+
 internal class MapCamera {
     var x by mutableStateOf((Outlines.GERMANY[0] + Outlines.GERMANY[2]) / 2.0)
     var y by mutableStateOf((Outlines.GERMANY[1] + Outlines.GERMANY[3]) / 2.0)
@@ -140,8 +145,8 @@ internal class MapCamera {
     companion object {
         const val EARTH = 40_075_016.686
 
-        /** At most about 2 m per pixel: the borders are no more exact than that. */
-        private const val MAX_SCALE = 1.3e7
+        /** Down to about 30 cm per pixel (20.11.2026): close enough to read the names of streets. */
+        private const val MAX_SCALE = 8.0e7
 
         /** A single place is shown about 12 km wide. */
         private const val MIN_SPAN = 0.0003
@@ -323,7 +328,8 @@ private fun renderMap(want: MapWanted, margin: Float, measurer: TextMeasurer, de
         drawTiles(listOfNotNull(world) + far + region + near, camera, view, mpp, scheme.surface, scheme.onSurfaceVariant, land)
         drawWarnings(outlines, camera, view, mpp, warnings, c.alarm, c.alarm)
         if (mpp < GERMAN_BORDERS_BELOW) drawBorders(outlines, camera, view, mpp, scheme.onSurfaceVariant.copy(alpha = if (region.isEmpty()) 0.8f else 0.4f), quiet = far.isNotEmpty())
-        (near + region + far.reversed() + listOfNotNull(world)).forEach { drawPackNames(it, camera, view, mpp, measurer, scheme.onSurface, scheme.surface, taken, german) }
+        // The big names first, so that they win the room: cities, then the places of the region, then quarters.
+        (far.reversed() + region + near + listOfNotNull(world)).forEach { drawPackNames(it, camera, view, mpp, measurer, scheme.onSurface, scheme.surface, taken, german) }
         // The names of districts and municipalities only where nothing better is there.
         if (ground.isEmpty() && region.isEmpty()) drawNames(outlines, camera, view, mpp, kreisNames, measurer, scheme.onSurfaceVariant)
         drawAreas(camera, mpp, markers, measurer, BrandPalette.Signalorange, scheme.onSurface)
@@ -480,7 +486,7 @@ private fun roadFrom(kind: Int): Double = when (kind) {
 private fun tone0(ground: Color, edge: Color, share: Float) = androidx.compose.ui.graphics.lerp(ground, edge, share)
 
 private fun roadWidth(kind: Int, mpp: Double): Float {
-    val close = if (mpp < 3) 1.6f else if (mpp < 9) 1.2f else if (mpp < 18) 0.7f else if (mpp < 40) 0.55f else 0.45f
+    val close = if (mpp < 0.7) 4.2f else if (mpp < 1.4) 2.8f else if (mpp < 3) 1.6f else if (mpp < 9) 1.2f else if (mpp < 18) 0.7f else if (mpp < 40) 0.55f else 0.45f
     return close * when (kind) {
         MapPack.MOTORWAY -> 4f
         MapPack.MAIN -> 3.2f
@@ -563,11 +569,13 @@ private fun DrawScope.drawTiles(packs: List<MapPack>, camera: MapCamera, view: R
 }
 
 private fun DrawScope.drawPackNames(p: MapPack, camera: MapCamera, view: Rect, mpp: Double, measurer: TextMeasurer, color: Color, halo: Color, taken: ArrayList<Rect>, german: Boolean) {
-    fun put(text: String, x: Float, y: Float, style: TextStyle): Boolean {
+    fun put(text: String, x: Float, y: Float, style: TextStyle, room: Float = 4f): Boolean {
         val layout = measurer.measure(text, style, maxLines = 1)
         val at = Offset(x - layout.size.width / 2f, y - layout.size.height / 2f)
         val box = Rect(at, Size(layout.size.width.toFloat(), layout.size.height.toFloat())).inflate(3.dp.toPx())
-        if (box.left < 0 || box.top < 0 || box.right > size.width || box.bottom > size.height || taken.any { it.overlaps(box) }) return false
+        // Room around a name (20.11.2026): names side by side hid the map itself.
+        val free = box.inflate(room.dp.toPx())
+        if (box.left < 0 || box.top < 0 || box.right > size.width || box.bottom > size.height || taken.any { it.overlaps(free) }) return false
         taken += box
         drawRoundRect(halo.copy(alpha = 0.6f), box.topLeft, box.size, androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
         drawText(layout, color, at)
@@ -588,22 +596,27 @@ private fun DrawScope.drawPackNames(p: MapPack, camera: MapCamera, view: Rect, m
             // Cities of the world once a continent fills the screen, not on the whole globe.
             isWorld -> mpp < 12_000
             kind == MapPack.CITY -> true
-            // Towns of the maps of the app only closer; places of a tile always.
-            else -> p.level != 0 || mpp < 180
+            // Towns of the maps of the app only closer. Places of a tile only once they have room (20.11.2026):
+            // towns and villages of the region from about 6 km across the screen per name, quarters closer still.
+            p.level == 0 -> mpp < 120
+            p.level == MapPack.REGION -> mpp < 45
+            else -> mpp < 10
         }
         if (!show) continue
         val x = p.shapes[i][0]
         val y = p.shapes[i][1]
         if (x < view.left || x > view.right || y < view.top || y > view.bottom) continue
         val name = p.name(i)?.let { MapPack.localName(it, german) } ?: continue
-        put(name, sx(camera, x), sy(camera, y), if (kind == MapPack.COUNTRY) countryStyle else if (kind == MapPack.CITY) cityStyle else placeStyle)
+        // The further out, the more room a name keeps free around itself.
+        put(name, sx(camera, x), sy(camera, y), if (kind == MapPack.COUNTRY) countryStyle else if (kind == MapPack.CITY) cityStyle else placeStyle, room = if (mpp > 40) 26f else if (mpp > 8) 16f else 8f)
     }
-    if (mpp > 3 || p.level == 0) return
+    // Names of roads once one is close: main roads first, the streets of a quarter closer still.
+    if (mpp > 8 || p.level == 0) return
     val seen = HashSet<Int>()
     for (i in p.size - 1 downTo 0) {
         val kind = p.kinds[i].toInt()
         if (kind >= MapPack.PLACE || kind == MapPack.PATH || kind == MapPack.RAIL || MapPack.isArea(kind) && kind != MapPack.WATER) continue
-        if (kind == MapPack.STREET && mpp > 1.5) continue
+        if (kind == MapPack.STREET && mpp > 2.5 || kind == MapPack.SIDE && mpp > 5) continue
         val id = p.nameOf[i]
         if (id == 0 || id in seen) continue
         val b = 4 * i

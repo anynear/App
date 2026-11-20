@@ -115,7 +115,7 @@ internal class SettingsSync(
             "files.find.watch_notice",
             // Postponed notices, chosen circle
             "notification_hint_postponed_until", "bluetooth_hint_postponed_until", "background_hint_postponed_until",
-            "location_hint_postponed_until", "location_sent", "location_escort", "location_roll_call", "sos_shown", "location_presence", "location_last_own", "location_visits", "location_places_declined",
+            "location_hint_postponed_until", "location_sent", "location_escort", "location_roll_call", "sos_shown", "sos_asks_told", "location_presence", "location_last_own", "location_visits", "location_places_declined",
             "selected_circle",
         )
     }

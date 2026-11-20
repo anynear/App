@@ -67,11 +67,8 @@ internal fun LocationSection(controller: AppController) {
             trailing = { Switch(checked = on, onCheckedChange = ::set) },
             onClick = { set(!on) },
         )
-        // Someone sees the place, but this device may not read it exactly: say so and offer the way to the system.
-        val anyOn = on || shown.any { (overrides[it.id] ?: default) == ShareLevel.WhenNeeded }
-        if (anyOn && !allowed) {
-            AppRow(title = lt.allowTitle, subtitle = lt.allowText, icon = AppIcons.Achtung, chevron = true, onClick = sharing::allow)
-        }
+        // What this phone allows and what follows from it (20.11.2026): here, not on „Wer sieht mich?“.
+        PhoneLocationRow(sharing)
     }
 }
 

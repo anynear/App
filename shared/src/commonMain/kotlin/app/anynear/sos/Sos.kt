@@ -8,7 +8,9 @@ import app.anynear.anmp.core.AlivePosition
 import app.anynear.anmp.core.AliveStatus
 import app.anynear.anmp.core.AnmpCore
 import app.anynear.anmp.core.CoreEvent
+import app.anynear.anmp.core.SosAsk
 import app.anynear.anmp.core.SosCall
+import app.anynear.anmp.core.SosContact
 import app.anynear.app.PlatformHooks
 import app.anynear.data.KeyValueStore
 import app.anynear.data.ObservedKeyValueStore
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -41,6 +44,29 @@ interface SosSource {
     suspend fun end(id: String): Boolean
 
     suspend fun care(id: String): Boolean
+
+    // Contacts for calls need a yes, once (ADR 0121 §25).
+
+    /** A person whenever something about the contacts changed: asked, answered, taken back. */
+    val contactChanges: Flow<String> get() = kotlinx.coroutines.flow.emptyFlow()
+
+    /** Whom the own person asked, and what they said. */
+    fun contacts(): List<SosContact> = emptyList()
+
+    /** Who asked us and has no answer yet. */
+    fun asks(): List<SosAsk> = emptyList()
+
+    /** Whose calls we agreed to be woken for. */
+    fun agreed(): List<String> = emptyList()
+
+    suspend fun ask(circleIds: List<String>, personIds: List<String>): Boolean = false
+
+    suspend fun answer(person: String, agree: Boolean): Boolean = false
+
+    suspend fun forget(person: String): Boolean = false
+
+    /** Returns once what is stored is loaded: before that the lists above are empty, although something is known. */
+    suspend fun ready() = Unit
 }
 
 /** [SosSource] on the ANMP core. */
@@ -60,6 +86,27 @@ class CoreSosSource(private val core: AnmpCore) : SosSource {
     override suspend fun end(id: String): Boolean = core.endSos(id)
 
     override suspend fun care(id: String): Boolean = core.careSos(id)
+
+    override val contactChanges: Flow<String> = kotlinx.coroutines.flow.merge(
+        core.events.filterIsInstance<CoreEvent.SosContactsChanged>().map { it.person },
+        core.events.filterIsInstance<CoreEvent.SosAsked>().map { it.person },
+    )
+
+    override fun contacts(): List<SosContact> = core.sosContacts()
+
+    override fun asks(): List<SosAsk> = core.sosAsks()
+
+    override fun agreed(): List<String> = core.sosAgreed()
+
+    override suspend fun ask(circleIds: List<String>, personIds: List<String>): Boolean = core.askSosContacts(circleIds, personIds)
+
+    override suspend fun answer(person: String, agree: Boolean): Boolean = core.answerSosAsk(person, agree)
+
+    override suspend fun forget(person: String): Boolean = core.forgetSosContact(person)
+
+    override suspend fun ready() {
+        core.identity.first { it != null }
+    }
 }
 
 /** Who is called: circles and single persons (ADR 0121 §13, „deine Helfer“). */
@@ -125,8 +172,77 @@ class Sos(
     /** Where this phone was, the newest last, for the trail of a call. Stays on the phone until a call is raised. */
     private val trail = ArrayDeque<Place>()
 
+    private val _contacts = MutableStateFlow(source.contacts())
+
+    /** Whom the own person asked to be its SOS contact, and what they said (ADR 0121 §25). */
+    val contacts: StateFlow<List<SosContact>> = _contacts.asStateFlow()
+
+    private val _asks = MutableStateFlow(source.asks())
+
+    /** Who asks us to be its SOS contact and has no answer yet. */
+    val asks: StateFlow<List<SosAsk>> = _asks.asStateFlow()
+
+    private val _agreed = MutableStateFlow(source.agreed())
+
+    /** Whose calls this phone rings for: only theirs. A call of anyone else is shown without the alarm. */
+    val agreed: StateFlow<List<String>> = _agreed.asStateFlow()
+
+    private fun refreshContacts() {
+        _contacts.value = source.contacts()
+        _asks.value = source.asks()
+        _agreed.value = source.agreed()
+        // Asked for the first time: a quiet notice, the answer is given in the app.
+        val told = store.getString(KEY_ASKS_TOLD)?.split(',')?.toSet().orEmpty()
+        val open = _asks.value.map { it.person }
+        for (person in open) if (person !in told) {
+            hooks.showAlertNotification(
+                AlertNotification(
+                    key = "sos-ask/$person", channelId = ASK_CHANNEL, channelName = texts.sos.title, title = texts.sos.askTitle(name(person)), text = texts.sos.askNotice,
+                    priority = AlertPriority.Info, loudness = AlertLoudness.Normal, sound = AlertSound.Hint, timestampMillis = now(),
+                ),
+            )
+        }
+        // Answered, here or on another device: the notice has nothing left to say.
+        if (open.isEmpty() && told.isNotEmpty()) hooks.cancelAlertNotifications(ASK_CHANNEL)
+        if (open.toSet() != told) store.putString(KEY_ASKS_TOLD, open.takeLast(40).joinToString(",").takeIf { it.isNotEmpty() })
+    }
+
+    /** Asks everyone chosen who was not asked yet; the core leaves out who has an answer or was asked before. */
+    private fun askContacts() {
+        val to = _helpers.value
+        if (to.isEmpty) return
+        scope.launch { runCatching { source.ask(to.circles.toList(), to.persons.toList()) } }
+    }
+
+    private val _later = MutableStateFlow(setOf<String>())
+
+    /** Questions the person put off with „Später“: not asked again by themselves until the app starts anew. */
+    val later: StateFlow<Set<String>> = _later.asStateFlow()
+
+    fun askLater(person: String) { _later.value = _later.value + person }
+
+    /** Shows the question of [person] again, from the list of open questions. */
+    fun askNow(person: String) { _later.value = _later.value - person }
+
+    /** The own answer to [person], also later to take a yes back. */
+    suspend fun answer(person: String, agree: Boolean): Boolean = source.answer(person, agree).also { refreshContacts() }
+
+    /** How many of those asked said yes. */
+    fun agreedCount(): Int = _contacts.value.count { it.state == SosContact.AGREED }
+
     fun start() {
         scope.launch { source.changes.collect { refresh() } }
+        scope.launch { source.contactChanges.collect { refreshContacts() } }
+        // Once the core has loaded what it knows: the calls, the open questions and whose calls ring here. Read earlier,
+        // the lists are empty, and after a restart a call of someone this person said yes to would stay quiet
+        // (found on a tablet, 20.11.2026).
+        scope.launch {
+            source.ready()
+            refresh()
+            refreshContacts()
+            // Everyone chosen who has no answer yet is asked; the core leaves out who was asked a short while ago.
+            askContacts()
+        }
         (store as? ObservedKeyValueStore)?.let { observed ->
             scope.launch { observed.changes.collect { if (it == KEY_HELPERS) _helpers.value = readHelpers() } }
         }
@@ -188,8 +304,17 @@ class Sos(
     fun helperCount(call: SosCall): Int = maxOf((call.circles.flatMap(membersOf) + call.persons).toSet().size, call.arrived.size)
 
     fun setHelpers(helpers: SosHelpers) {
+        val before = _helpers.value
         store.putString(KEY_HELPERS, (helpers.circles.map { "c:$it" } + helpers.persons.map { "p:$it" }).sorted().joinToString(",").takeIf { it.isNotEmpty() })
         _helpers.value = helpers
+        // Who is no longer chosen is forgotten as a contact; who is new gets the question (ADR 0121 §25).
+        val still = (helpers.circles.flatMap(membersOf) + helpers.persons).toSet()
+        val gone = (before.circles.flatMap(membersOf) + before.persons).toSet() - still
+        scope.launch {
+            gone.forEach { runCatching { source.forget(it) } }
+            refreshContacts()
+        }
+        askContacts()
     }
 
     /** Opens the page: for calling, or the running own call. */
@@ -330,7 +455,7 @@ class Sos(
             val parts = e.split('|')
             if (parts.size == 3) rings[parts[0]] = Pair(parts[1].toIntOrNull() ?: 0, parts[2].toLongOrNull() ?: 0L)
         }
-        val open = _calls.value.filter { !it.own && !it.ended && it.caring.isEmpty() }
+        val open = _calls.value.filter { !it.own && !it.ended && it.caring.isEmpty() && it.owner in _agreed.value }
         val next = HashMap<String, Pair<Int, Long>>()
         for (call in open) {
             // Counted from the first alarm, which the phone showed when the call came.
@@ -386,7 +511,9 @@ class Sos(
                     val volume = loudnessOf(call)
                     // A check-in someone already looks after („Ich schaue nach“ after the hint) does not ring loudly any more.
                     val quiet = call.plan != null && call.caring.isNotEmpty()
-                    if (volume != LifeSignLoudness.Off) notify(call, title, text, loud = volume == LifeSignLoudness.Loud && !quiet)
+                    // Only for someone this person said yes to (ADR 0121 §25): any other call is shown, quietly.
+                    val agreedTo = call.owner in _agreed.value
+                    if (volume != LifeSignLoudness.Off) notify(call, title, text, loud = volume == LifeSignLoudness.Loud && !quiet && agreedTo)
                     firstRing[call.id] = now()
                     alarmed += call.id
                 }
@@ -433,6 +560,10 @@ class Sos(
 
         /** Device setting: calls whose alarm was shown here. */
         const val KEY_SHOWN = "sos_shown"
+
+        /** Device setting: whose question to be an SOS contact this phone already announced. */
+        const val KEY_ASKS_TOLD = "sos_asks_told"
+        private const val ASK_CHANNEL = "sos-ask"
         private const val RAISE_TRIES = 12
         private const val RAISE_RETRY_MILLIS = 5_000L
 

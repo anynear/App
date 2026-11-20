@@ -49,6 +49,7 @@ import app.anynear.mesh.Conversation
 import app.anynear.mesh.FoundDevice
 import app.anynear.mesh.PublicChannel
 import app.anynear.mesh.previewText
+import app.anynear.mesh.spotLine
 import kotlin.time.Clock
 import kotlinx.coroutines.launch
 
@@ -516,14 +517,7 @@ private fun ChatListEntry.preview(loading: HistoryLoading): String {
         else -> texts.chat.noMessagesYet
     }
     // A place (ADR 0121 §8): what the card says, not the stand-in text with its link for older apps.
-    val shown = message.spot?.let { spot ->
-        when (spot.kind) {
-            app.anynear.mesh.ChatSpot.MEET -> spot.label?.let { texts.map.spotMeetText(it) } ?: texts.map.spotMeet
-            app.anynear.mesh.ChatSpot.ASK -> texts.map.spotAsk
-            app.anynear.mesh.ChatSpot.ALL -> texts.map.shareAll
-            else -> if (message.outgoing) texts.map.spotHereOwn else texts.location.settingsTitle
-        }
-    } ?: message.previewText
+    val shown = message.spotLine ?: message.previewText
     return lastSender?.let { "$it: $shown" } ?: shown
 }
 

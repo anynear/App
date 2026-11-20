@@ -132,8 +132,9 @@ class LocationSharing(
      * the most any of its circles gives. Seeing the place all the time through a circle needs the ok for this person
      * ([approved]); without it the person stays at „wenn etwas ist“.
      */
-    fun levelFor(personId: String, circleIds: List<String>): ShareLevel {
-        if (_paused.value) return ShareLevel.Off
+    fun levelFor(personId: String, circleIds: List<String>, evenPaused: Boolean = false): ShareLevel {
+        // [evenPaused]: what holds for a call for help, which goes also while everything is paused.
+        if (_paused.value && !evenPaused) return ShareLevel.Off
         held("p:$personId", _persons.value[personId])?.let { return it }
         val most = circleIds.map(::level).maxByOrNull { it.wire } ?: _default.value ?: ShareLevel.Off
         return if (most.always && personId !in _approved.value) ShareLevel.WhenNeeded else most
@@ -153,22 +154,152 @@ class LocationSharing(
     /** Asks the system for „Immer“; only offered where a level shares all the time. */
     fun allowBackground() = hooks.requestBackgroundLocation()
 
+    /** What this phone lets the app do with the location, in the order of what is missing first. */
+    enum class Phone { SwitchedOff, NotAllowed, WhileOpen, Always }
+
+    /**
+     * The state of the phone's own setting (ADR 0121 §24): the levels in anynear say what goes out, this says whether
+     * the phone plays along. [Phone.WhileOpen]: actions the person starts in the app work, what is shared for good
+     * only updates while the app is open.
+     */
+    fun phone(): Phone = when {
+        !hooks.locationServicesOn() -> Phone.SwitchedOff
+        !allowed.value -> Phone.NotAllowed
+        !background.value -> Phone.WhileOpen
+        else -> Phone.Always
+    }
+
+    /** The next step towards [Phone.Always] from where the phone stands: the system's question or its settings. */
+    fun fixPhone() = when (phone()) {
+        Phone.SwitchedOff -> hooks.openLocationSettings()
+        Phone.NotAllowed -> allow()
+        Phone.WhileOpen -> allowBackground()
+        Phone.Always -> Unit
+    }
+
     /**
      * Says that a place leaves the phone for [reason] right now, with [text] for the person to see; `null` ends it.
      * While it holds, the phone keeps locating with the app in the background, and the system shows that it does.
      */
     fun inUse(reason: String, text: String?) = hooks.setLocationInUse(reason, text)
 
-    /** Places the system delivers while [inUse] holds. */
+    /** The system reports clear moves of the phone while [on] ([app.anynear.app.PlatformHooks.watchMoves]). */
+    fun watchMoves(on: Boolean) = hooks.watchMoves(on)
+
+    /** Places the system delivers while [inUse] or [watchMoves] holds. */
     val placeUpdates: kotlinx.coroutines.flow.Flow<Place> get() = hooks.placeUpdates
 
-    /** Sets what [personId] sees, apart from its circles; `null`: follow the circles again. [untilMillis] > 0 limits it. */
-    fun setPersonLevel(personId: String, level: ShareLevel?, untilMillis: Long = 0) {
-        val next = if (level == null) _persons.value - personId else _persons.value + (personId to level)
+    /**
+     * Sets what [personId] sees, apart from its circles; `null`: follow the circles again. [untilMillis] > 0 limits it.
+     * Lowering it below what both agreed on ends or lowers the agreement for both ([onMutualLowered], ADR 0121 §28).
+     * [quiet]: a step of the app itself (a sharing for a time, an answer), which tells nobody; a `null` then goes back
+     * to what both agreed on, if anything.
+     */
+    fun setPersonLevel(personId: String, level: ShareLevel?, untilMillis: Long = 0, quiet: Boolean = false) {
+        val set = level ?: agreed(personId).takeIf { quiet }
+        val next = if (set == null) _persons.value - personId else _persons.value + (personId to set)
         writeMap(KEY_PERSONS, next)
         _persons.value = next
         setUntil("p:$personId", untilMillis.takeIf { level != null } ?: 0)
-        if (level != null && level != ShareLevel.Off) askSystem(level)
+        if (set != null && set != ShareLevel.Off) askSystem(set)
+        if (quiet) return
+        store.putString(KEY_KEPT + personId, null)
+        val agreed = agreed(personId) ?: return
+        val shown = set?.takeIf { it.always }
+        if ((shown?.wire ?: 0) >= agreed.wire) return
+        // The person lowers what it shows: the agreement holds at most that from now on, and the other side is told.
+        setAgreed(personId, shown)
+        if (shown == null) store.putString(KEY_MUTUAL + personId, null)
+        runCatching { onMutualLowered(personId, shown?.wire ?: 0) }
+    }
+
+    /**
+     * The person lowered what it shows [personId] below what both agreed on; the level it shows now, 0 for nothing. The
+     * app tells the other side, which then shows the same.
+     */
+    var onMutualLowered: (personId: String, level: Int) -> Unit = { _, _ -> }
+
+    /** What the person and [personId] agreed to show each other (ADR 0121 §28), or `null`. */
+    fun agreed(personId: String): ShareLevel? = store.getString(KEY_AGREED + personId)?.let { id -> ShareLevel.entries.firstOrNull { it.id == id } }
+
+    private fun setAgreed(personId: String, level: ShareLevel?) = store.putString(KEY_AGREED + personId, level?.id)
+
+    private fun before(personId: String): ShareLevel? = store.getString(KEY_MUTUAL + personId)?.let { id -> ShareLevel.entries.firstOrNull { it.id == id } }
+
+    private fun rememberBefore(personId: String) {
+        if (store.getString(KEY_MUTUAL + personId) == null) store.putString(KEY_MUTUAL + personId, _persons.value[personId]?.id ?: MUTUAL_NONE)
+    }
+
+    /**
+     * „Standort gegenseitig teilen“ (ADR 0121 §28): the person shows [personId] its place at [level] from now on and
+     * asks for the same. What held before is kept, to go back to after a no ([mutualAnswered]).
+     */
+    fun askMutual(personId: String, level: ShareLevel) {
+        rememberBefore(personId)
+        store.putString(KEY_OPEN + personId, "1")
+        approve(listOf(personId))
+        setPersonLevel(personId, level, quiet = true)
+    }
+
+    /**
+     * [personId] answered the own question with [level] (wire value, 0 for no): after a no the person shows what it
+     * showed before asking; after a yes to less than asked it shows that, too.
+     */
+    fun mutualAnswered(personId: String, level: Int) {
+        if (!mutualOpen(personId)) return
+        store.putString(KEY_OPEN + personId, null)
+        val to = ShareLevel.entries.firstOrNull { it.wire == level && it.always }
+        if (to == null) {
+            val back = before(personId)
+            store.putString(KEY_MUTUAL + personId, null)
+            setAgreed(personId, null)
+            setPersonLevel(personId, back, quiet = true)
+            return
+        }
+        setAgreed(personId, to)
+        if ((_persons.value[personId]?.wire ?: 0) > to.wire) setPersonLevel(personId, to, quiet = true)
+    }
+
+    /** `true` while the own question to [personId] has no answer yet. */
+    fun mutualOpen(personId: String): Boolean = store.getString(KEY_OPEN + personId) != null
+
+    /** The person says yes to the question of [personId], at [level]: both show each other that from now on. */
+    fun agreeMutual(personId: String, level: ShareLevel) {
+        rememberBefore(personId)
+        approve(listOf(personId))
+        setAgreed(personId, level)
+        setPersonLevel(personId, level, quiet = true)
+    }
+
+    /**
+     * [personId] lowered what it shows to [level] (wire value, 0 for nothing): the person shows the same from now on,
+     * so that nobody gives without getting. What it showed is kept for „Weiter zeigen“ ([keepShowing]). `false` if
+     * there was no agreement above [level].
+     */
+    fun remoteLowered(personId: String, level: Int): Boolean {
+        val agreed = agreed(personId) ?: return false
+        val to = ShareLevel.entries.firstOrNull { it.wire == level && it.always }
+        if ((to?.wire ?: 0) >= agreed.wire) return false
+        _persons.value[personId]?.let { store.putString(KEY_KEPT + personId, it.id) }
+        setAgreed(personId, to)
+        if (to == null) {
+            val back = before(personId)
+            store.putString(KEY_MUTUAL + personId, null)
+            setPersonLevel(personId, back, quiet = true)
+        } else if ((_persons.value[personId]?.wire ?: 0) > to.wire) {
+            setPersonLevel(personId, to, quiet = true)
+        }
+        return true
+    }
+
+    /** What the person showed [personId] before the other side lowered, while „Weiter zeigen“ is on offer. */
+    fun kept(personId: String): ShareLevel? = store.getString(KEY_KEPT + personId)?.let { id -> ShareLevel.entries.firstOrNull { it.id == id } }
+
+    /** „Weiter zeigen“: the person shows [personId] again what it showed, on its own. */
+    fun keepShowing(personId: String) {
+        val level = kept(personId) ?: return
+        store.putString(KEY_KEPT + personId, null)
+        setPersonLevel(personId, level, quiet = true)
     }
 
     /** The answer to „Tom ist neu in „Familie“. Soll er sehen, wo du bist?“ (ADR 0121 §5), also for everyone at once. */
@@ -179,10 +310,18 @@ class LocationSharing(
         if (!yes) personIds.forEach { if (it !in _persons.value) setPersonLevel(it, ShareLevel.WhenNeeded) }
     }
 
+    /**
+     * „Alles pausieren“ (20.11.2026): nothing goes out, silently, so the others keep what they saw last; and nothing
+     * new of the others is shown either, so that nobody watches without being seen.
+     */
     fun setPaused(paused: Boolean) {
+        store.putString(KEY_PAUSED_AT, if (paused) now().toString() else null)
         store.putString(KEY_PAUSED, if (paused) "1" else null)
         _paused.value = paused
     }
+
+    /** Since when everything is paused, ms; 0 if it is not. */
+    fun pausedAt(): Long = if (_paused.value) store.getString(KEY_PAUSED_AT)?.toLongOrNull() ?: 0 else 0
 
     /** „Mein Standort kommt von: diesem Handy“ (ADR 0121 §4.6). */
     fun setSource(deviceId: String?) {
@@ -273,12 +412,18 @@ class LocationSharing(
 
         /** Person setting: `1` while everything is paused. */
         const val KEY_PAUSED = "location.share.paused"
+        private const val KEY_PAUSED_AT = "location.share.paused_at"
 
         /** Person setting: device ID of the own device whose location counts. */
         const val KEY_SOURCE = "location.share.source"
 
         /** Person setting: person IDs that may see the place all the time through a circle. */
         const val KEY_APPROVED = "location.share.approved"
+        private const val KEY_MUTUAL = "location_mutual_"
+        private const val KEY_OPEN = "location_mutual_open_"
+        private const val KEY_AGREED = "location_agreed_"
+        private const val KEY_KEPT = "location_kept_"
+        private const val MUTUAL_NONE = "-"
 
         /** Device setting: until when the question is postponed. */
         const val KEY_POSTPONED = "location_hint_postponed_until"

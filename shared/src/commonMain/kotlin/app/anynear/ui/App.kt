@@ -297,11 +297,13 @@ private fun MainScreen(controller: AppController) {
                 return@let
             }
             // Check-ins (ADR 0083) are on the map (ADR 0121 §1), not in a channel.
-            tab = if (it.startsWith(LifeSigns.CHANNEL_PREFIX)) Tab.Map else Tab.Alerts
+            // Someone asks to see the place (ADR 0121 §26): the answer is given on the map.
+            val place = it == app.anynear.location.PlaceSharer.ASK_CHANNEL
+            tab = if (it.startsWith(LifeSigns.CHANNEL_PREFIX) || place) Tab.Map else Tab.Alerts
             open = null
             openPublic = null
             newMessage = false
-            details = if (it.startsWith(LifeSigns.CHANNEL_PREFIX)) emptyList() else listOf(Detail.AlertChannel(it))
+            details = if (it.startsWith(LifeSigns.CHANNEL_PREFIX) || place) emptyList() else listOf(Detail.AlertChannel(it))
             // Question or ongoing notification tapped: straight to the big button.
             if (it.startsWith(LifeSigns.CHANNEL_PREFIX)) controller.lifeSigns?.openFullScreen()
             alerts?.consumeOpenRequest()

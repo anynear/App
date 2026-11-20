@@ -221,6 +221,8 @@ data class ChatSpot(
     val label: String? = null,
     /** [ALL]: until when everyone who joins shares, ms. */
     val untilMillis: Long? = null,
+    /** [SHARE]: the level asked for; [SHARED]: the level agreed to, 0 for no (wire values of the levels). */
+    val level: Int? = null,
 ) {
     companion object {
         const val MEET = 1
@@ -229,6 +231,15 @@ data class ChatSpot(
 
         /** „Alle teilen“ (ADR 0121 §13): an invitation to share in the circle until [untilMillis]. */
         const val ALL = 4
+
+        /** „Angekommen“ (ADR 0121 §26): the sender arrived where it was going; the place and, if it has one, its name. */
+        const val ARRIVED = 5
+
+        /** „Standort gegenseitig teilen“ (ADR 0121 §28): the sender asks that both see each other for good, at [level]. */
+        const val SHARE = 6
+
+        /** The answer to [SHARE]. */
+        const val SHARED = 7
     }
 }
 
@@ -310,6 +321,27 @@ val ChatMessage.awaitsAttachments: Boolean
 /** This is how the message goes out over radio: text with announcement of the attachments. */
 val ChatMessage.radioText: String
     get() = RadioAnnouncement.radioText(text, attachments.map { it.kind }, voiceMillis)
+
+/**
+ * What a message with a place says in the overview and in a notification (ADR 0121 §26): what the card says, not the
+ * stand-in text with its link for older apps. `null` without a place.
+ */
+val ChatMessage.spotLine: String?
+    get() = spot?.let { spotLineOf(it.kind, it.label, outgoing) }
+
+/** [spotLine] for a place of the kind [kind] with the name [label]; also for the wake-up without the running app. */
+fun spotLineOf(kind: Int, label: String?, outgoing: Boolean): String {
+    val mt = app.anynear.i18n.texts.map
+    return when (kind) {
+        ChatSpot.MEET -> label?.let { mt.spotMeetText(it) } ?: mt.spotMeet
+        ChatSpot.ASK -> mt.spotAsk
+        ChatSpot.ALL -> mt.shareAll
+        ChatSpot.ARRIVED -> if (outgoing) mt.arrivedOwn else mt.noticeArrived(label)
+        ChatSpot.SHARE -> mt.mutualNotice
+        ChatSpot.SHARED -> mt.mutualAnswerNotice
+        else -> if (outgoing) mt.spotHereOwn else mt.noticeHere
+    }
+}
 
 /** Short form for overview and notification: text, otherwise the attachments („📎 Bild“, „🎤 Sprachnachricht 0:42“). */
 val ChatMessage.previewText: String

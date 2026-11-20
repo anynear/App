@@ -32,6 +32,8 @@ class PlaceSharerTest {
         override val preciseLocationAllowed: StateFlow<Boolean> = MutableStateFlow(true)
         override suspend fun currentPlace(): Place? = place
         val inUse = mutableMapOf<String, String>()
+        var watching = false
+        override fun watchMoves(on: Boolean) { watching = on }
         override fun setLocationInUse(reason: String, text: String?) { if (text == null) inUse.remove(reason) else inUse[reason] = text }
     }
 
@@ -41,7 +43,8 @@ class PlaceSharerTest {
         val sent = mutableListOf<Sent>()
         override val changes = MutableSharedFlow<String>()
         override val asks = MutableSharedFlow<String>()
-        override fun places(): List<SharedPlace> = emptyList()
+        var shared = listOf<SharedPlace>()
+        override fun places(): List<SharedPlace> = shared
         override suspend fun share(personId: String, level: ShareLevel, place: Place?, radiusMeters: Int?, untilMillis: Long, label: String?, sinceMillis: Long): Boolean {
             sent += Sent(personId, level, place, radiusMeters, untilMillis, label, sinceMillis)
             return true
@@ -137,13 +140,18 @@ class PlaceSharerTest {
         assertEquals(t + 3_600_000L, s.source.sent.last().until)
         assertNotNull(s.source.sent.last().place)
 
+        // Paused: nothing goes out, not even that it is paused; Anna keeps what she saw last.
+        val quiet = s.source.sent.size
         s.sharing.setPaused(true)
+        s.hooks.place = Place(50.2000, 8.7000, t, 10)
         s.sharer.sync()
-        assertEquals(ShareLevel.Off, s.source.sent.last().level)
-        assertNull(s.source.sent.last().place)
+        assertEquals(quiet, s.source.sent.size)
+        assertNull(s.sharer.riding("anna", radio = true))
+        // Going on: she gets the place as it is now.
         s.sharing.setPaused(false)
         s.sharer.sync()
         assertEquals(ShareLevel.Exact, s.source.sent.last().level)
+        assertEquals(50.2000, s.source.sent.last().place?.latitude)
 
         // The hour is over: back to the default by itself.
         t += 3_600_001L
@@ -309,5 +317,133 @@ class PlaceSharerTest {
         // An old place does not ride along.
         t += 30 * 60_000L
         assertNull(s.sharer.riding("anna", radio = true))
+    }
+
+    /** 20.11.2026: who pauses everything does not watch the others either; they stand where they were last known. */
+    @Test
+    fun whilePausedNothingNewOfTheOthersIsShown() = runTest {
+        val s = setup(listOf(anna))
+        s.sharer.start()
+        s.source.shared = listOf(SharedPlace("anna", ShareLevel.Exact, Place(50.10, 8.60, t, 10), atMillis = t))
+        s.source.changes.emit("anna")
+        assertEquals(50.10, s.sharer.places.value["anna"]?.place?.latitude)
+
+        s.sharing.setPaused(true)
+        t += 60_000L
+        s.source.shared = listOf(SharedPlace("anna", ShareLevel.Exact, Place(50.30, 8.60, t, 10), atMillis = t), SharedPlace("tom", ShareLevel.Exact, Place(50.40, 8.60, t, 10), atMillis = t))
+        s.source.changes.emit("anna")
+        // Anna stays where she was, and Tom, who came after pausing, does not show at all.
+        assertEquals(50.10, s.sharer.places.value["anna"]?.place?.latitude)
+        assertNull(s.sharer.places.value["tom"])
+
+        // Going on shows what came in since.
+        s.sharing.setPaused(false)
+        assertEquals(50.30, s.sharer.places.value["anna"]?.place?.latitude)
+        assertNotNull(s.sharer.places.value["tom"])
+    }
+
+    /** 20.11.2026: what was known when pausing is still there after the app was closed and opened again. */
+    @Test
+    fun whatWasKnownWhenPausingSurvivesARestart() = runTest {
+        val store = ObservedKeyValueStore(InMemoryStore())
+        var sharing: LocationSharing? = null
+        fun start(source: Source): PlaceSharer {
+            val own = LocationSharing(CoroutineScope(Dispatchers.Unconfined), store, Hooks()) { t }
+            sharing = own
+            return PlaceSharer(CoroutineScope(Dispatchers.Unconfined), source, own, store, ownDeviceId = { "handy" }, now = { t }).also {
+                it.targets = { listOf(anna) }
+                it.start()
+            }
+        }
+        val source = Source().apply { shared = listOf(SharedPlace("anna", ShareLevel.Exact, Place(50.10, 8.60, t, 10), atMillis = t, label = "Zuhause")) }
+        start(source)
+        sharing!!.setPaused(true)
+
+        // Closed and opened again while paused; Anna moved in the meantime.
+        t += 600_000L
+        val later = Source().apply { shared = listOf(SharedPlace("anna", ShareLevel.Exact, Place(50.30, 8.60, t, 10), atMillis = t)) }
+        val again = start(later)
+        assertEquals(50.10, again.places.value["anna"]?.place?.latitude)
+        assertEquals("Zuhause", again.places.value["anna"]?.label)
+    }
+
+    /** 20.11.2026: at rest the hourly check stretches to six hours; a move brings it back to one. */
+    @Test
+    fun atRestTheHourlyCheckStretches() {
+        val hour = PlaceSharer.IDLE_MILLIS
+        var gap = hour
+        gap = PlaceSharer.nextIdleGap(gap, moved = false, quiet = true)
+        assertEquals(2 * hour, gap)
+        gap = PlaceSharer.nextIdleGap(gap, moved = false, quiet = true)
+        gap = PlaceSharer.nextIdleGap(gap, moved = false, quiet = true)
+        assertEquals(PlaceSharer.IDLE_MAX_MILLIS, gap)
+        // Opening the app at the same place changes nothing about it.
+        assertEquals(gap, PlaceSharer.nextIdleGap(gap, moved = false, quiet = false))
+        // Moved: hourly again.
+        assertEquals(hour, PlaceSharer.nextIdleGap(gap, moved = true, quiet = true))
+    }
+
+    /** ADR 0121 §24: the system reports moves only while someone sees the place for good, and not while paused. */
+    @Test
+    fun movesAreWatchedOnlyWhileSomeoneSeesThePlaceForGood() = runTest {
+        val s = setup(listOf(anna))
+        s.sharing.answer(ShareLevel.WhenNeeded)
+        s.sharer.sync()
+        assertTrue(!s.hooks.watching)
+        s.sharing.setPersonLevel("anna", ShareLevel.Area)
+        s.sharer.sync()
+        assertTrue(s.hooks.watching)
+        s.sharing.setPaused(true)
+        s.sharer.sync()
+        assertTrue(!s.hooks.watching)
+        s.sharing.setPaused(false)
+        s.sharer.sync()
+        assertTrue(s.hooks.watching)
+        s.sharing.setPersonLevel("anna", ShareLevel.WhenNeeded)
+        s.sharer.sync()
+        assertTrue(!s.hooks.watching)
+    }
+
+    /** ADR 0121 §24: a level alone never keeps the phone locating; only an action with an end does. */
+    @Test
+    fun onlyAnActionKeepsLocatingALevelIsBroughtUpToDateWhenSomethingHappens() = runTest {
+        val s = setup(listOf(anna))
+        s.sharing.answer(ShareLevel.WhenNeeded)
+        s.sharing.setPersonLevel("anna", ShareLevel.Exact)
+        s.sharer.sync()
+        // Anna sees the place, but nothing runs in the background and the system shows no notification.
+        assertNotNull(s.source.sent.last { it.person == "anna" }.place)
+        assertTrue(!s.sharer.live())
+        assertTrue(s.hooks.inUse.isEmpty())
+
+        // Moved, and nothing happens: Anna keeps the old place.
+        val count = s.source.sent.size
+        s.hooks.place = Place(50.1500, 8.6850, t, 10)
+        assertEquals(count, s.source.sent.size)
+        // The app is opened or a message goes out: now she gets the new one, once.
+        s.sharer.touch()
+        assertEquals(count + 1, s.source.sent.size)
+        s.hooks.place = Place(50.2000, 8.6850, t, 10)
+        s.sharer.touch()
+        assertEquals(count + 1, s.source.sent.size)
+        t += PlaceSharer.TOUCH_GAP_MILLIS
+        s.sharer.touch()
+        assertEquals(count + 2, s.source.sent.size)
+
+        // The phone had no place when the app was opened: that try does not count, the next one goes out at once.
+        t += PlaceSharer.TOUCH_GAP_MILLIS
+        s.hooks.place = null
+        s.sharer.touch()
+        val without = s.source.sent.size
+        s.hooks.place = Place(50.3000, 8.6850, t, 10)
+        s.sharer.touch()
+        assertEquals(without + 1, s.source.sent.size)
+        assertNotNull(s.source.sent.last { it.person == "anna" }.place)
+
+        // Sharing for an hour is an action: the phone keeps locating and says so.
+        s.sharing.setPersonLevel("anna", ShareLevel.Exact, untilMillis = t + 3_600_000L)
+        s.sharer.sync()
+        assertTrue(s.sharer.live())
+        assertTrue(s.hooks.inUse.isNotEmpty())
     }
 }
