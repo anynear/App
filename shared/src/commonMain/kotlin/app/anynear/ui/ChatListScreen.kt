@@ -88,7 +88,10 @@ internal fun ChatListScreen(
     var requestsOpen by rememberSaveable { mutableStateOf(false) }
     val uiScope = rememberCoroutineScope()
     // The search covers the name and the last message, the way the row shows them.
+    // Circles live here since the tab „Kreise“ is the map (ADR 0121 §1): a filter replaces the list of circles.
+    var kind by rememberSaveable { mutableStateOf(0) }
     val shown = entries.filter { matchesSearch(query, it.title, it.preview(loading)) }
+        .filter { kind == 0 || (kind == 1) == (it.conversation is Conversation.Circle) }
     // While searching, also circles and contacts without a conversation yet (ADR 0100 §2): otherwise one would think
     // the person is gone. Tapping opens the conversation, like „Neue Nachricht“.
     val circleMembers by controller.circleMembers.collectAsState()
@@ -113,13 +116,26 @@ internal fun ChatListScreen(
                 0 -> null
                 else -> texts.chat.newMessages(unread)
             },
+            // Also in the ⋮ menu (ADR 0121 §1); the visible button stays, it is the main task of the page.
+            menu = listOf(
+                MenuAction(texts.map.newMessage, AppIcons.Nachrichten, onNewMessage),
+                MenuAction(texts.map.newCircle, AppIcons.Kreis) { creating = true },
+            ),
         )
+        // A running call for the helpers, the own one or one of someone we help (ADR 0083 §2).
         // New device or back from the emergency card: the messages are still coming (ADR 0107 §8).
         if (loading.any) HistoryStrip(texts.status.messagesLoading)
         Box(Modifier.weight(1f).fillMaxWidth()) {
             Column(Modifier.fillMaxSize()) {
                 if (entries.isNotEmpty() || people.isNotEmpty() || circles.isNotEmpty()) {
                     SearchField(query, { query = it }, texts.chat.search, Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp))
+                }
+                if (entries.any { it.conversation is Conversation.Circle } && entries.any { it.conversation !is Conversation.Circle }) {
+                    Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(texts.map.filterAll, texts.map.filterCircles, texts.map.filterPeople).forEachIndexed { i, label ->
+                            androidx.compose.material3.FilterChip(selected = kind == i, onClick = { kind = i }, label = { Text(label) })
+                        }
+                    }
                 }
                 if (shown.isEmpty() && moreCircles.isEmpty() && morePeople.isEmpty() && query.isNotBlank()) NoSearchResults()
                 LazyColumn(
@@ -499,7 +515,16 @@ private fun ChatListEntry.preview(loading: HistoryLoading): String {
         loading.has(conversation) -> texts.chat.loadingMessages
         else -> texts.chat.noMessagesYet
     }
-    return lastSender?.let { "$it: ${message.previewText}" } ?: message.previewText
+    // A place (ADR 0121 §8): what the card says, not the stand-in text with its link for older apps.
+    val shown = message.spot?.let { spot ->
+        when (spot.kind) {
+            app.anynear.mesh.ChatSpot.MEET -> spot.label?.let { texts.map.spotMeetText(it) } ?: texts.map.spotMeet
+            app.anynear.mesh.ChatSpot.ASK -> texts.map.spotAsk
+            app.anynear.mesh.ChatSpot.ALL -> texts.map.shareAll
+            else -> if (message.outgoing) texts.map.spotHereOwn else texts.location.settingsTitle
+        }
+    } ?: message.previewText
+    return lastSender?.let { "$it: $shown" } ?: shown
 }
 
 /** Whether the messages of [conversation] are still coming on this device (ADR 0107 §8). */

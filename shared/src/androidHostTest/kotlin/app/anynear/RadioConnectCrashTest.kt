@@ -89,7 +89,11 @@ class RadioConnectCrashTest {
             throw CancellationException("connect aborted by the transport")
         }
         override suspend fun disconnect() {
-            inner.value = TransportState.Disconnected
+            // A state the SDK cannot have passed on before (a new exception each time). StateFlow only passes on what
+            // differs from the last value: if the SDK passed on the initial „Disconnected“ and then missed „Connecting“
+            // (its coroutine was slower than the engine, as on a busy CI machine), a final „Disconnected“ would never
+            // be sent, and the test would wait in vain.
+            inner.value = TransportState.Error(IllegalStateException("disconnected"), recoverable = false)
         }
         override suspend fun send(frame: Frame) = Unit
         override fun frames(): Flow<Frame> = flow { awaitCancellation() }

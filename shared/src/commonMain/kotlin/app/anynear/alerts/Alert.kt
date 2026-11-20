@@ -123,11 +123,29 @@ enum class AlertSound(val file: String) {
      * nobody is startled who is watching someone else at the same time. Not selectable for channels.
      */
     Question("frage"),
+
+    /**
+     * A person calls its helpers (ADR 0083 §2, ADR 0121 §14): urgent and unlike every other sound, so that one knows
+     * without looking that a person calls. Not selectable for channels.
+     */
+    Sos("sos"),
+
+    /** A calmer warning for own and shared channels, next to [Alarm]. Not for curated channels. */
+    Warning("warnung"),
     ;
 
     companion object {
         /** Default: curated channels “Amtlich”, own and shared ones “Alarm”. */
         fun defaultFor(curated: Boolean) = if (curated) Official else Alarm
+
+        /**
+         * The sounds a person may choose for a channel (19.11.2026): the official one only for curated channels,
+         * the calmer warning only for own and shared ones; [Sos] and [Question] for no channel.
+         */
+        fun choicesFor(curated: Boolean): List<AlertSound> = if (curated) listOf(Official, Alarm, Hint) else listOf(Alarm, Warning, Hint)
+
+        /** [chosen] if the channel may have it, otherwise its default, e.g. an own channel that was set to „Amtlich“ before. */
+        fun allowedFor(curated: Boolean, chosen: AlertSound): AlertSound = chosen.takeIf { it in choicesFor(curated) } ?: defaultFor(curated)
     }
 }
 

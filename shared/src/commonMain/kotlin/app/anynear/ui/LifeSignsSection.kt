@@ -154,7 +154,7 @@ private fun OwnCard(lifeSigns: LifeSigns, s: AliveStatus, now: Long, onConfirm: 
     Surface(shape = MaterialTheme.shapes.medium, color = container, contentColor = content, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                listOf(s.plan.label, lifeSigns.circle(s.plan.circleId)).filter { it.isNotBlank() }.joinToString(" · "),
+                listOf(s.plan.label, lifeSigns.circle(LifeSigns.targetOf(s.plan))).filter { it.isNotBlank() }.joinToString(" · "),
                 style = MaterialTheme.typography.labelMedium,
             )
             if (asking) {
@@ -171,6 +171,13 @@ private fun OwnCard(lifeSigns: LifeSigns, s: AliveStatus, now: Long, onConfirm: 
             if (s.notArriving) Text(lt.notArriving, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             if (s.looking.isNotEmpty()) Text(lt.lookingBy(s.looking.joinToString(", ") { lifeSigns.name(it) }), style = MaterialTheme.typography.bodyMedium)
             if (s.away.isNotEmpty()) Text(lt.awayBy(s.away.joinToString(", ") { lifeSigns.name(it) }), style = MaterialTheme.typography.bodyMedium)
+            // Honest about the place too (ADR 0121 §10): from when the one is that would go along, or that there is none.
+            if (lifeSigns.sharesPlace(LifeSigns.targetOf(s.plan))) {
+                Text(
+                    s.plan.position?.let { lt.ownPlaceShared(formatDayAndTime(it.at, now)) } ?: lt.ownPlaceUnknown,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                 AppButton(lt.allGood, onConfirm, Modifier.weight(1f), kind = if (asking) ButtonKind.Main else ButtonKind.Primary, icon = AppIcons.Haken)
                 AppButton(lt.done, onEnd, Modifier.weight(1f), kind = ButtonKind.Secondary)
@@ -191,10 +198,10 @@ private fun WatchedCard(lifeSigns: LifeSigns, s: AliveStatus, now: Long) {
         else -> MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
     }
     val meAway = lifeSigns.meAway(s)
-    var loudness by remember(s.plan.circleId) { mutableStateOf(lifeSigns.loudness(s.plan.circleId)) }
+    var loudness by remember(LifeSigns.targetOf(s.plan)) { mutableStateOf(lifeSigns.loudness(LifeSigns.targetOf(s.plan))) }
     Surface(shape = MaterialTheme.shapes.medium, color = container, contentColor = content, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(lifeSigns.circle(s.plan.circleId), style = MaterialTheme.typography.labelMedium)
+            Text(lifeSigns.circle(LifeSigns.targetOf(s.plan)), style = MaterialTheme.typography.labelMedium)
             val title = when (s.phase) {
                 AliveStatus.ALARM -> if (s.reason == AliveStatus.REASON_MISSED) lt.missedTitle(who) else lt.unreachableTitle(who)
                 AliveStatus.HINT -> if (s.reason == AliveStatus.REASON_MISSED) lt.missedTitle(who) else lt.hintTitle(who)
@@ -211,6 +218,15 @@ private fun WatchedCard(lifeSigns: LifeSigns, s: AliveStatus, now: Long) {
             )
             if (meAway) Text(lt.awayActive, style = MaterialTheme.typography.bodyMedium)
             if (s.looking.isNotEmpty()) Text(lt.lookingBy(s.looking.joinToString(", ") { lifeSigns.name(it) }), style = MaterialTheme.typography.bodyMedium)
+            // The place that came with „nicht bestätigt“ (ADR 0121 §10), with its time and how accurate it is.
+            s.plan.position?.let { place ->
+                Text(
+                    listOfNotNull(lt.placeFrom(formatDayAndTime(place.at, now)), place.accuracy?.let { lt.placeAccuracy(formatAccuracy(it)) }).joinToString(", "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                AppButton(lt.showOnMap, { lifeSigns.openMap(s) }, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                 if (s.phase == AliveStatus.HINT || s.phase == AliveStatus.ALARM) {
                     AppButton(lt.looking, { scope.launch { lifeSigns.care(s.plan.id, AnmpCareState.LOOKING) } }, Modifier.weight(1f), kind = ButtonKind.Main)
@@ -232,7 +248,7 @@ private fun WatchedCard(lifeSigns: LifeSigns, s: AliveStatus, now: Long) {
                             selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                         ),
                         onClick = {
-                            lifeSigns.setLoudness(s.plan.circleId, v)
+                            lifeSigns.setLoudness(LifeSigns.targetOf(s.plan), v)
                             loudness = v
                         },
                         label = { Text(when (v) { LifeSignLoudness.Loud -> lt.loud; LifeSignLoudness.Normal -> lt.normal; LifeSignLoudness.Off -> lt.off }) },
@@ -244,14 +260,33 @@ private fun WatchedCard(lifeSigns: LifeSigns, s: AliveStatus, now: Long) {
 }
 
 @Composable
-private fun StartDialog(lifeSigns: LifeSigns, circles: List<Circle>, onDismiss: () -> Unit, onCreateCircle: () -> Unit) {
+private fun StartDialog(lifeSigns: LifeSigns, circles: List<Circle>, onDismiss: () -> Unit, onCreateCircle: () -> Unit) =
+    LifeSignStartDialog(lifeSigns, circles, onDismiss, onCreateCircle)
+
+/**
+ * Starting a check-in (ADR 0083 §5.1). From the map the person chooses the circle. From the „+“ of a conversation
+ * (ADR 0121 §13, §23) it is settled where it goes: [fixedCircle], or [fixedPerson] (person ID) with [fixedName] for a
+ * check-in that goes to that one person.
+ */
+@Composable
+internal fun LifeSignStartDialog(
+    lifeSigns: LifeSigns,
+    circles: List<Circle>,
+    onDismiss: () -> Unit,
+    onCreateCircle: () -> Unit = {},
+    fixedCircle: String? = null,
+    fixedPerson: String? = null,
+    fixedName: String = "",
+) {
     val lt = texts.lifeSigns
-    val usable = circles
+    val fixed = fixedCircle != null || fixedPerson != null
+    val usable = if (fixed) circles.filter { it.id == fixedCircle } else circles
     var template by remember { mutableStateOf(LifeSignTemplate.Work) }
-    var circleId by remember { mutableStateOf(lifeSigns.preselect(usable)) }
+    var circleId by remember { mutableStateOf(fixedCircle ?: lifeSigns.preselect(usable)) }
     var hours by remember { mutableStateOf(2) }
     var minutes by remember { mutableStateOf(30) }
     var busy by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     AppDialog(
         onDismissRequest = onDismiss,
@@ -260,7 +295,7 @@ private fun StartDialog(lifeSigns: LifeSigns, circles: List<Circle>, onDismiss: 
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 // The explanation stood under the start button before; since starting is in the ⋮ menu it is here (ADR 0101).
                 Text(lt.intro, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (usable.isEmpty()) {
+                if (usable.isEmpty() && fixedPerson == null) {
                     // No circle yet: straight to creating one (afterwards its chat opens with „Lade jemanden ein“).
                     Text(lt.noCircle)
                     AppButton(lt.createCircle, onCreateCircle, Modifier.fillMaxWidth(), kind = ButtonKind.Main, icon = AppIcons.Plus)
@@ -293,8 +328,10 @@ private fun StartDialog(lifeSigns: LifeSigns, circles: List<Circle>, onDismiss: 
                         listOf(15, 30, 60, 120).forEach { m -> FilterChip(minutes == m, { minutes = m }, label = { Text("$m") }) }
                     }
                 }
-                Text(lt.goesTo, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
-                usable.forEach { c ->
+                if (fixed) {
+                    Text(lt.goesToOne(fixedName), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                } else Text(lt.goesTo, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
+                if (!fixed) usable.forEach { c ->
                     Row(Modifier.fillMaxWidth().clickable { circleId = c.id }, verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = circleId == c.id, onClick = { circleId = c.id })
                         val known = lifeSigns.helpersOf(c.id).size
@@ -302,18 +339,19 @@ private fun StartDialog(lifeSigns: LifeSigns, circles: List<Circle>, onDismiss: 
                     }
                 }
                 Text(lt.notEmergency, style = MaterialTheme.typography.bodySmall)
+                if (failed) Text(lt.startFailed, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             }
         },
         confirmButton = {
-            if (usable.isNotEmpty()) AppButton(lt.startNow, {
-                val id = circleId ?: return@AppButton
+            if (usable.isNotEmpty() || fixedPerson != null) AppButton(lt.startNow, {
+                val id = circleId ?: if (fixedPerson != null) "" else return@AppButton
                 busy = true
                 scope.launch {
-                    val ok = lifeSigns.start(template, id, hours, minutes)
+                    val ok = lifeSigns.start(template, id, hours, minutes, person = fixedPerson)
                     busy = false
-                    if (ok) onDismiss()
+                    if (ok) onDismiss() else failed = true
                 }
-            }, enabled = circleId != null && !busy && usable.isNotEmpty())
+            }, enabled = (circleId != null || fixedPerson != null) && !busy)
         },
         dismissButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
     )
@@ -336,7 +374,7 @@ private fun FullScreenCheckIn(lifeSigns: LifeSigns, s: AliveStatus, now: Long, o
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(listOf(s.plan.label, lifeSigns.circle(s.plan.circleId)).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.titleMedium)
+                    Text(listOf(s.plan.label, lifeSigns.circle(LifeSigns.targetOf(s.plan))).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.titleMedium)
                     Text(
                         if (asking) lt.askNow else lt.nextQuestion(formatFutureDayAndTime(s.plan.due, now)),
                         style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,

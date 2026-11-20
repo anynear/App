@@ -74,6 +74,32 @@ interface LifeSignTexts {
     val off: String
     val exactAlarmHint: String
     val exactAlarmAllow: String
+    fun placeIncluded(time: String): String
+    fun placeFrom(time: String): String
+    fun placeAccuracy(distance: String): String
+    val showOnMap: String
+    fun ownPlaceShared(time: String): String
+    val ownPlaceUnknown: String
+
+    // The card of a check-in in the chat of its circle.
+    fun cardOwn(until: String): String
+    fun cardOf(name: String, until: String): String
+    fun cardLabel(label: String): String
+    fun cardRunning(time: String): String
+    fun cardNext(time: String): String
+    val cardAsk: String
+    val cardHint: String
+    val cardMissed: String
+    val cardUnreachable: String
+    val cardEnded: String
+    val cardTimedOut: String
+    val cardAway: String
+    val cardOpen: String
+
+    // Started from the „+“ of a conversation, also for one person (ADR 0121 §23).
+    val startInChat: String
+    fun goesToOne(name: String): String
+    val startFailed: String
 }
 
 internal object LifeSignTextsDe : LifeSignTexts {
@@ -146,6 +172,30 @@ internal object LifeSignTextsDe : LifeSignTexts {
     override val off = "Aus"
     override val exactAlarmHint = "Damit Fragen und Warnungen pünktlich kommen, braucht anynear die Erlaubnis für Wecker."
     override val exactAlarmAllow = "Erlauben"
+    override fun placeIncluded(time: String) = "Der Standort von $time ist dabei."
+    override fun placeFrom(time: String) = "Standort von $time"
+    override fun placeAccuracy(distance: String) = "auf etwa $distance genau"
+    override val showOnMap = "Auf Karte zeigen"
+    override fun ownPlaceShared(time: String) = "Antwortest du nicht, sehen deine Helfer deinen Standort von $time."
+    override val ownPlaceUnknown = "Antwortest du nicht, sehen deine Helfer deinen Standort. Gerade kennt dein Handy ihn nicht."
+
+    override fun cardOwn(until: String) = "Dein Lebenszeichen bis $until"
+    override fun cardOf(name: String, until: String) = "$name · Lebenszeichen bis $until"
+    override fun cardLabel(label: String) = "„$label“"
+    override fun cardRunning(time: String) = "Läuft · zuletzt alles gut um $time"
+    override fun cardNext(time: String) = "Nächste Frage: $time"
+    override val cardAsk = "Alles gut? Bitte bestätigen."
+    override val cardHint = "Noch nicht bestätigt"
+    override val cardMissed = "Nicht bestätigt. Die Helfer sind gewarnt."
+    override val cardUnreachable = "Nicht erreichbar. Die Helfer sind gewarnt."
+    override val cardEnded = "Beendet, alles gut"
+    override val cardTimedOut = "Ohne Abschluss beendet"
+    override val cardAway = "Du passt gerade nicht mit auf."
+    override val cardOpen = "Ansehen"
+
+    override val startInChat = "Lebenszeichen starten"
+    override fun goesToOne(name: String) = "Geht an: $name"
+    override val startFailed = "Das ging nicht raus. Prüf deine Verbindung und versuch es noch einmal."
 }
 
 internal object LifeSignTextsEn : LifeSignTexts {
@@ -218,4 +268,28 @@ internal object LifeSignTextsEn : LifeSignTexts {
     override val off = "Off"
     override val exactAlarmHint = "So questions and warnings come on time, anynear needs permission for alarms."
     override val exactAlarmAllow = "Allow"
+    override fun placeIncluded(time: String) = "The location from $time is included."
+    override fun placeFrom(time: String) = "Location from $time"
+    override fun placeAccuracy(distance: String) = "accurate to about $distance"
+    override val showOnMap = "Show on map"
+    override fun ownPlaceShared(time: String) = "If you don't answer, your helpers see your location from $time."
+    override val ownPlaceUnknown = "If you don't answer, your helpers see your location. Right now your phone doesn't know it."
+
+    override fun cardOwn(until: String) = "Your check-in until $until"
+    override fun cardOf(name: String, until: String) = "$name · check-in until $until"
+    override fun cardLabel(label: String) = "“$label”"
+    override fun cardRunning(time: String) = "Running · last all good at $time"
+    override fun cardNext(time: String) = "Next question: $time"
+    override val cardAsk = "All good? Please confirm."
+    override val cardHint = "Not confirmed yet"
+    override val cardMissed = "Not confirmed. The helpers have been warned."
+    override val cardUnreachable = "Can't be reached. The helpers have been warned."
+    override val cardEnded = "Ended, all good"
+    override val cardTimedOut = "Ended without closing"
+    override val cardAway = "You aren't watching right now."
+    override val cardOpen = "Open"
+
+    override val startInChat = "Start a check-in"
+    override fun goesToOne(name: String) = "Goes to: $name"
+    override val startFailed = "That didn't go out. Check your connection and try again."
 }

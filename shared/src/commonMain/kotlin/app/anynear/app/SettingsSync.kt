@@ -95,6 +95,9 @@ internal class SettingsSync(
             "alerts.settings",
             "radio_charge_reminder",
             "files.sort",
+            // Who sees the own location (ADR 0121 §10): asked once per person, not per device
+            "location.share", "location.share.circles", "location.share.persons", "location.share.until", "location.share.paused",
+            "location.share.source", "location.share.approved", "sos.helpers", "location.places",
         )
 
         /** Bound to one device, in the network under its device ID. */
@@ -112,6 +115,7 @@ internal class SettingsSync(
             "files.find.watch_notice",
             // Postponed notices, chosen circle
             "notification_hint_postponed_until", "bluetooth_hint_postponed_until", "background_hint_postponed_until",
+            "location_hint_postponed_until", "location_sent", "location_escort", "location_roll_call", "sos_shown", "location_presence", "location_last_own", "location_visits", "location_places_declined",
             "selected_circle",
         )
     }

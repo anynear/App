@@ -76,6 +76,7 @@ interface SetupTexts {
     val tabChats: String
     val tabContacts: String
     val tabCircles: String
+    val tabMap: String
     val tabSettings: String
     /** Read-aloud text on the tab „Nachrichten“: „3 neue Nachrichten“ */
     fun newMessages(n: Int): String
@@ -265,6 +266,7 @@ internal object SetupTextsDe : SetupTexts {
     override val tabChats = "Nachrichten"
     override val tabContacts = "Kontakte"
     override val tabCircles = "Kreise"
+    override val tabMap = "Karte"
     override val tabSettings = "Einstellungen"
     override fun newMessages(n: Int) = if (n == 1) "1 neue Nachricht" else "$n neue Nachrichten"
 
@@ -441,6 +443,7 @@ internal object SetupTextsEn : SetupTexts {
     override val tabChats = "Messages"
     override val tabContacts = "Contacts"
     override val tabCircles = "Circles"
+    override val tabMap = "Map"
     override val tabSettings = "Settings"
     override fun newMessages(n: Int) = if (n == 1) "1 new message" else "$n new messages"
 

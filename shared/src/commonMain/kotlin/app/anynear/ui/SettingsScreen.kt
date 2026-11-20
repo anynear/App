@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalUriHandler
 import app.anynear.AppConfig
 import app.anynear.app.AppController
 import app.anynear.mesh.Conversation
@@ -43,6 +44,8 @@ import app.anynear.app.AppUpdateState
 import app.anynear.app.BackgroundRestriction
 import app.anynear.app.RelayState
 import app.anynear.i18n.texts
+import app.anynear.i18n.Language
+import app.anynear.i18n.currentLanguage
 import app.anynear.mesh.DeviceSetupCheck
 import app.anynear.mesh.LinkState
 import app.anynear.mesh.MeshLink
@@ -174,6 +177,7 @@ internal fun SettingsPageScreen(controller: AppController, onBack: () -> Unit) {
             }
             NotificationSection(controller)
             AppSection { EmergencyCardRow(controller) }
+            LocationSection(controller)
             PrivacySection(controller)
             // Rarely needed and cannot be undone: at the very bottom, each with a confirmation (ADR 0046).
             if (controller.resetAvailable) StartOverSection(controller)
@@ -320,14 +324,34 @@ internal fun HelpScreen(controller: AppController, onBack: () -> Unit, onOpenCha
     }
 }
 
-/** About anynear: version, update, license. */
+/** About anynear: version, update, license, legal pages. */
 @Composable
 internal fun AboutScreen(controller: AppController, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         AppHeader(texts.settings.aboutApp, leading = { HeaderBackButton(onBack) })
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
             OldAppSection(controller)
             AppUpdateSection(controller)
+            LegalSection()
+        }
+    }
+}
+
+/** Legal notice, privacy and terms: the pages of the website in the language of the app, as in the web app. */
+@Composable
+private fun LegalSection() {
+    val uri = LocalUriHandler.current
+    val german = currentLanguage() == Language.GERMAN
+    AppSection(texts.settings.legal, footer = texts.settings.legalFooter) {
+        listOf(
+            Triple(texts.settings.legalNotice, AppIcons.Info, if (german) AppConfig.LEGAL_NOTICE_URL_DE else AppConfig.LEGAL_NOTICE_URL_EN),
+            Triple(texts.settings.privacy, AppIcons.Schloss, if (german) AppConfig.PRIVACY_URL_DE else AppConfig.PRIVACY_URL_EN),
+            Triple(texts.settings.terms, AppIcons.Dokument, if (german) AppConfig.TERMS_URL_DE else AppConfig.TERMS_URL_EN),
+        ).forEach { (title, icon, url) ->
+            AppRow(title = title, icon = icon, chevron = true, onClick = { runCatching { uri.openUri(url) } })
         }
     }
 }

@@ -90,6 +90,9 @@ interface StatusTexts {
     /** Own contact link for sharing in other apps; [name] is the own name. */
     fun shareOwnContact(name: String, url: String): String
 
+    /** Text message to someone from the phone's contacts; [name] may be empty. */
+    fun phoneInvite(name: String, url: String): String
+
     // --- Lines in the circle chat ---
     fun lineYouRemoved(name: String): String
     val lineYouResetInvites: String
@@ -200,6 +203,8 @@ internal object StatusTextsDe : StatusTexts {
     override fun shareInvite(circle: String, url: String) = "Komm in meinen Kreis „$circle“ bei $APP: $url"
     override fun reinviteMessage(circle: String, url: String) = "Komm wieder in den Kreis „$circle“ bei $APP: $url"
     override fun shareOwnContact(name: String, url: String) = "$name bei $APP. Tippe auf den Link, um mich als Kontakt hinzuzufügen: $url"
+    override fun phoneInvite(name: String, url: String) =
+        (if (name.isEmpty()) "" else "Hier ist $name. ") + "Ich lade dich zu $APP ein. Tippe auf den Link, um mich hinzuzufügen: $url"
 
     override fun lineYouRemoved(name: String) = "Du hast $name entfernt."
     override val lineYouResetInvites = "Du hast die alten Einladungslinks ungültig gemacht."
@@ -297,6 +302,8 @@ internal object StatusTextsEn : StatusTexts {
     override fun shareInvite(circle: String, url: String) = "Join my circle “$circle” on $APP: $url"
     override fun reinviteMessage(circle: String, url: String) = "Come back to the circle “$circle” on $APP: $url"
     override fun shareOwnContact(name: String, url: String) = "$name on $APP. Tap the link to add me as a contact: $url"
+    override fun phoneInvite(name: String, url: String) =
+        (if (name.isEmpty()) "" else "It's $name. ") + "I'm inviting you to $APP. Tap the link to add me: $url"
 
     override fun lineYouRemoved(name: String) = "You removed $name."
     override val lineYouResetInvites = "You turned off the old invite links."

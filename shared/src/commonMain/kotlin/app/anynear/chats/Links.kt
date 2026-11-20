@@ -27,14 +27,14 @@ fun findLinks(text: String): List<TextLink> = LINK.findAll(text).mapNotNull { ma
 }.toList()
 
 /**
- * First invitation link (`https://anynear.app/k#…`) or contact link (`…/c#…`, ADR 0036; also on anynear.net,
- * ADR 0061) in [text], e.g. from a pasted text
+ * First invitation link (`https://anynear.app/k#…`), contact link (`…/c#…`, ADR 0036) or login link (`…/l#…`,
+ * ADR 0122; all also on anynear.net, ADR 0061) in [text], e.g. from a pasted text
  * or a QR code; `null` if there is none in it.
  */
 fun findAppLink(text: String): String? =
     findLinks(text).map { it.url }.firstOrNull { APP_LINK.matches(it) }
 
-private val APP_LINK = Regex("""(?i)https://anynear\.(?:app|net)/[kc]/?#\S+""")
+private val APP_LINK = Regex("""(?i)https://anynear\.(?:app|net)/[kcl]/?#\S+""")
 
 /** Link into the settings of the app, `https://anynear.app/s#erase` (ADR 0089); also on anynear.net. */
 fun isSettingsLink(url: String): Boolean = SETTINGS_LINK.matches(url)

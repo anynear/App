@@ -4,6 +4,7 @@ import app.anynear.alerts.AlarmProblem
 import app.anynear.alerts.AlertNotification
 import app.anynear.alerts.GeoPoint
 import app.anynear.core.PushToken
+import app.anynear.location.Place
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -126,6 +127,49 @@ interface PlatformHooks {
 
     /** Opens the device's location setting (Android) or the app's settings (iOS), so the user can switch it on. */
     fun openLocationSettings() = Unit
+
+    /**
+     * May the app read the exact location (ADR 0121 §10, „wenn etwas ist“)? Android `ACCESS_FINE_LOCATION`, iOS allowed
+     * with full accuracy. Without it [currentPlace] still gives what the system allows, with its accuracy.
+     */
+    val preciseLocationAllowed: StateFlow<Boolean> get() = NoLocation
+
+    /** Ask for the exact location; if the system no longer asks, open the app's settings. */
+    fun requestPreciseLocation() = requestLocation()
+
+    /**
+     * Where the phone is, as exact as the system allows, with time and accuracy; `null` if not allowed or not
+     * obtainable right now. In the background the system usually gives nothing without „Immer“.
+     */
+    suspend fun currentPlace(): Place? = null
+
+    /** Opens the place in the maps app of the system, named [label]; only after a tap on a button. */
+    fun openMap(latitude: Double, longitude: Double, label: String) = Unit
+
+    /**
+     * May the app locate when it is not on the screen, also after a restart of the phone („Immer“, ADR 0121 §13)?
+     * Only the levels that share all the time need it; sharing for a time and a call for the helpers do not.
+     */
+    val backgroundLocationAllowed: StateFlow<Boolean> get() = NO_BACKGROUND_LOCATION
+
+    /** Asks the system for „Immer“; only where the person chose a level that shares all the time. */
+    fun requestBackgroundLocation() = Unit
+
+    /**
+     * Tells the system that a place leaves the phone for [reason] right now, with [text] for the person to see
+     * (Android: a foreground service with a notification; iOS: location in the background with the system's sign).
+     * `null` ends it for this reason. While any reason holds, the phone keeps locating with the app in the background.
+     */
+    fun setLocationInUse(reason: String, text: String?) = Unit
+
+    /** Places the system delivers while [setLocationInUse] holds, also with the app in the background. */
+    val placeUpdates: kotlinx.coroutines.flow.Flow<Place> get() = kotlinx.coroutines.flow.emptyFlow()
+
+    /** Battery of this device in percent, `null` if the system does not say; goes along with a call for the helpers. */
+    fun batteryPercent(): Int? = null
+
+    /** Opens the phone app with [number] typed in; the person presses the call button itself (ADR 0083 §9). */
+    fun dial(number: String) = Unit
 
     /** What stands in the way of an alarm on this device (without battery, [backgroundRestriction] checks that). */
     suspend fun alarmProblems(): List<AlarmProblem> = emptyList()
@@ -278,6 +322,8 @@ data class MessageNotification(
         val senderImage: ByteArray? = null,
     )
 }
+
+private val NO_BACKGROUND_LOCATION = kotlinx.coroutines.flow.MutableStateFlow(false)
 
 /** For tests: no permission prompt, no foreground service, no sharing. */
 open class NoOpPlatformHooks : PlatformHooks {

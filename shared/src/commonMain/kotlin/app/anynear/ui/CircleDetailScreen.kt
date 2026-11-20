@@ -129,6 +129,9 @@ internal fun CircleDetailScreen(
                 AppRow(title = texts.files.circleFiles, subtitle = circleFilesSummary(controller, circle.id), icon = AppIcons.Dokument, chevron = true, onClick = onOpenFiles)
             }
 
+            // What this circle sees of my location (ADR 0121 §13).
+            if (!isSupport) LocationLevelRow(controller, circle.name, circleId = circle.id)
+
             AppSection(
                 texts.people.members,
                 footer = if (members.isEmpty()) texts.people.noMembersYet else null,

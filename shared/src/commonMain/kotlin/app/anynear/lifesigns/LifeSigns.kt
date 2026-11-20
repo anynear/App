@@ -15,6 +15,9 @@ import app.anynear.circles.Circle
 import app.anynear.app.PlatformHooks
 import app.anynear.data.KeyValueStore
 import app.anynear.i18n.texts
+import app.anynear.location.LocationSharing
+import app.anynear.location.ShareLevel
+import app.anynear.ui.formatDayAndTime
 import app.anynear.ui.formatFutureDayAndTime
 import app.anynear.ui.formatTime
 import app.anynear.ui.nextLocalHour
@@ -61,6 +64,17 @@ class LifeSigns(
     private val me: () -> String? = { null },
     /** Support circles (ADR 0065) are no place for a check-in. */
     private val isSupport: (String) -> Boolean = { false },
+    /** Who sees the place „wenn etwas ist“ (ADR 0121 §10); without it no place is ever handed to the core. */
+    private val sharing: LocationSharing? = null,
+    /**
+     * `true`: a check-in nobody confirmed rings as a call for the helpers ([app.anynear.sos.Sos], ADR 0083 §5.4), so
+     * this class shows neither its loud alarm nor the quiet hint before it: only the call warns the helpers.
+     */
+    private val alarmIsCall: Boolean = false,
+    /** Where the phone was before a place, oldest first; goes along only into such a call. */
+    private val trailBefore: (app.anynear.location.Place) -> List<app.anynear.location.Place> = { emptyList() },
+    /** The circles we share with a person, for what it sees of the own place (ADR 0121 §13). */
+    private val circlesOf: (personId: String) -> List<String> = { emptyList() },
     private val log: (String) -> Unit = {},
 ) {
     private val _statuses = MutableStateFlow<List<AliveStatus>>(emptyList())
@@ -98,6 +112,11 @@ class LifeSigns(
         scope.launch {
             source.changes.collect { runCatching { evaluate() }.onFailure { if (it is CancellationException) throw it } }
         }
+        // Switched on or off in the settings or on another own device: hand in or forget the place at once.
+        sharing?.let { s ->
+            scope.launch { s.default.collect { placeChanged() } }
+            scope.launch { s.circles.collect { placeChanged() } }
+        }
         // While the process runs, look at the next deadline (at least every minute); in deep sleep the alarm wakes it.
         scope.launch {
             while (true) {
@@ -118,6 +137,7 @@ class LifeSigns(
         val own = list.firstOrNull { it.own && it.phase != AliveStatus.ENDED }
         hooks.showCheckIn(own?.let { checkInOf(it, t) })
         if (own == null) _fullScreen.value = false
+        own?.let { refreshPlace(it, t) }
         val next = source.nextAt(t)
         hooks.scheduleExactWake(next)
         _exactMissing.value = next != null && !hooks.exactAlarmsAllowed()
@@ -162,21 +182,40 @@ class LifeSigns(
         }
     }
 
-    /** Starts in [circleId]; a running own one ends. `false` if it did not work. */
-    suspend fun start(template: LifeSignTemplate, circleId: String, customHours: Int = 2, customMinutes: Int = 30): Boolean {
+    /**
+     * Starts in [circleId], or with [person] for that one person instead (ADR 0121 §23); a running own one ends.
+     * `false` if it did not work.
+     */
+    suspend fun start(template: LifeSignTemplate, circleId: String, customHours: Int = 2, customMinutes: Int = 30, person: String? = null): Boolean {
         val r = request(template, now(), customHours, customMinutes)
-        val plan = source.start(circleId, r.label, r.until, r.quiet, r.firstDue) ?: return false
-        store.putString(KEY_CIRCLE, circleId)
+        val plan = source.start(circleId, r.label, r.until, r.quiet, r.firstDue, person) ?: return false
+        if (person == null) store.putString(KEY_CIRCLE, circleId)
         if (r.singleQuestion) store.putString(KEY_SINGLE, json.encodeToString(listSerializer, (singles() + plan.id).takeLast(20)))
         log("Lebenszeichen gestartet: ${r.label}")
+        placeTriedAt = 0L
         evaluate()
         return true
+    }
+
+    /**
+     * Starts a check-in with an own [label] in [circleId] until [untilMillis], asking every [quietMillis], e.g. for
+     * „Begleite mich“ (ADR 0121 §8). The plan ID, `null` if it did not work.
+     */
+    suspend fun startTimed(circleId: String, label: String, untilMillis: Long, quietMillis: Long): String? {
+        val plan = source.start(circleId, label, untilMillis, quietMillis.coerceIn(AliveLogic.MIN_QUIET, AliveLogic.MAX_QUIET), null) ?: return null
+        store.putString(KEY_CIRCLE, circleId)
+        log("Lebenszeichen gestartet: $label")
+        placeTriedAt = 0L
+        evaluate()
+        return plan.id
     }
 
     /** „Alles gut“: confirms the own one; with only one question it ends. */
     suspend fun confirm(planId: String) {
         if (planId in singles()) source.end(planId) else source.confirm(planId)
         hooks.cancelAlertNotifications(channelOf(planId))
+        // The person just held the phone: a good moment to learn where it is.
+        placeTriedAt = 0L
         evaluate()
     }
 
@@ -220,7 +259,7 @@ class LifeSigns(
 
     /** Helpers in the plan's circle and who of them knows (receipt). */
     fun helpers(status: AliveStatus): Pair<List<String>, List<String>> {
-        val all = helpersOf(status.plan.circleId)
+        val all = status.plan.peer?.let { listOf(it) } ?: helpersOf(status.plan.circleId)
         val heard = status.plan.heard.map { it.person }.filter { it in all }
         return all to heard
     }
@@ -232,7 +271,65 @@ class LifeSigns(
 
     fun openExactAlarmSettings() = hooks.openExactAlarmSettings()
 
-    fun circle(circleId: String): String = circleName(circleId)
+    /** Name of what a check-in goes to: a circle, or the person ([targetOf]). */
+    fun circle(target: String): String = if (target.startsWith(PERSON_PREFIX)) name(target.removePrefix(PERSON_PREFIX)) else circleName(target)
+
+    /** What the person lets [target] (a circle or a person, [targetOf]) see of its place. */
+    private fun levelOf(target: String): ShareLevel? = sharing?.let { s ->
+        if (target.startsWith(PERSON_PREFIX)) target.removePrefix(PERSON_PREFIX).let { s.levelFor(it, circlesOf(it)) } else s.level(target)
+    }
+
+    // --- Place „wenn etwas ist“ (ADR 0121 §10) ------------------------------------------------
+
+    private val placeLock = Mutex()
+    private var placeTriedAt = 0L
+
+    /** Do the helpers in [circleId] see where the person is, if nobody confirms? */
+    fun sharesPlace(circleId: String): Boolean = sharing?.takeIf { !it.paused.value }?.let { levelOf(circleId) }.let { it != null && it != ShareLevel.Off }
+
+    /** Opens the place of someone else's check-in in the maps app of the system; only after a tap. */
+    fun openMap(status: AliveStatus) {
+        val place = status.plan.position ?: return
+        hooks.openMap(place.latitude, place.longitude, name(status.plan.owner))
+    }
+
+    /**
+     * Looks where the phone is for the own running check-in, without holding up questions and warnings: right after
+     * the start and after „Alles gut“, every [PLACE_ASK_GAP_MILLIS] while the phone asks or knows no place yet,
+     * otherwise every [PLACE_GAP_MILLIS]. In the background the system usually gives nothing; then the last place stays,
+     * with its time.
+     */
+    private fun refreshPlace(status: AliveStatus, t: Long) {
+        if (sharing == null) return
+        val soon = status.phase == AliveStatus.ASK || (status.plan.position == null && sharesPlace(targetOf(status.plan)))
+        val gap = if (soon) PLACE_ASK_GAP_MILLIS else PLACE_GAP_MILLIS
+        if (placeTriedAt != 0L && t - placeTriedAt < gap) return
+        placeTriedAt = t
+        scope.launch { runCatching { updatePlace(status.plan.id) }.onFailure { if (it is CancellationException) throw it } }
+    }
+
+    private fun placeChanged() {
+        val own = _statuses.value.firstOrNull { it.own && it.phase != AliveStatus.ENDED } ?: return
+        placeTriedAt = now()
+        scope.launch { runCatching { updatePlace(own.plan.id) }.onFailure { if (it is CancellationException) throw it } }
+    }
+
+    /**
+     * Hands the core the place for the own check-in [planId] if the person shares it with that circle „wenn etwas
+     * ist“; otherwise the core forgets it. The core sends it only with „nicht bestätigt“.
+     */
+    private suspend fun updatePlace(planId: String) = placeLock.withLock {
+        val sharing = sharing ?: return@withLock
+        val plan = source.statuses(now()).firstOrNull { it.own && it.plan.id == planId && it.phase != AliveStatus.ENDED }?.plan ?: return@withLock
+        if (levelOf(targetOf(plan)) != ShareLevel.WhenNeeded) {
+            if (plan.position != null) source.setPlace(plan.id, null)
+            return@withLock
+        }
+        val place = sharing.place() ?: return@withLock
+        // The system may answer with an older place than the one already handed in.
+        if (plan.position?.let { it.at >= place.atMillis } == true) return@withLock
+        source.setPlace(plan.id, place, trailBefore(place))
+    }
 
     // --- Notifications ------------------------------------------------------------------------
 
@@ -247,8 +344,8 @@ class LifeSigns(
                     val first = "ask:${plan.due}"
                     val again = "ask2:${plan.due}"
                     when {
-                        shown != first && shown != again -> { show(plan.id, plan.circleId, lt.askTitle, lt.askText(plan.label), AlertPriority.Alarm, AlertLoudness.Loud, ACTION_OK, lt.allGood, AlertSound.Question); mark(first) }
-                        shown == first && t >= plan.due + AliveLogic.ASK_AGAIN -> { show(plan.id, plan.circleId, lt.askTitle, lt.askText(plan.label), AlertPriority.Alarm, AlertLoudness.Loud, ACTION_OK, lt.allGood, AlertSound.Question); mark(again) }
+                        shown != first && shown != again -> { show(plan.id, targetOf(plan), lt.askTitle, lt.askText(plan.label), AlertPriority.Alarm, AlertLoudness.Loud, ACTION_OK, lt.allGood, AlertSound.Question); mark(first) }
+                        shown == first && t >= plan.due + AliveLogic.ASK_AGAIN -> { show(plan.id, targetOf(plan), lt.askTitle, lt.askText(plan.label), AlertPriority.Alarm, AlertLoudness.Loud, ACTION_OK, lt.allGood, AlertSound.Question); mark(again) }
                     }
                 }
                 else -> if (shown.startsWith("ask")) {
@@ -259,45 +356,49 @@ class LifeSigns(
             return
         }
         val who = name(plan.owner)
-        val volume = loudness(plan.circleId)
+        val volume = loudness(targetOf(plan))
         when (s.phase) {
             AliveStatus.ENDED -> if (shown.isNotEmpty() && shown != "ended") {
                 val title = if (plan.state == AnmpAliveState.TIMEOUT) lt.timedOut(who) else lt.ended(who)
-                if (volume != LifeSignLoudness.Off) show(plan.id, plan.circleId, title, lt.endedText, AlertPriority.Info, AlertLoudness.Normal)
+                if (volume != LifeSignLoudness.Off) show(plan.id, targetOf(plan), title, lt.endedText, AlertPriority.Info, AlertLoudness.Normal)
                 mark("ended")
             }
             AliveStatus.RUNNING -> when {
                 shown.isEmpty() -> {
                     // Older check-ins (e.g. from the history of a new circle) are taken over quietly.
                     if (volume != LifeSignLoudness.Off && t - plan.start < 3_600_000L) {
-                        show(plan.id, plan.circleId, lt.started(who), lt.startedText(plan.label, formatTime(plan.until)), AlertPriority.Info, AlertLoudness.Normal)
+                        show(plan.id, targetOf(plan), lt.started(who), lt.startedText(plan.label, formatTime(plan.until)), AlertPriority.Info, AlertLoudness.Normal)
                     }
                     mark("start")
                 }
                 shown.startsWith("hint") || shown.startsWith("alarm") -> {
-                    if (volume != LifeSignLoudness.Off) show(plan.id, plan.circleId, lt.confirmedAgain(who), "", AlertPriority.Info, AlertLoudness.Normal)
+                    if (volume != LifeSignLoudness.Off) show(plan.id, targetOf(plan), lt.confirmedAgain(who), "", AlertPriority.Info, AlertLoudness.Normal)
                     mark("ok:${plan.due}")
                 }
                 plan.state == AnmpAliveState.BATTERY && shown != "battery:${plan.lastAt}" -> {
-                    if (volume != LifeSignLoudness.Off) show(plan.id, plan.circleId, lt.battery(who, plan.battery ?: 0), "", AlertPriority.Info, AlertLoudness.Normal)
+                    if (volume != LifeSignLoudness.Off) show(plan.id, targetOf(plan), lt.battery(who, plan.battery ?: 0), "", AlertPriority.Info, AlertLoudness.Normal)
                     mark("battery:${plan.lastAt}")
                 }
             }
-            AliveStatus.HINT -> if (shown != "hint:${plan.due}" && shown != "alarm:${plan.due}") {
+            // With the alarm as a call there is no hint before it (20.11.2026): only the call warns the helpers.
+            AliveStatus.HINT -> if (!alarmIsCall && shown != "hint:${plan.due}" && shown != "alarm:${plan.due}") {
                 val title = if (s.reason == AliveStatus.REASON_MISSED) lt.missedTitle(who) else lt.hintTitle(who)
-                if (volume != LifeSignLoudness.Off) show(plan.id, plan.circleId, title, lt.hintText, AlertPriority.Warning, AlertLoudness.Normal, ACTION_LOOKING, lt.looking)
+                if (volume != LifeSignLoudness.Off) show(plan.id, targetOf(plan), title, lt.hintText, AlertPriority.Warning, AlertLoudness.Normal, ACTION_LOOKING, lt.looking)
                 mark("hint:${plan.due}")
             }
             AliveStatus.ALARM -> if (shown != "alarm:${plan.due}") {
                 val (title, text) = if (s.reason == AliveStatus.REASON_MISSED) {
-                    lt.missedTitle(who) to lt.missedText
+                    lt.missedTitle(who) to listOfNotNull(lt.missedText, plan.position?.let { lt.placeIncluded(formatDayAndTime(it.at, t)) }).joinToString(" ")
                 } else {
-                    lt.unreachableTitle(who) to lt.unreachableText(formatTime(plan.lastAt))
+                    // With the place, if the alarm the phone left at the relays brought one (ADR 0083 §5.7).
+                    lt.unreachableTitle(who) to listOfNotNull(lt.unreachableText(formatTime(plan.lastAt)), plan.position?.let { lt.placeIncluded(formatDayAndTime(it.at, t)) }).joinToString(" ")
                 }
                 // If someone is already checking, it no longer rings loudly for the others (ADR 0083 §4).
                 val loud = volume == LifeSignLoudness.Loud && s.looking.isEmpty()
-                if (volume != LifeSignLoudness.Off) {
-                    show(plan.id, plan.circleId, title, text, AlertPriority.Alarm, if (loud) AlertLoudness.Loud else AlertLoudness.Normal, ACTION_LOOKING, lt.looking)
+                // As a call for the helpers the alarm rings there, once, with place, battery and „Ich kümmere mich“.
+                if (alarmIsCall) hooks.cancelAlertNotifications(channelOf(plan.id))
+                else if (volume != LifeSignLoudness.Off) {
+                    show(plan.id, targetOf(plan), title, text, AlertPriority.Alarm, if (loud) AlertLoudness.Loud else AlertLoudness.Normal, ACTION_LOOKING, lt.looking)
                 }
                 mark("alarm:${plan.due}")
             }
@@ -325,7 +426,7 @@ class LifeSigns(
     ) {
         hooks.showAlertNotification(
             AlertNotification(
-                key = channelOf(planId) + "/n", channelId = channelOf(planId), channelName = circleName(circleId), title = title, text = text,
+                key = channelOf(planId) + "/n", channelId = channelOf(planId), channelName = circle(circleId), title = title, text = text,
                 priority = priority, loudness = loudness, sound = sound ?: if (loudness == AlertLoudness.Loud) AlertSound.Alarm else AlertSound.Hint,
                 timestampMillis = now(), actions = listOfNotNull(action?.let { NotificationAction("$it:$planId", actionLabel) }),
             ),
@@ -351,15 +452,65 @@ class LifeSigns(
         internal const val KEY_LOUDNESS = "lifesigns.loudness"
         private const val KEY_SINGLE = "lifesigns.single"
 
+        /** How often the app looks for the place while the own check-in just runs. */
+        private const val PLACE_GAP_MILLIS = 10 * 60_000L
+
+        /** … and while the phone asks „Alles gut?“ (the place goes along if nobody answers) or knows no place yet. */
+        private const val PLACE_ASK_GAP_MILLIS = 60_000L
+
         fun channelOf(planId: String) = CHANNEL_PREFIX + planId
+
+        /** Prefix of a person in place of a circle ID, where a check-in goes to one person ([targetOf]). */
+        const val PERSON_PREFIX = "p:"
+
+        /**
+         * What a check-in goes to, as the key for its name, its loudness and the place: the circle ID, or
+         * [PERSON_PREFIX] and the other person for one that goes to a single person (ADR 0121 §23).
+         */
+        fun targetOf(plan: app.anynear.anmp.core.AlivePlan): String = plan.peer?.let { PERSON_PREFIX + it } ?: plan.circleId
+
+        /** How loud check-ins of [circleId] are on this phone, read without a running app (notification extension). */
+        fun loudnessIn(store: KeyValueStore, circleId: String): LifeSignLoudness {
+            val map = store.getString(KEY_LOUDNESS)?.let { runCatching { Json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), it) }.getOrNull() }.orEmpty()
+            return map[circleId]?.let { v -> LifeSignLoudness.entries.firstOrNull { it.name == v } } ?: LifeSignLoudness.Loud
+        }
+    }
+}
+
+/**
+ * What the iOS notification extension shows for a packet of someone's check-in (ADR 0117), so that a locked iPhone is
+ * treated like a phone whose app runs (20.11.2026): only the call for the helpers rings (ADR 0083 §5.4).
+ * - The alarm the relays released ([AnmpAlive.guard]) is that call ([call]): it rings as one, „nicht erreichbar“.
+ * - „Nicht bestätigt“ of a phone that calls the helpers itself ([AnmpAlive.calls]) shows nothing: the call follows when
+ *   the alarm is due, and the extension rings for it then ([app.anynear.sos.sosWake]).
+ * - „Nicht bestätigt“ of an older version, which sends no call, rings at once as before; that alarm counts as the
+ *   first one of the call the app opens later.
+ * - Everything else (start, battery, end, a late confirmation) as [lifeSignWake].
+ */
+fun checkInWake(
+    store: KeyValueStore,
+    planId: String,
+    circleId: String,
+    who: String,
+    circleName: String,
+    alive: AnmpAlive,
+    call: String?,
+    atMillis: Long,
+    now: Long,
+): AlertNotification? = when {
+    alive.guard && call != null -> app.anynear.sos.sosWake(store, call, circleId, who, fromCheckIn = true, unreachable = true, atMillis = now)
+    alive.state == AnmpAliveState.MISSED && alive.calls -> null
+    else -> lifeSignWake(store, planId, circleId, who, circleName, alive, atMillis, now)?.also { n ->
+        if (n.priority == AlertPriority.Alarm && call != null) app.anynear.sos.Sos.markShown(store, call)
     }
 }
 
 /**
  * Notification of the iOS notification extension for a sign of life of another person (ADR 0117, ADR 0083): the same
  * texts, loudness and „shown“ marks as [LifeSigns] uses for helpers, so that the app does not show it again once it
- * runs. Only what a packet itself says: start, battery, no confirmation, a late confirmation after a warning, end.
- * Warnings by time (hint, „nicht erreichbar“) need the running app. `null`: nothing to show.
+ * runs. Only what a packet itself says: start, battery, no confirmation, a late confirmation after a warning, end, and
+ * „nicht erreichbar“ when the relays release the alarm the person's phone left with them (ADR 0083 §5.7; the core
+ * hands it over only if nothing newer is known). The hint by time needs the running app. `null`: nothing to show.
  */
 fun lifeSignWake(
     store: KeyValueStore,
@@ -382,7 +533,31 @@ fun lifeSignWake(
     val volume = read(LifeSigns.KEY_LOUDNESS)[circleId]?.let { v -> LifeSignLoudness.entries.firstOrNull { it.name == v } } ?: LifeSignLoudness.Loud
     val lt = texts.lifeSigns
     val due = alive.due * 1000
-    val (title, text, priority, loud) = when (alive.state) {
+    val (title, text, priority, loud) = when {
+        // Left at the relays by the phone and released because nothing came since [atMillis]: the same alarm the app
+        // shows when its own deadline runs out, so the same mark.
+        alive.guard -> {
+            if (shown == "alarm:$due") return null
+            mark("alarm:$due")
+            val place = alive.position?.takeIf { it.plausible }?.let { lt.placeIncluded(formatDayAndTime(it.at * 1000, now)) }
+            Quad(lt.unreachableTitle(who), listOfNotNull(lt.unreachableText(formatTime(atMillis)), place).joinToString(" "), AlertPriority.Alarm, volume == LifeSignLoudness.Loud)
+        }
+        else -> stateWake(alive, shown, due, atMillis, now, who, lt, volume, ::mark) ?: return null
+    }
+    if (volume == LifeSignLoudness.Off) return null
+    val loudness = if (loud) AlertLoudness.Loud else AlertLoudness.Normal
+    return AlertNotification(
+        key = LifeSigns.channelOf(planId) + "/n", channelId = LifeSigns.channelOf(planId), channelName = circleName, title = title, text = text,
+        priority = priority, loudness = loudness, sound = if (loud) AlertSound.Alarm else AlertSound.Hint, timestampMillis = atMillis,
+    )
+}
+
+/** What a packet of a sign of life says by its state; `null`: nothing to show. */
+private fun stateWake(
+    alive: AnmpAlive, shown: String, due: Long, atMillis: Long, now: Long, who: String, lt: app.anynear.i18n.LifeSignTexts, volume: LifeSignLoudness,
+    mark: (String) -> Unit,
+): Quad? {
+    return when (alive.state) {
         AnmpAliveState.START -> {
             if (shown.isNotEmpty()) return null
             mark("start")
@@ -393,7 +568,8 @@ fun lifeSignWake(
         AnmpAliveState.MISSED -> {
             if (shown == "alarm:$due") return null
             mark("alarm:$due")
-            Quad(lt.missedTitle(who), lt.missedText, AlertPriority.Alarm, volume == LifeSignLoudness.Loud)
+            val place = alive.position?.takeIf { it.plausible }?.let { lt.placeIncluded(formatDayAndTime(it.at * 1000, now)) }
+            Quad(lt.missedTitle(who), listOfNotNull(lt.missedText, place).joinToString(" "), AlertPriority.Alarm, volume == LifeSignLoudness.Loud)
         }
         AnmpAliveState.BATTERY -> {
             if (shown == "battery:$atMillis") return null
@@ -412,12 +588,6 @@ fun lifeSignWake(
             Quad(lt.confirmedAgain(who), "", AlertPriority.Info, false)
         }
     }
-    if (volume == LifeSignLoudness.Off) return null
-    val loudness = if (loud) AlertLoudness.Loud else AlertLoudness.Normal
-    return AlertNotification(
-        key = LifeSigns.channelOf(planId) + "/n", channelId = LifeSigns.channelOf(planId), channelName = circleName, title = title, text = text,
-        priority = priority, loudness = loudness, sound = if (loud) AlertSound.Alarm else AlertSound.Hint, timestampMillis = atMillis,
-    )
 }
 
 private data class Quad(val title: String, val text: String, val priority: AlertPriority, val loud: Boolean)

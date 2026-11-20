@@ -89,6 +89,14 @@ interface PeopleTexts {
     val myContactHint: String
     val addContactText: String
 
+    // Invite from the phone's contacts (ADR 0003: no phone numbers)
+    val inviteFromPhone: String
+    val inviteFromPhoneHint: String
+    /** Why there is no phone number search, said as an advantage. */
+    val inviteFromPhoneWhy: String
+    val inviteFromPhoneHow: String
+    val pickPhoneContact: String
+
     /** Scanned or pasted code does not match the stored key of [name]. */
     fun keyMismatch(name: String): String
     val ownContact: String
@@ -306,6 +314,13 @@ internal object PeopleTextsDe : PeopleTexts {
     override val scanContactHint = "Kontakt oder Einladung einer anderen Person scannen"
     override val myContact = "Mein Kontakt"
     override val myContactHint = "Gib deinen Kontakt an andere weiter, als Link oder QR-Code"
+    override val inviteFromPhone = "Aus Telefonkontakten einladen"
+    override val inviteFromPhoneHint = "Per SMS mit deinem Kontaktlink"
+    override val inviteFromPhoneWhy =
+        "$APP kennt deine Telefonnummer nicht. So kann dich niemand darüber finden, und du lädst selbst ein, wen du willst."
+    override val inviteFromPhoneHow =
+        "Wähle eine Person aus deinen Kontakten. Sie bekommt eine SMS mit deinem Kontaktlink. Ihre Nummer bleibt auf deinem Handy."
+    override val pickPhoneContact = "Person auswählen"
     override val addContactText =
         "Für Menschen außerhalb deiner Kreise: Tippe auf den Kontaktlink, den du bekommen hast, scanne den QR-Code oder füge den Link hier ein. " +
             "Menschen aus deinen Kreisen erscheinen automatisch."
@@ -514,6 +529,13 @@ internal object PeopleTextsEn : PeopleTexts {
     override val scanContactHint = "Scan another person's contact or invite"
     override val myContact = "My contact"
     override val myContactHint = "Share your contact with others, as a link or QR code"
+    override val inviteFromPhone = "Invite from phone contacts"
+    override val inviteFromPhoneHint = "By text message with your contact link"
+    override val inviteFromPhoneWhy =
+        "$APP doesn't know your phone number. So no one can find you by it, and you decide who to invite."
+    override val inviteFromPhoneHow =
+        "Choose someone from your contacts. They get a text message with your contact link. Their number stays on your phone."
+    override val pickPhoneContact = "Choose person"
     override val addContactText =
         "For people outside your circles: tap the contact link you got, scan the QR code or paste the link here. " +
             "People from your circles show up automatically."

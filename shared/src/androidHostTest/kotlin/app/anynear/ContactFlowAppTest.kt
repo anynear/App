@@ -225,6 +225,23 @@ class ContactFlowAppTest {
     }
 
     @Test
+    fun loginLinkWaitsForTheDialogAndForeignIssuersAreRefused() = withApp { a ->
+        val req = ByteArray(32) { it.toByte() }
+        val link = app.anynear.anmp.core.AnmpLogin.link("anynear.app", app.anynear.anmp.core.AnmpLogin.ISSUER, req)
+        val result = runBlocking { a.controller.receiveLink("Melde dich an: $link") }
+        if (a.controller.setupDone.value) {
+            assertNull(result)
+            assertEquals(app.anynear.anmp.core.AnmpLogin.ISSUER, a.controller.pendingLogin.value?.issuer)
+            a.controller.dismissLogin()
+            val foreign = app.anynear.anmp.core.AnmpLogin.link("anynear.net", "https://id.example.org", req)
+            assertEquals(texts.login.invalid, runBlocking { a.controller.receiveLink(foreign) })
+        } else {
+            assertEquals(texts.login.notSetUp, result)
+        }
+        assertNull(a.controller.pendingLogin.value)
+    }
+
+    @Test
     fun ownLinkAndLinksOfOtherNetworksAreRefused() = withApp { a ->
         val own = runBlocking { withTimeout(10.seconds) { while (a.controller.ownContactLink.value == null) delay(20) }; a.controller.ownContactLink.value!! }
         assertEquals(texts.status.ownContact, runBlocking { a.controller.receiveLink(own) })
@@ -331,6 +348,27 @@ class ContactFlowAppTest {
             a.controller.shareOwnContact()
             assertEquals(texts.status.shareOwnContact("Testperson Anna", own), hooks.shared.single())
             assertTrue(hooks.shared.single().startsWith("Testperson Anna "))
+        }
+    }
+
+    @Test
+    fun invitingFromPhoneContactsTextsOrShares() {
+        val hooks = SharingHooks()
+        withApp(hooks) { a ->
+            runBlocking { withTimeout(10.seconds) { while (a.controller.ownContactLink.value == null) delay(20) } }
+            val expected = texts.status.phoneInvite("Testperson Anna", "https://anynear.app/c#").substringBefore("https://")
+            fun check(text: String) = assertTrue(text.startsWith(expected) && "anynear.app/c#" in text, text)
+            // With a number and SMS: only the text message, the share menu stays closed.
+            val texted = mutableListOf<Pair<String, String>>()
+            assertTrue(a.controller.inviteFromPhoneContact("+4917112345") { n, t -> texted += n to t; true })
+            assertEquals("+4917112345", texted.single().first)
+            check(texted.single().second)
+            assertTrue(hooks.shared.isEmpty())
+            // No SMS on this device (tablet) or no number: the same text in the share menu.
+            assertTrue(a.controller.inviteFromPhoneContact("+4917112345") { _, _ -> false })
+            assertTrue(a.controller.inviteFromPhoneContact(null) { _, _ -> error("no number, no text message") })
+            assertEquals(2, hooks.shared.size)
+            hooks.shared.forEach(::check)
         }
     }
 

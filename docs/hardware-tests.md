@@ -703,3 +703,26 @@ the app. Public chats and alerts have no reply.
 | NR5 | Apple Watch paired with the iPhone, as NR4 | “Reply” on the watch with the watch's own suggestions, dictation or scribble; reply arrives | pending |
 | NR6 | Garmin watch with an iPhone | iOS only passes simple actions to Garmin; no text reply expected on the watch, the notification still arrives | pending |
 | NR7 | Reply without a path (e.g. contact without internet and no radio) | notification comes back without sound, “Not sent: …” with the reason | unit test only |
+
+## Location when nobody confirms a check-in (ADR 0121 §10, 19.11.2026) – none of it tested on hardware
+
+Unit tests (`LocationSharingTest`, `LifeSignsTest`, ANMP `thePlaceLeavesThePhoneOnlyWhenNobodyConfirmed`) and one
+Android emulator (Android 16, 19.11.2026): the step in the setup with Android's question for precise or approximate, the
+section in the settings, the own card naming the place with its time, and the dialog after “Later” and four days (clock
+set forward), which does not come back after “No”. Not tried: any phone, iOS, a second device (S5–S7, S9) and radio.
+
+| Nr | Test | Expected | Result |
+|---|---|---|---|
+| S1 | New setup on Android, step “Your location”, tap “Yes, when something is wrong” | Android asks for precise and approximate location; after the answer the setup goes on; Settings → Location shows the switch on | pending |
+| S2 | Same step, tap “No, only for warnings and radio” | Android asks only for the approximate location; switch off; no question after the setup | pending |
+| S3 | Same step, “Later” | setup goes on; the question comes as a dialog after three days at the earliest, not right after the setup | pending |
+| S4 | Phone that had anynear before the update, with a circle | about 20 seconds after the start one dialog “Your location when something is wrong” with “Applies to: …”; both buttons decide; it does not come again | pending |
+| S5 | Same person on a second device after answering on the first | no dialog there; under Settings → Location only “Allow location on this phone” if the permission is missing | pending |
+| S6 | Start a check-in with the switch on, do not answer the question | the helper's warning says “The location from … is included”; the card shows time and accuracy; “Show on map” opens the maps app at the right place | pending |
+| S7 | As S6, then tap “All good” | the place disappears from the helper's card | pending |
+| S8 | As S6 with the app in the background since the start (screen off, phone in the pocket) | the place is the one from the start or the last “All good”, with that time; note how old it is | pending |
+| S9 | Circle switched off under Settings → Location, check-in in that circle, no answer | warning without place | pending |
+| S10 | iPhone with “Precise Location” off | place a few kilometres wide, the card says so (“accurate to about 3 km”) | pending |
+| S11 | iPhone, new setup and after the update (S1–S4) | the same questions; iOS asks once for the location | pending |
+| S12 | Both phones with a radio, no internet, no answer to the question | place arrives over radio, or the warning arrives without it when the packet does not fit | pending |
+

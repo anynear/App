@@ -31,6 +31,9 @@ class RegionTable private constructor(
 ) {
     val size: Int get() = keys.size
 
+    /** District key → name as people know it. */
+    val kreisNames: Map<String, String> get() = names
+
     /** District for [point]; `null` outside Germany (nearest municipality centre further than [MAX_DISTANCE_KM]). */
     fun nearest(point: GeoPoint): AlertRegion? {
         // At these distances the flat approximation suffices: degrees of longitude shrink with the cosine of latitude.

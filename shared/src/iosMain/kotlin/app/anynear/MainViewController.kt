@@ -119,6 +119,46 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
 
     override suspend fun approximateLocation(): GeoPoint? = location.read()
 
+    override val preciseLocationAllowed: StateFlow<Boolean> = location.precise
+
+    override fun requestPreciseLocation() = location.requestPrecise()
+
+    override suspend fun currentPlace(): app.anynear.location.Place? = location.place()
+
+    override val backgroundLocationAllowed: StateFlow<Boolean> = location.always
+
+    override fun requestBackgroundLocation() = location.requestAlways()
+
+    private val locationReasons = mutableSetOf<String>()
+
+    override fun setLocationInUse(reason: String, text: String?) {
+        if (text == null) locationReasons.remove(reason) else locationReasons.add(reason)
+        location.share(locationReasons.isNotEmpty())
+    }
+
+    override val placeUpdates: kotlinx.coroutines.flow.Flow<app.anynear.location.Place> = location.updates
+
+    override fun batteryPercent(): Int? {
+        val device = platform.UIKit.UIDevice.currentDevice
+        device.batteryMonitoringEnabled = true
+        return device.batteryLevel.takeIf { it >= 0f }?.let { (it * 100).toInt() }
+    }
+
+    override fun dial(number: String) {
+        NSURL.URLWithString("tel:$number")?.let { url -> platform.UIKit.UIApplication.sharedApplication.openURL(url, emptyMap<Any?, Any>(), null) }
+    }
+
+    override fun openMap(latitude: Double, longitude: Double, label: String) {
+        // Apple Maps; the name of the person only labels the pin.
+        val name = label.encodeToByteArray().joinToString("") { b ->
+            val c = b.toInt().toChar()
+            if (c.isLetterOrDigit() && b >= 0) c.toString() else "%" + (b.toInt() and 0xFF).toString(16).uppercase().padStart(2, '0')
+        }
+        NSURL.URLWithString("https://maps.apple.com/?ll=$latitude,$longitude&q=$name")?.let { url ->
+            UIApplication.sharedApplication.openURL(url, options = emptyMap<Any?, Any>(), completionHandler = null)
+        }
+    }
+
     override fun locationServicesOn(): Boolean = location.servicesOn()
 
     // iOS opens no page of the location services itself; the app's page leads there.

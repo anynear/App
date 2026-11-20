@@ -70,3 +70,6 @@ internal fun dayMonthPattern(tag: String): String = when {
     app.anynear.i18n.regionOf(tag) in setOf("US", "CA", "PH") -> "MMMM d"
     else -> "d MMMM"
 }
+
+/** A time of day as text, for texts built outside the interface (a message that names a time). */
+internal fun formatTimeText(epochMillis: Long): String = formatTime(epochMillis)

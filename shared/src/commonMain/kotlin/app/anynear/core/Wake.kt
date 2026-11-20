@@ -77,6 +77,7 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
                 is CoreEvent.Reaction -> notificationOf(event)
                 is CoreEvent.Alert -> notificationOf(event)
                 is CoreEvent.AliveWake -> notificationOf(event)
+                is CoreEvent.SosWake -> notificationOf(event)
                 else -> null
             }
         }
@@ -111,10 +112,15 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
 
     /** Sign of life of another person (ADR 0083): as the app shows it to helpers ([lifeSignWake]). */
     private fun notificationOf(e: CoreEvent.AliveWake): WakeNotification? {
-        val circle = core.circle(e.circleId) ?: return null
-        val who = core.membersOf(e.circleId).lastOrNull { (it.personId ?: it.deviceId) == e.owner }?.name?.ifBlank { null } ?: texts.status.someone
+        // In a circle, or for this person alone (empty circle ID, ADR 0121 §23): then the person stands for the circle.
+        val direct = e.circleId.isEmpty()
+        val circle = if (direct) null else core.circle(e.circleId) ?: return null
+        val known = if (direct) core.membersOf(MemberState.CONTACTS) else core.membersOf(e.circleId)
+        val who = ContactNames.active(ContactNames.decode(store.getString(ContactNames.SETTING_KEY)))[e.owner]?.takeIf { direct }
+            ?: known.lastOrNull { (it.personId ?: it.deviceId) == e.owner }?.name?.ifBlank { null } ?: texts.status.someone
         val planId = B64.encode(e.alive.plan)
-        val n = lifeSignWake(store, planId, e.circleId, who, circle.name, e.alive, e.timestampMillis, Clock.System.now().toEpochMilliseconds()) ?: return null
+        val target = if (direct) app.anynear.lifesigns.LifeSigns.PERSON_PREFIX + e.owner else e.circleId
+        val n = app.anynear.lifesigns.checkInWake(store, planId, target, who, circle?.name ?: who, e.alive, e.call, e.timestampMillis, Clock.System.now().toEpochMilliseconds()) ?: return null
         return WakeNotification(
             objectId = e.objectId,
             key = n.key,
@@ -124,6 +130,19 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
             alertChannel = n.channelId,
             sound = n.sound.file.takeIf { n.loudness == AlertLoudness.Loud },
             level = wakeLevelOf(n.loudness),
+        )
+    }
+
+    /** A call for the helpers (ADR 0083 §2, §5.4): rings on a locked iPhone like in the running app ([app.anynear.sos.sosWake]). */
+    private fun notificationOf(e: CoreEvent.SosWake): WakeNotification? {
+        val known = e.circleId?.let { core.membersOf(it) }.orEmpty() + core.membersOf(MemberState.CONTACTS)
+        val who = ContactNames.active(ContactNames.decode(store.getString(ContactNames.SETTING_KEY)))[e.owner]
+            ?: known.lastOrNull { (it.personId ?: it.deviceId) == e.owner }?.name?.ifBlank { null } ?: texts.status.someone
+        val target = e.circleId ?: (app.anynear.lifesigns.LifeSigns.PERSON_PREFIX + e.owner)
+        val n = app.anynear.sos.sosWake(store, e.id, target, who, fromCheckIn = e.plan != null, unreachable = false, atMillis = e.timestampMillis) ?: return null
+        return WakeNotification(
+            objectId = e.objectId, key = n.key, title = n.title, body = n.text, timestampMillis = n.timestampMillis, alertChannel = n.channelId,
+            sound = n.sound.file.takeIf { n.loudness == AlertLoudness.Loud }, level = wakeLevelOf(n.loudness),
         )
     }
 

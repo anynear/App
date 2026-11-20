@@ -36,6 +36,8 @@ shared/      Kotlin Multiplatform: logic + Compose UI (Android & iOS)
   people/    Members and contacts (mirror of the core) and radio contacts as one person
   alerts/    Alerts and official warnings (district from the approximate location)
   lifesigns/ Check-ins (“Lebenszeichen”)
+  location/  Who sees the own location (ADR 0121): the answer of the person, and the place that goes along when
+             nobody confirms a check-in
   app/       AppController (UI-independent app logic)
   chats/     Overview “Messages”: all conversations with the number of new messages
   i18n/      Text catalogs in German and English
@@ -395,6 +397,23 @@ Merkmalen am 31.12.2025 (4. Quartal)” (file `AuszugGV4QAktuell.xlsx`, publishe
 © Statistisches Bundesamt (Destatis), 2026, on behalf of the Herausgebergemeinschaft Statistische Ämter des Bundes und der
 Länder; geographic center coordinates: Bundesamt für Kartographie und Geodäsie (BKG). Reproduction and
 distribution, also in part, permitted with attribution. The attribution is also shown in the app under “License”.
+
+The map draws the borders of all municipalities and districts from `files/regions/outlines.bin` (generated with
+`scripts/outlines.py`, simplified to about 110 m, land areas only). Source: Verwaltungsgebiete 1:250 000 (VG250), as of
+01.01.2026, downloaded on 19.11.2026 from [gdz.bkg.bund.de](https://gdz.bkg.bund.de). © BKG (2026)
+[dl-de/by-2-0](https://www.govdata.de/dl-de/by-2-0), data changed. The attribution is shown in the app under
+“License”.
+
+The ground of the map is a coarse map of the world (`files/regions/world.amp`, 260 kB: countries and big cities) and a
+map of Europe (`europe.amp`, 239 kB: trunk roads, rivers, lakes, cities), both generated with `scripts/worldmap.py`
+from [Natural Earth](https://www.naturalearthdata.com) (public domain). For Germany it shows motorways, long rivers,
+cities and towns (`base.amp`, 162 kB);
+close up it draws tiles with roads, paths, rail, water, woods and names: region tiles of about 25 km and near tiles of
+about 6 km, kept on the phone and fetched from the anynear network (`location/MapPack.kt`, all generated with
+`scripts/maptiles.py`; for a whole country from an OpenStreetMap extract with `scripts/maptiles.py pbf`, which needs
+`pip install osmium`). The app reads them from the two spaces named in `AppConfig.MAP_SPACE` and `MAP_DATA_SPACE`;
+while these are empty it fetches nothing. Source: © OpenStreetMap contributors,
+[Open Database License](https://www.openstreetmap.org/copyright). The tiles are not part of this repository.
 
 The name “anynear” and the logos are excluded from this. Forks must use a different
 name, see [TRADEMARKS.md](TRADEMARKS.md). The maintenance service is a separate product

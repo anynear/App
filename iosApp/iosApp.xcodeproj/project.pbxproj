@@ -29,6 +29,10 @@
 		C1A5E3062ED0000000B7A001 /* amtlich.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3022ED0000000B7A001 /* amtlich.caf */; };
 		C1A5E3072ED0000000B7A001 /* hinweis.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3032ED0000000B7A001 /* hinweis.caf */; };
 		C1A5E3122ED0000000B7A001 /* frage.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3112ED0000000B7A001 /* frage.caf */; };
+		C1A5E3322ED0000000B7A001 /* warnung.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3312ED0000000B7A001 /* warnung.caf */; };
+		C1A5E3332ED0000000B7A001 /* warnung.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3312ED0000000B7A001 /* warnung.caf */; };
+		C1A5E3222ED0000000B7A001 /* sos.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3212ED0000000B7A001 /* sos.caf */; };
+		C1A5E3232ED0000000B7A001 /* sos.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3212ED0000000B7A001 /* sos.caf */; };
 		C1A5E3082ED0000000B7A001 /* alarm.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3012ED0000000B7A001 /* alarm.caf */; };
 		C1A5E3092ED0000000B7A001 /* amtlich.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3022ED0000000B7A001 /* amtlich.caf */; };
 		C1A5E30A2ED0000000B7A001 /* hinweis.caf in Resources */ = {isa = PBXBuildFile; fileRef = C1A5E3032ED0000000B7A001 /* hinweis.caf */; };
@@ -109,6 +113,8 @@
 		C1A5E3022ED0000000B7A001 /* amtlich.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = amtlich.caf; sourceTree = "<group>"; };
 		C1A5E3032ED0000000B7A001 /* hinweis.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = hinweis.caf; sourceTree = "<group>"; };
 		C1A5E3112ED0000000B7A001 /* frage.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = frage.caf; sourceTree = "<group>"; };
+		C1A5E3312ED0000000B7A001 /* warnung.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = warnung.caf; sourceTree = "<group>"; };
+		C1A5E3212ED0000000B7A001 /* sos.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = sos.caf; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -247,6 +253,8 @@
 				C1A5E3022ED0000000B7A001 /* amtlich.caf */,
 				C1A5E3032ED0000000B7A001 /* hinweis.caf */,
 				C1A5E3112ED0000000B7A001 /* frage.caf */,
+				C1A5E3312ED0000000B7A001 /* warnung.caf */,
+				C1A5E3212ED0000000B7A001 /* sos.caf */,
 			);
 			path = Sounds;
 			sourceTree = "<group>";
@@ -428,6 +436,8 @@
 				C1A5E3062ED0000000B7A001 /* amtlich.caf in Resources */,
 				C1A5E3072ED0000000B7A001 /* hinweis.caf in Resources */,
 				C1A5E3122ED0000000B7A001 /* frage.caf in Resources */,
+				C1A5E3322ED0000000B7A001 /* warnung.caf in Resources */,
+				C1A5E3222ED0000000B7A001 /* sos.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -447,6 +457,8 @@
 				C1A5E3092ED0000000B7A001 /* amtlich.caf in Resources */,
 				C1A5E30A2ED0000000B7A001 /* hinweis.caf in Resources */,
 				C1A5E3132ED0000000B7A001 /* frage.caf in Resources */,
+				C1A5E3332ED0000000B7A001 /* warnung.caf in Resources */,
+				C1A5E3232ED0000000B7A001 /* sos.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

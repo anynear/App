@@ -59,11 +59,11 @@ internal fun originOf(person: Person, circleNames: Map<String, String>, members:
     }
 }
 
-private enum class AddContactStep { Menu, Paste, Scan, Own }
+private enum class AddContactStep { Menu, Paste, Scan, Own, Phone }
 
 /**
- * „Kontakt hinzufügen“: choice of the three ways (paste link, scan QR code, pass on your own
- * contact) and the respective dialog. From „Kontakte“ and from „Neue Nachricht“ the same flow.
+ * „Kontakt hinzufügen“: choice of the ways (paste link, scan QR code, pass on your own contact, invite from the
+ * phone's contacts) and the respective dialog. From „Kontakte“ and from „Neue Nachricht“ the same flow.
  */
 @Composable
 internal fun AddContactFlow(controller: AppController, onDismiss: () -> Unit, onOpenChat: (peer: String) -> Unit) {
@@ -73,11 +73,40 @@ internal fun AddContactFlow(controller: AppController, onDismiss: () -> Unit, on
             AppRow(title = texts.people.pasteLink, subtitle = texts.people.pasteLinkHint, icon = AppIcons.Link, onClick = { step = AddContactStep.Paste })
             AppRow(title = texts.people.scanQrCode, subtitle = texts.people.scanContactHint, icon = AppIcons.Kamera, onClick = { step = AddContactStep.Scan })
             AppRow(title = texts.people.myContact, subtitle = texts.people.myContactHint, icon = AppIcons.QrCode, onClick = { step = AddContactStep.Own })
+            AppRow(title = texts.people.inviteFromPhone, subtitle = texts.people.inviteFromPhoneHint, icon = AppIcons.Nachrichten, onClick = { step = AddContactStep.Phone })
         }
         AddContactStep.Paste -> AddContactDialog(controller, onDismiss = onDismiss, onOpenChat = onOpenChat)
         AddContactStep.Scan -> QrScanDialog(controller, onDismiss = onDismiss)
         AddContactStep.Own -> OwnCodeDialog(controller, onDismiss = onDismiss)
+        AddContactStep.Phone -> PhoneInviteDialog(controller, onDismiss = onDismiss)
     }
+}
+
+/**
+ * „Aus Telefonkontakten einladen“ (ADR 0003): first one sentence on why anynear knows no phone numbers, then the
+ * system's contact picker and a text message with the own contact link (or the share menu).
+ */
+@Composable
+private fun PhoneInviteDialog(controller: AppController, onDismiss: () -> Unit) {
+    val link by controller.ownContactLink.collectAsState()
+    val pick = rememberPhoneContactPicker { picked ->
+        if (picked != null) {
+            controller.inviteFromPhoneContact(smsNumber(picked), ::openSms)
+            onDismiss()
+        }
+    }
+    AppDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(texts.people.inviteFromPhone) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(texts.people.inviteFromPhoneWhy, style = MaterialTheme.typography.bodyLarge)
+                Text(if (link == null) texts.people.preparingContact else texts.people.inviteFromPhoneHow)
+            }
+        },
+        confirmButton = { if (link != null) AppButton(texts.people.pickPhoneContact, pick, icon = AppIcons.Person) },
+        dismissButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
+    )
 }
 
 @Composable

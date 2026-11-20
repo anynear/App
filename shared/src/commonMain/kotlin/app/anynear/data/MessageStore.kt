@@ -212,6 +212,8 @@ class MessageStore(
             replyTo = other.replyTo ?: current.replyTo,
             // Not over radio (ADR 0118): the mark comes with the internet copy.
             passedOn = other.passedOn || current.passedOn,
+            // Not over radio (ADR 0121 §8): the place comes with the internet copy.
+            spot = other.spot ?: current.spot,
         )
     }
 

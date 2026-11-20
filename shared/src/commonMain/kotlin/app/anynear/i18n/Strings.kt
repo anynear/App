@@ -43,13 +43,21 @@ class Strings private constructor(
     val find: FindTexts,
     /** Check-ins (ADR 0083). */
     val lifeSigns: LifeSignTexts,
+    /** Who sees the own location (ADR 0121). */
+    val location: LocationTexts,
+    /** The tab „Karte“ (ADR 0121). */
+    val map: MapTexts,
+    /** Calling the helpers (ADR 0083 §2). */
+    val sos: SosTexts,
+    /** Login with anynear at a service (ADR 0122). */
+    val login: LoginTexts,
 ) {
     companion object {
         val german: Strings by lazy {
-            Strings(Language.GERMAN, CommonTextsDe, ChatTextsDe, PeopleTextsDe, SetupTextsDe, SettingsTextsDe, StatusTextsDe, SystemTextsDe, FilesTextsDe, PasswordTextsDe, AppMoveTextsDe, DevicesTextsDe, PublicRadioTextsDe, RadioSoftwareTextsDe, AlertTextsDe, SupportTextsDe, FindTextsDe, LifeSignTextsDe)
+            Strings(Language.GERMAN, CommonTextsDe, ChatTextsDe, PeopleTextsDe, SetupTextsDe, SettingsTextsDe, StatusTextsDe, SystemTextsDe, FilesTextsDe, PasswordTextsDe, AppMoveTextsDe, DevicesTextsDe, PublicRadioTextsDe, RadioSoftwareTextsDe, AlertTextsDe, SupportTextsDe, FindTextsDe, LifeSignTextsDe, LocationTextsDe, MapTextsDe, SosTextsDe, LoginTextsDe)
         }
         val english: Strings by lazy {
-            Strings(Language.ENGLISH, CommonTextsEn, ChatTextsEn, PeopleTextsEn, SetupTextsEn, SettingsTextsEn, StatusTextsEn, SystemTextsEn, FilesTextsEn, PasswordTextsEn, AppMoveTextsEn, DevicesTextsEn, PublicRadioTextsEn, RadioSoftwareTextsEn, AlertTextsEn, SupportTextsEn, FindTextsEn, LifeSignTextsEn)
+            Strings(Language.ENGLISH, CommonTextsEn, ChatTextsEn, PeopleTextsEn, SetupTextsEn, SettingsTextsEn, StatusTextsEn, SystemTextsEn, FilesTextsEn, PasswordTextsEn, AppMoveTextsEn, DevicesTextsEn, PublicRadioTextsEn, RadioSoftwareTextsEn, AlertTextsEn, SupportTextsEn, FindTextsEn, LifeSignTextsEn, LocationTextsEn, MapTextsEn, SosTextsEn, LoginTextsEn)
         }
 
         fun of(language: Language): Strings = when (language) {

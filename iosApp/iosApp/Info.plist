@@ -64,9 +64,14 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>anynear sucht dein Funkgerät auch im WLAN, wenn dort WLAN eingeschaltet ist.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>anynear bestimmt deinen ungefähren Standort nur auf deinem iPhone, um dir amtliche Warnungen für deinen Kreis zu zeigen. Dein Standort verlässt das iPhone nicht.</string>
-	<key>NSLocationDefaultAccuracyReduced</key>
-	<true/>
+	<string>anynear bestimmt deinen Standort, um dir amtliche Warnungen für deinen Landkreis zu zeigen. Andere sehen ihn nur, wenn du ihn für einen Kreis oder eine Person freigibst.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>anynear ortet auch im Hintergrund, solange du deinen Standort teilst oder deine Helfer rufst. Mit „Immer“ geht das Teilen nach einem Neustart des iPhones von selbst weiter.</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>Share</key>
+		<string>Für Treffpunkt, „Wo bist du?“ und die Freigabe „genau“ braucht anynear deinen genauen Standort.</string>
+	</dict>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_meshtastic._tcp</string>
@@ -79,6 +84,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
+		<string>location</string>
 		<string>processing</string>
 	</array>
 	<key>UILaunchScreen</key>
