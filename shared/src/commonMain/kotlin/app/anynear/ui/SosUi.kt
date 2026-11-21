@@ -19,12 +19,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,9 +51,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -84,8 +89,11 @@ internal fun SosHeaderButton(controller: AppController) {
         }
         delay(TAP_WAIT_MILLIS)
         taps = 0
+        sos.askAllNow()
         sos.open()
     }
+    // Someone asks to have this person as SOS contact: the number on the button leads to the question.
+    val asks by sos.asks.collectAsState()
     val running = calls.any { !it.ended }
     val helpers by sos.helpers.collectAsState()
     // Not set up yet (19.11.2026): an empty ring with a dot instead of the full red button, so that one sees at a
@@ -103,13 +111,25 @@ internal fun SosHeaderButton(controller: AppController) {
         Box(
             Modifier.fillMaxSize().clip(CircleShape)
                 .then(if (ready) Modifier.background(red.copy(alpha = if (running) 1f else 0.92f)) else Modifier.border(2.dp, red.copy(alpha = 0.55f), CircleShape))
-                .clickable(onClickLabel = if (ready) st.buttonLabel else st.buttonSetUp, role = Role.Button) { if (ready) taps++ else sos.open() },
+                .clickable(onClickLabel = if (ready) st.buttonLabel else st.buttonSetUp, role = Role.Button) { if (ready) taps++ else { sos.askAllNow(); sos.open() } }
+                .then(if (asks.isNotEmpty()) Modifier.semantics { stateDescription = st.openAsksCount(asks.size) } else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             Text(st.button, color = if (ready) AppTheme.colors.onAlarm else red.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
         }
         // Outside the round clip, so that the dot sits on the ring whole.
-        if (!ready) Box(Modifier.align(Alignment.TopEnd).size(12.dp).clip(CircleShape).background(BrandPalette.Signalorange))
+        // Open questions win over the dot: they are the next thing to do. The number is in the spoken state already.
+        if (asks.isNotEmpty()) OpenAsksBadge(asks.size, Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp))
+        else if (!ready) Box(Modifier.align(Alignment.TopEnd).size(12.dp).clip(CircleShape).background(BrandPalette.Signalorange))
+    }
+}
+
+/** The number of open SOS questions, as on the tabs. Silent for screen readers: the holder says it. */
+@Composable
+private fun OpenAsksBadge(count: Int, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    Badge(containerColor = scheme.secondary, contentColor = scheme.onSecondary, modifier = modifier.clearAndSetSemantics {}) {
+        Text(if (count > 99) "99+" else count.toString())
     }
 }
 
@@ -255,7 +275,11 @@ private fun RaisePage(controller: AppController, sos: Sos) {
         Text(st.whatGoes, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         Text(st.not112, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
         AppButton(st.dial112, sos::dialEmergency, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary)
-        AppButton(st.chooseHelpers, { choosing = true }, kind = ButtonKind.Quiet)
+        val asks by sos.asks.collectAsState()
+        if (asks.isEmpty()) AppButton(st.chooseHelpers, { choosing = true }, kind = ButtonKind.Quiet)
+        else BadgedBox(badge = { OpenAsksBadge(asks.size) }, Modifier.semantics { stateDescription = st.openAsksCount(asks.size) }) {
+            AppButton(st.chooseHelpers, { choosing = true }, kind = ButtonKind.Quiet)
+        }
     }
 }
 
@@ -272,6 +296,11 @@ private fun HelpersPage(controller: AppController, sos: Sos, onDone: () -> Unit)
     val search = rememberPeopleSearch(controller, people.filter { it.deviceId != null })
     val shownPeople = search.all
     PageFrame(st.noHelpersTitle, sos::close) {
+        // Questions put off with „Später“ wait here, on top: they are what is left to do.
+        val openAsks by sos.asks.collectAsState()
+        if (openAsks.isNotEmpty()) AppSection(st.openAsks) {
+            openAsks.forEach { a -> AppRow(title = st.askTitle(sos.name(a.person)), icon = AppIcons.Person, chevron = true, onClick = { sos.askNow(a.person) }) }
+        }
         Text(st.noHelpersText, style = MaterialTheme.typography.bodyLarge)
         if (shownCircles.isEmpty() && shownPeople.isEmpty()) Text(st.nobodyYet, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (shownCircles.isNotEmpty()) AppSection(st.circles) {
@@ -295,11 +324,6 @@ private fun HelpersPage(controller: AppController, sos: Sos, onDone: () -> Unit)
                     onClick = { chosenPersons = if (on) chosenPersons - id else chosenPersons + id },
                 )
             }
-        }
-        // Questions put off with „Später“ wait here.
-        val openAsks by sos.asks.collectAsState()
-        if (openAsks.isNotEmpty()) AppSection(st.openAsks) {
-            openAsks.forEach { a -> AppRow(title = st.askTitle(sos.name(a.person)), icon = AppIcons.Person, chevron = true, onClick = { sos.askNow(a.person) }) }
         }
         // Whose SOS contact this person is, and the way to take it back.
         val agreed by sos.agreed.collectAsState()

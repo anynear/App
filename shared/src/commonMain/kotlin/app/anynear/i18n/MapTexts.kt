@@ -196,6 +196,11 @@ interface MapTexts {
     fun mutualLoweredOwnText(name: String): String
     fun mutualKeep(level: String): String
     val mutualMark: String
+    fun mutualMine(name: String, level: String): String
+    fun mutualTheirs(name: String, level: String): String
+    fun mutualBoth(name: String, exact: Boolean): String
+    fun mutualWaiting(name: String): String
+    val mutualMore: String
     val pickHint: String
     val pickTake: String
     val spotMeetOnMap: String
@@ -381,7 +386,7 @@ internal object MapTextsDe : MapTexts {
     override val spotMeetHere = "Treffpunkt hier"
     override val spotMeetName = "Name, z. B. Haupteingang (freiwillig)"
     override val spotMeetSend = "Treffpunkt senden"
-    override val spotMeetExplain = "Alle im Gespräch sehen den Ort, an dem du gerade stehst, und können sich hinführen lassen."
+    override val spotMeetExplain = "Alle im Gespräch sehen den Treffpunkt und können sich hinführen lassen. Er ist da, wo du gerade bist, oder an einem Ort, den du auf der Karte wählst."
     override fun spotFrom(time: String) = "Stand $time"
     override fun guideToPlace(name: String) = "Zu „$name“ führen"
     override val closeFocus = "Ziel schließen"
@@ -420,8 +425,8 @@ internal object MapTextsDe : MapTexts {
     override val noticeHere = "Hat den Standort gesendet"
     override fun noticeArrived(label: String?) = if (label == null) "Ist angekommen" else "Ist angekommen: $label"
     override val askedNotice = "Antworte in anynear auf der Karte."
-    override val mutualStart = "Standort gegenseitig teilen"
-    override fun mutualTitle(name: String) = "Standort mit $name teilen"
+    override val mutualStart = "Standort freigeben"
+    override fun mutualTitle(name: String) = "Standort für $name freigeben"
     override val mutualText = "Was du wählst, sieht die Person ab jetzt von dir. Sie entscheidet, ob sie dir dasselbe zeigt."
     override val mutualArea = "Ungefähr"
     override val mutualAreaText = "Ihr seht voneinander den Ort, genau nur bei SOS."
@@ -432,7 +437,7 @@ internal object MapTextsDe : MapTexts {
     override val mutualYesMessage = "Einverstanden, wir sehen gegenseitig unseren Standort."
     override val mutualNoMessage = "Ich möchte meinen Standort nicht teilen."
     override val mutualNotice = "Möchte, dass ihr euch gegenseitig seht"
-    override val mutualAnswerNotice = "Standort gegenseitig teilen: Es gibt etwas Neues"
+    override val mutualAnswerNotice = "Standort freigeben: Es gibt etwas Neues"
     override fun mutualAskBy(name: String, exact: Boolean) = "$name möchte, dass ihr euch gegenseitig ${if (exact) "genau" else "ungefähr"} seht"
     override fun mutualAskOwn(name: String, exact: Boolean) = "Du hast $name gefragt: gegenseitig ${if (exact) "genau" else "ungefähr"} sehen"
     override fun mutualAlready(name: String, exact: Boolean) = "$name zeigt dir den Standort schon ${if (exact) "genau" else "ungefähr"}. Du kannst deine Antwort jederzeit unter „Wer sieht mich?“ ändern."
@@ -454,6 +459,11 @@ internal object MapTextsDe : MapTexts {
     override fun mutualLoweredOwnText(name: String) = "$name zeigt dir von selbst auch nicht mehr als du."
     override fun mutualKeep(level: String) = "Weiter zeigen: $level"
     override val mutualMark = "gegenseitig"
+    override fun mutualMine(name: String, level: String) = "Du zeigst $name: $level"
+    override fun mutualTheirs(name: String, level: String) = "$name zeigt dir: $level"
+    override fun mutualBoth(name: String, exact: Boolean) = "Du und $name seht euch schon gegenseitig ${if (exact) "genau" else "ungefähr"}."
+    override fun mutualWaiting(name: String) = "Deine Anfrage an $name wartet noch auf eine Antwort."
+    override val mutualMore = "Du kannst auch nach mehr fragen:"
     override val pickHint = "Schieb die Karte, bis der Ort unter dem Kreis liegt."
     override val pickTake = "Diesen Ort nehmen"
     override val spotMeetOnMap = "Auf der Karte wählen"
@@ -639,7 +649,7 @@ internal object MapTextsEn : MapTexts {
     override val spotMeetHere = "Meeting point here"
     override val spotMeetName = "Name, e.g. main entrance (optional)"
     override val spotMeetSend = "Send meeting point"
-    override val spotMeetExplain = "Everyone in the conversation sees the place where you are standing right now and can be guided there."
+    override val spotMeetExplain = "Everyone in the conversation sees the meeting point and can be guided there. It is where you are right now, or a place you choose on the map."
     override fun spotFrom(time: String) = "As of $time"
     override fun guideToPlace(name: String) = "Guide me to “$name”"
     override val closeFocus = "Close destination"
@@ -678,7 +688,7 @@ internal object MapTextsEn : MapTexts {
     override val noticeHere = "Sent a location"
     override fun noticeArrived(label: String?) = if (label == null) "Has arrived" else "Has arrived: $label"
     override val askedNotice = "Answer on the map in anynear."
-    override val mutualStart = "Share location with each other"
+    override val mutualStart = "Share location"
     override fun mutualTitle(name: String) = "Share location with $name"
     override val mutualText = "What you choose, the person sees of you from now on. They decide whether to show you the same."
     override val mutualArea = "Approximate"
@@ -690,7 +700,7 @@ internal object MapTextsEn : MapTexts {
     override val mutualYesMessage = "Agreed, we see each other's location."
     override val mutualNoMessage = "I don't want to share my location."
     override val mutualNotice = "Would like you to see each other"
-    override val mutualAnswerNotice = "Sharing location with each other: there is news"
+    override val mutualAnswerNotice = "Share location: there is news"
     override fun mutualAskBy(name: String, exact: Boolean) = "$name would like you to see each other ${if (exact) "precisely" else "approximately"}"
     override fun mutualAskOwn(name: String, exact: Boolean) = "You asked $name: see each other ${if (exact) "precisely" else "approximately"}"
     override fun mutualAlready(name: String, exact: Boolean) = "$name already shows you their location ${if (exact) "precisely" else "approximately"}. You can change your answer at any time under “Who sees me?”."
@@ -712,6 +722,11 @@ internal object MapTextsEn : MapTexts {
     override fun mutualLoweredOwnText(name: String) = "$name automatically shows you no more than you do."
     override fun mutualKeep(level: String) = "Keep showing: $level"
     override val mutualMark = "mutual"
+    override fun mutualMine(name: String, level: String) = "You show $name: $level"
+    override fun mutualTheirs(name: String, level: String) = "$name shows you: $level"
+    override fun mutualBoth(name: String, exact: Boolean) = "You and $name already see each other ${if (exact) "precisely" else "approximately"}."
+    override fun mutualWaiting(name: String) = "Your request to $name is still waiting for an answer."
+    override val mutualMore = "You can also ask for more:"
     override val pickHint = "Move the map until the place is under the circle."
     override val pickTake = "Take this place"
     override val spotMeetOnMap = "Choose on the map"

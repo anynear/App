@@ -13,6 +13,8 @@ interface SystemTexts {
     val messagesChannelDescription: String
     /** Action on a message notification, also on watches: „Antworten“ */
     val reply: String
+    /** Action on a message notification, also on watches and in Android Auto: „Gelesen“ */
+    val markRead: String
     /** Placeholder of the reply field in the notification */
     val replyHint: String
     /** Ready-made short replies offered on watches and in the notification, shortest first. */
@@ -72,6 +74,7 @@ internal object SystemTextsDe : SystemTexts {
     override val messagesChannel = "Nachrichten"
     override val messagesChannelDescription = "Neue Nachrichten aus deinen Kreisen und von deinen Kontakten"
     override val reply = "Antworten"
+    override val markRead = "Gelesen"
     override val replyHint = "Nachricht"
     override val quickReplies = listOf("Ja", "Nein", "Okay", "Bin unterwegs", "Rufe gleich an")
     override fun replyNotSent(reason: String) = "Nicht gesendet: $reason"
@@ -112,6 +115,7 @@ internal object SystemTextsEn : SystemTexts {
     override val messagesChannel = "Messages"
     override val messagesChannelDescription = "New messages from your circles and contacts"
     override val reply = "Reply"
+    override val markRead = "Mark as read"
     override val replyHint = "Message"
     override val quickReplies = listOf("Yes", "No", "Okay", "On my way", "Will call you soon")
     override fun replyNotSent(reason: String) = "Not sent: $reason"

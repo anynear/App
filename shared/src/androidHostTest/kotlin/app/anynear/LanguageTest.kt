@@ -89,6 +89,24 @@ class LanguageTest {
         assertTrue(same.size < de.size / 10, "auffällig viele unübersetzte Texte: ${same.keys}")
     }
 
+    /** „Standort freigeben“ (ADR 0121 §28) has this name in both languages, also in its notice and dialog. */
+    @Test
+    fun shareLocationIsNamedTheSameEverywhere() {
+        localeTagOverride = "de-DE"
+        assertEquals("Standort freigeben", texts.map.mutualStart)
+        assertTrue(texts.map.mutualAnswerNotice.startsWith("Standort freigeben"))
+        assertEquals("Standort für Anna freigeben", texts.map.mutualTitle("Anna"))
+        localeTagOverride = "en-US"
+        assertEquals("Share location", texts.map.mutualStart)
+        assertTrue(texts.map.mutualAnswerNotice.startsWith("Share location"))
+        assertEquals("Share location with Anna", texts.map.mutualTitle("Anna"))
+        for (tag in listOf("de-DE", "en-US")) {
+            localeTagOverride = tag
+            val all = listOf(texts.map.mutualStart, texts.map.mutualAnswerNotice, texts.map.mutualTitle("Anna"))
+            assertTrue(all.none { "gegenseitig teilen" in it || "with each other" in it }, tag)
+        }
+    }
+
     @Test
     fun germanFormats() {
         localeTagOverride = "de-DE"

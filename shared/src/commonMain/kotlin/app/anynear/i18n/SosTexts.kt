@@ -35,6 +35,7 @@ interface SosTexts {
     val askLater: String
     val contactFor: String
     val openAsks: String
+    fun openAsksCount(count: Int): String
     val withdraw: String
     fun arrived(done: Int, all: Int): String
     val notArrived: String
@@ -86,7 +87,7 @@ internal object SosTextsDe : SosTexts {
     override val dial112 = "112 anrufen"
     override val noHelpersTitle = "Wer soll dir helfen?"
     override val noHelpersText = "Wähle Kreise oder einzelne Personen. Sie werden laut geweckt, wenn du Hilfe rufst."
-    override val chooseHelpers = "SOS-Kontakte ändern"
+    override val chooseHelpers = "SOS-Kontakte verwalten"
     override val save = "Speichern"
     override val nobodyYet = "Du hast noch keinen Kreis und keinen Kontakt. Lade zuerst jemanden ein."
     override fun countdown(seconds: Int) = "Deine SOS-Kontakte werden in $seconds Sekunden gewarnt"
@@ -109,6 +110,7 @@ internal object SosTextsDe : SosTexts {
     override val askLater = "Später"
     override val contactFor = "Du bist SOS-Kontakt für"
     override val openAsks = "Offene Anfragen"
+    override fun openAsksCount(count: Int) = if (count == 1) "1 offene Anfrage" else "$count offene Anfragen"
     override val withdraw = "Antippen, um es zurückzunehmen"
     override fun arrived(done: Int, all: Int) = "Angekommen bei $done von $all"
     override val notArrived = "Noch bei niemandem angekommen. Wenn es eilt, ruf die 112 an."
@@ -159,7 +161,7 @@ internal object SosTextsEn : SosTexts {
     override val dial112 = "Call 112"
     override val noHelpersTitle = "Who should help you?"
     override val noHelpersText = "Choose circles or single people. They are woken loudly when you call for help."
-    override val chooseHelpers = "Change SOS contacts"
+    override val chooseHelpers = "Manage SOS contacts"
     override val save = "Save"
     override val nobodyYet = "You have no circle and no contact yet. Invite someone first."
     override fun countdown(seconds: Int) = "Your SOS contacts will be warned in $seconds seconds"
@@ -182,6 +184,7 @@ internal object SosTextsEn : SosTexts {
     override val askLater = "Later"
     override val contactFor = "You are an SOS contact for"
     override val openAsks = "Open requests"
+    override fun openAsksCount(count: Int) = if (count == 1) "1 open request" else "$count open requests"
     override val withdraw = "Tap to take it back"
     override fun arrived(done: Int, all: Int) = "Arrived with $done of $all"
     override val notArrived = "Not arrived with anyone yet. If it is urgent, call 112."

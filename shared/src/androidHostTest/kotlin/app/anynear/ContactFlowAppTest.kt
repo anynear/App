@@ -420,6 +420,25 @@ class ContactFlowAppTest {
     }
 
     @Test
+    fun markReadFromNotificationRemovesTheNotification() {
+        val hooks = NotificationHooks()
+        withApp(hooks) { a ->
+            val (ben, link) = a.otherDevice("Testperson Ben")
+            runBlocking { a.controller.receiveLink(link) }
+            a.controller.acceptPendingContact(openChat = false)
+            eventually { a.controller.isDirectContact(ben) }
+            val key = "p:" + PeerId.device(ben)
+            assertTrue(runBlocking { a.controller.markReadFromNotification(key, wait = 1.seconds) })
+            assertTrue(key in hooks.cancelled, "Benachrichtigung ist weg")
+        }
+    }
+
+    @Test
+    fun noMarkReadFromNotificationOfPublicChats() = withApp { a ->
+        assertFalse(runBlocking { a.controller.markReadFromNotification("o:nearby", wait = 1.seconds) })
+    }
+
+    @Test
     fun noReplyFromNotificationOfPublicChats() = withApp { a ->
         assertFalse(runBlocking { a.controller.replyFromNotification("o:nearby", "Ja", wait = 1.seconds) })
         assertTrue(a.controller.messages.value.none { it.outgoing })

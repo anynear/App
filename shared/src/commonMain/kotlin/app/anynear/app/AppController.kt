@@ -394,7 +394,7 @@ class AppController(
     }
 
     /**
-     * „Standort gegenseitig teilen“ (ADR 0121 §28) with the person of [conversation]: from now on it sees the own place
+     * „Standort freigeben“ (ADR 0121 §28) with the person of [conversation]: from now on it sees the own place
      * at [level], and is asked to show the same. `false` if that is not a person with anynear or nothing went out.
      */
     fun askMutualPlace(conversation: Conversation, level: app.anynear.location.ShareLevel): Boolean {
@@ -1479,6 +1479,22 @@ class AppController(
                 all.any { it.outgoing && it.conversation == conversation && it.timestampMillis >= since && it.status != MessageStatus.QUEUED }
             }
         }
+        return true
+    }
+
+    /**
+     * „Gelesen“ in the notification of [key] (also on a watch or in Android Auto), without opening the app: the
+     * conversation counts as read, as when opening it, so the senders get a read receipt (ADR 0019), and the
+     * notification disappears. Waits at most [wait] for the core, as [replyFromNotification]. Returns `false` for an
+     * unknown conversation.
+     */
+    suspend fun markReadFromNotification(key: String, wait: Duration = REPLY_WAIT): Boolean {
+        val conversation = conversationOf(key) ?: return false
+        // Started by the notification: the core needs the own keys before it can send read receipts.
+        withTimeoutOrNull(wait) { _myDeviceId.filterNotNull().first() }
+        log("Gelesen aus der Benachrichtigung ${conversation.key()}")
+        markConversationRead(conversation)
+        cancelNotification(conversation)
         return true
     }
 
@@ -2788,7 +2804,7 @@ class AppController(
         if (e.forwarded) e.mid?.let { core.confirmReceipt(e.fromDevice, it, AnmpArrived.INTERNET) }
         val read = !own && readOnArrival(conversation, message.timestampMillis)
         val added = messageStore.addOnline(e.objectId, message, read)
-        // The answer to „Standort gegenseitig teilen“ (ADR 0121 §28): after a no the own place goes back to what it was.
+        // The answer to „Standort freigeben“ (ADR 0121 §28): after a no the own place goes back to what it was.
         if (added && !own && conversation is Conversation.Direct) message.spot?.takeIf { it.kind == ChatSpot.SHARED }?.let { answer ->
             findPerson(conversation.peer)?.deviceId?.let { id ->
                 // The answer to the own question, or the other side lowering later what both agreed on.

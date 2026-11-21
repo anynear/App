@@ -73,6 +73,8 @@ class MessageNotifier(private val context: Context) {
             // Again after a failed reply, but without a second sound.
             .setOnlyAlertOnce(notification.replyError != null)
         if (notification.canReply) builder.addAction(replyAction(notification.key))
+        // Only with something unread: a notification for a failed reply or only reactions has nothing to mark.
+        if (notification.unreadCount > 0) builder.addAction(markReadAction(notification.key))
         val built = builder.build()
         try {
             // Summary of app versions up to 13.11.2026, replaced by the one of [NotificationGroups].
@@ -106,6 +108,17 @@ class MessageNotifier(private val context: Context) {
             .setShowsUserInterface(false)
             .build()
     }
+
+    /**
+     * „Gelesen“: marks the conversation as read without opening the app ([MessageReadReceiver]). Together with
+     * „Antworten“ the condition for Android Auto to read out and show the messages; the semantic action tells it which
+     * button is which.
+     */
+    private fun markReadAction(key: String): NotificationCompat.Action =
+        NotificationCompat.Action.Builder(AppBrand.notificationIcon, texts.system.markRead, MessageReadReceiver.intent(context, key))
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .setShowsUserInterface(false)
+            .build()
 
     private fun openIntent(key: String): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
