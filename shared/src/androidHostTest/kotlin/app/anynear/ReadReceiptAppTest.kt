@@ -5,6 +5,7 @@ import app.anynear.app.AppController
 import app.anynear.app.PlatformHooks
 import app.anynear.attachments.AttachmentFiles
 import app.anynear.attachments.BinaryFiles
+import app.anynear.chats.key
 import app.anynear.circles.CircleRepository
 import app.anynear.circles.ProfileRepository
 import app.anynear.contacts.ContactRepository
@@ -204,7 +205,7 @@ class ReadReceiptAppTest {
         println("ok: $what (${System.currentTimeMillis() - t0} ms)")
     }
 
-    private fun run(benOpensFirst: Boolean, withRadio: Boolean = false, direct: Boolean = false) = runBlocking {
+    private fun run(benOpensFirst: Boolean, withRadio: Boolean = false, direct: Boolean = false, fromNotification: Boolean = false) = runBlocking {
         if (!enabled) return@runBlocking
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
@@ -226,7 +227,9 @@ class ReadReceiptAppTest {
             anna.send(circle, "Hallo Ben")
             eventually("Ben hat sie") { ben.messages.value.any { it.text == "Hallo Ben" } }
             if (withRadio) println("Ben: Wege " + ben.messages.value.single { it.text == "Hallo Ben" }.via)
-            if (!benOpensFirst) ben.setOpenConversation(benSide)
+            // „Gelesen“ in the notification instead of opening the chat: the same read receipt.
+            if (fromNotification) check(ben.markReadFromNotification(benSide.key()))
+            else if (!benOpensFirst) ben.setOpenConversation(benSide)
             try {
                 eventually("bei Anna gelesen") {
                     anna.messages.value.single { it.text == "Hallo Ben" }.status == MessageStatus.READ
@@ -500,4 +503,10 @@ class ReadReceiptAppTest {
 
     @Test
     fun readOverRadioAndInternetWhenChatIsOpenedLater() = run(benOpensFirst = false, withRadio = true)
+
+    @Test
+    fun readFromNotificationWithoutOpeningTheChat() = run(benOpensFirst = false, fromNotification = true)
+
+    @Test
+    fun directReadFromNotificationOverRadioAndInternet() = run(benOpensFirst = false, withRadio = true, direct = true, fromNotification = true)
 }

@@ -91,4 +91,52 @@ class MutualPlaceTest {
         assertTrue(!s.remoteLowered("eva", ShareLevel.Exact.wire))
         assertEquals(ShareLevel.Area, s.persons.value["eva"])
     }
+
+    /** The reported bug: both share precisely already, set up outside „Standort freigeben“; a second tap shows that. */
+    @Test
+    fun anExistingSharingIsRecognizedAndNothingMoreIsAsked() = runTest {
+        val s = sharing()
+        s.setPersonLevel("anna", ShareLevel.Exact)
+        val between = s.between("anna", emptyList(), ShareLevel.Exact)
+        assertTrue(between.exists)
+        assertEquals(ShareLevel.Exact, between.mine)
+        assertEquals(ShareLevel.Exact, between.theirs)
+        assertEquals(ShareLevel.Exact, between.both)
+        assertTrue(between.askable.isEmpty())
+        assertNull(between.suggested)
+    }
+
+    @Test
+    fun aSharingThroughACircleCountsToo() = runTest {
+        val s = sharing()
+        s.setLevel("familie", ShareLevel.Exact, members = listOf("anna"))
+        val between = s.between("anna", listOf("familie"), ShareLevel.Area)
+        assertEquals(ShareLevel.Exact, between.mine)
+        assertEquals(ShareLevel.Area, between.both)
+        // Only more than both show is left to ask for, and the choice starts where the person is already.
+        assertEquals(listOf(ShareLevel.Exact), between.askable)
+        assertEquals(ShareLevel.Exact, between.suggested)
+    }
+
+    @Test
+    fun anAgreementOrAnOpenQuestionIsShown() = runTest {
+        val s = sharing()
+        s.agreeMutual("ben", ShareLevel.Area)
+        assertEquals(ShareLevel.Area, s.between("ben", emptyList(), null).agreed)
+        assertTrue(s.between("ben", emptyList(), null).exists)
+        s.askMutual("tom", ShareLevel.Exact)
+        val tom = s.between("tom", emptyList(), null)
+        assertTrue(tom.open && tom.exists)
+        assertNull(tom.both)
+        // Asking again never starts below what the person shows already.
+        assertEquals(ShareLevel.Exact, tom.suggested)
+    }
+
+    @Test
+    fun withoutAnySharingItIsAFreshQuestion() = runTest {
+        val between = sharing().between("eva", emptyList(), null)
+        assertTrue(!between.exists)
+        assertEquals(listOf(ShareLevel.Area, ShareLevel.Exact), between.askable)
+        assertEquals(ShareLevel.Area, between.suggested)
+    }
 }

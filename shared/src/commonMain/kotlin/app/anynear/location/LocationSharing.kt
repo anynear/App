@@ -231,7 +231,15 @@ class LocationSharing(
     }
 
     /**
-     * „Standort gegenseitig teilen“ (ADR 0121 §28): the person shows [personId] its place at [level] from now on and
+     * Where the person and [personId] stand with each other, for „Standort freigeben“ (ADR 0121 §28): what it shows
+     * [personId] now (through [circleIds] or its own setting), what [personId] shows back ([theirs], from the shared
+     * places), what both agreed on and whether the own question is still open. Also a sharing set up elsewhere counts.
+     */
+    fun between(personId: String, circleIds: List<String>, theirs: ShareLevel?): Between =
+        Between(levelFor(personId, circleIds), theirs ?: ShareLevel.Off, agreed(personId), mutualOpen(personId))
+
+    /**
+     * „Standort freigeben“ (ADR 0121 §28): the person shows [personId] its place at [level] from now on and
      * asks for the same. What held before is kept, to go back to after a no ([mutualAnswered]).
      */
     fun askMutual(personId: String, level: ShareLevel) {
@@ -431,4 +439,22 @@ class LocationSharing(
         /** As long as the other postponed hints (three days). */
         const val PAUSE_MILLIS = 3 * 24 * 3_600_000L
     }
+}
+
+/**
+ * Where the person and someone else stand with each other ([LocationSharing.between]): [mine] is what the person shows,
+ * [theirs] what the other shows back, [agreed] what both agreed on, [open] while the own question has no answer yet.
+ */
+data class Between(val mine: ShareLevel, val theirs: ShareLevel, val agreed: ShareLevel?, val open: Boolean) {
+    /** Something is shared all the time in either direction, agreed on or asked for: there is a sharing to show. */
+    val exists: Boolean get() = mine.always || theirs.always || agreed != null || open
+
+    /** The level both show each other all the time, the lower of the two; `null` if one of them does not. */
+    val both: ShareLevel? get() = if (mine.always && theirs.always) minOf(mine, theirs, compareBy { it.wire }) else null
+
+    /** The levels it still makes sense to ask for: those above what both show already. Empty: nothing more to ask. */
+    val askable: List<ShareLevel> get() = listOf(ShareLevel.Area, ShareLevel.Exact).filter { it.wire > (both?.wire ?: 0) }
+
+    /** The level to start the choice at: never below what the person shows already, so asking does not lower it. */
+    val suggested: ShareLevel? get() = askable.firstOrNull { it.wire >= mine.wire } ?: askable.lastOrNull()
 }

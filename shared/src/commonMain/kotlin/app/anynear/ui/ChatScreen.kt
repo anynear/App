@@ -1517,36 +1517,66 @@ private fun placeSendText(result: AppController.PlaceSend): String = when (resul
 }
 
 
-/** „Standort gegenseitig teilen“ (ADR 0121 §28): choose the level; the own place is shown at it from then on. */
+/**
+ * „Standort freigeben“ (ADR 0121 §28): first what the person and the other already show each other, also when it was
+ * set up elsewhere (a circle, „Wer sieht mich?“); then, if there is more to ask for, the level. The own place is shown
+ * at it from then on.
+ */
 @Composable
 private fun MutualPlaceDialog(controller: AppController, conversation: Conversation, onDismiss: () -> Unit) {
     val mt = texts.map
     val name = (conversation as? Conversation.Direct)?.let { controller.peerName(it.peer) }.orEmpty()
-    var level by remember { mutableStateOf(app.anynear.location.ShareLevel.Area) }
+    val person = (conversation as? Conversation.Direct)?.let { controller.findPerson(it.peer) }
+    val id = person?.deviceId
+    val sharing = controller.locationSharing
+    val persons by (sharing?.persons ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, app.anynear.location.ShareLevel>()) }).collectAsState()
+    val places by (controller.placeSharer?.places ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, app.anynear.location.SharedPlace>()) }).collectAsState()
+    // Read so that the state follows a change on another own device while the dialog is open.
+    sharing?.let { s -> s.circles.collectAsState().value; s.default.collectAsState().value; s.paused.collectAsState().value; s.approved.collectAsState().value }
+    persons.size
+    // What the other shows back, unless its time is over.
+    val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+    val theirs = id?.let { places[it] }?.takeIf { it.untilMillis == 0L || it.untilMillis > now }?.level
+    val between = if (sharing == null || id == null) null
+    else sharing.between(id, person?.circleIds.orEmpty().filter { it != app.anynear.people.MemberDirectory.DIRECT_CONTACTS }, theirs)
+    val askable = between?.askable ?: listOf(app.anynear.location.ShareLevel.Area, app.anynear.location.ShareLevel.Exact)
+    var level by remember(between?.suggested) { mutableStateOf(between?.suggested ?: app.anynear.location.ShareLevel.Area) }
     AppDialog(
         onDismissRequest = onDismiss,
         title = { Text(mt.mutualTitle(name)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(mt.mutualText, style = MaterialTheme.typography.bodyMedium)
-                listOf(
-                    Triple(app.anynear.location.ShareLevel.Area, mt.mutualArea, mt.mutualAreaText),
-                    Triple(app.anynear.location.ShareLevel.Exact, mt.mutualExact, mt.mutualExactText),
-                ).forEach { (l, title, text) ->
-                    AppRow(
-                        title = title, subtitle = text, onClick = { level = l },
-                        leading = { androidx.compose.material3.RadioButton(selected = level == l, onClick = { level = l }) },
-                    )
+                if (between != null && between.exists) {
+                    // The sharing that holds already, so that a second tap does not look like a fresh start.
+                    val both = between.both
+                    if (both != null) Text(mt.mutualBoth(name, both == app.anynear.location.ShareLevel.Exact), style = MaterialTheme.typography.titleSmall)
+                    Text(mt.mutualMine(name, levelName(between.mine)), style = MaterialTheme.typography.bodyMedium)
+                    Text(mt.mutualTheirs(name, levelName(between.theirs)), style = MaterialTheme.typography.bodyMedium)
+                    if (between.open) Text(mt.mutualWaiting(name), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(mt.mutualChange, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (askable.isNotEmpty()) {
+                    Text(if (between?.exists == true) mt.mutualMore else mt.mutualText, style = MaterialTheme.typography.bodyMedium)
+                    listOf(
+                        Triple(app.anynear.location.ShareLevel.Area, mt.mutualArea, mt.mutualAreaText),
+                        Triple(app.anynear.location.ShareLevel.Exact, mt.mutualExact, mt.mutualExactText),
+                    ).filter { it.first in askable }.forEach { (l, title, text) ->
+                        AppRow(
+                            title = title, subtitle = text, onClick = { level = l },
+                            leading = { androidx.compose.material3.RadioButton(selected = level == l, onClick = { level = l }) },
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
-            AppButton(mt.mutualSend, {
+            if (askable.isEmpty()) AppButton(texts.common.done, onDismiss, kind = ButtonKind.Quiet)
+            else AppButton(mt.mutualSend, {
                 controller.askMutualPlace(conversation, level)
                 onDismiss()
             }, kind = ButtonKind.Quiet)
         },
-        dismissButton = { AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) },
+        dismissButton = if (askable.isEmpty()) null else ({ AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) }),
     )
 }
 

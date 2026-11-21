@@ -235,7 +235,7 @@ data class ChatSpot(
         /** „Angekommen“ (ADR 0121 §26): the sender arrived where it was going; the place and, if it has one, its name. */
         const val ARRIVED = 5
 
-        /** „Standort gegenseitig teilen“ (ADR 0121 §28): the sender asks that both see each other for good, at [level]. */
+        /** „Standort freigeben“ (ADR 0121 §28): the sender asks that both see each other for good, at [level]. */
         const val SHARE = 6
 
         /** The answer to [SHARE]. */

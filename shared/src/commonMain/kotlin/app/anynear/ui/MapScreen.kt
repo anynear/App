@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -208,6 +211,8 @@ internal fun MapScreen(
     // A coloured district tapped (ADR 0121 §7): where, so that the bubble with its warnings moves with the map.
     var warningSpot by remember { mutableStateOf<WarningSpot?>(null) }
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
+    // Open, the sheet can also cover the whole map: scrolling the list up takes it there, back at the top down again.
+    var sheetFull by rememberSaveable { mutableStateOf(false) }
 
     // The own dot: located when the tab opens and every two minutes while it is open, every ten seconds on the way to
     // a destination. The place stays on the phone.
@@ -360,18 +365,53 @@ internal fun MapScreen(
             // for an answer or a destination opens it by itself.
             val needsLook = focus != null || (sharer?.asking?.collectAsState()?.value?.isNotEmpty() == true)
             LaunchedEffect(needsLook) { if (needsLook) sheetOpen = true }
-            LaunchedEffect(sheetOpen) { if (sheetOpen) warningSpot = null }
-            val sheetHeight by androidx.compose.animation.core.animateDpAsState(if (sheetOpen) full * 0.62f else SHEET_CLOSED)
+            LaunchedEffect(sheetOpen) { if (sheetOpen) warningSpot = null else sheetFull = false }
+            val sheetHeight by androidx.compose.animation.core.animateDpAsState(
+                when {
+                    !sheetOpen -> SHEET_CLOSED
+                    sheetFull -> full
+                    else -> full * 0.62f
+                },
+            )
+            // The list decides between half and whole (21.11.2026): a scroll up while half open first grows the sheet;
+            // a scroll down that the list no longer takes, because it is at its top, makes it half again.
+            val sheetScroll = remember {
+                object : NestedScrollConnection {
+                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                        if (sheetOpen && !sheetFull && available.y < 0f && source == NestedScrollSource.UserInput) {
+                            sheetFull = true
+                            return available
+                        }
+                        return Offset.Zero
+                    }
+
+                    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                        if (sheetFull && available.y > 0f && source == NestedScrollSource.UserInput) {
+                            sheetFull = false
+                            return available
+                        }
+                        return Offset.Zero
+                    }
+                }
+            }
             Surface(
                 color = MaterialTheme.colorScheme.background, shadowElevation = 8.dp, shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(sheetHeight),
             ) {
-                Column {
+                Column(Modifier.nestedScroll(sheetScroll)) {
                     Column(
                         Modifier.fillMaxWidth()
                             .clickable(onClickLabel = if (sheetOpen) mt.sheetClose else mt.sheetOpen, role = Role.Button) { sheetOpen = !sheetOpen }
                             .pointerInput(Unit) {
-                                detectVerticalDragGestures { _, drag -> if (drag < -6) sheetOpen = true else if (drag > 6) sheetOpen = false }
+                                // Up: closed to half, half to whole. Down: whole to half, half to closed. One step per drag.
+                                var moved = false
+                                detectVerticalDragGestures(onDragStart = { moved = false }) { _, drag ->
+                                    if (moved) return@detectVerticalDragGestures
+                                    when {
+                                        drag < -6 -> { moved = true; if (sheetOpen) sheetFull = true else sheetOpen = true }
+                                        drag > 6 -> { moved = true; if (sheetFull) sheetFull = false else sheetOpen = false }
+                                    }
+                                }
                             }
                             .padding(top = 8.dp, bottom = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,

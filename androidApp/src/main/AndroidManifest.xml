@@ -94,6 +94,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.App">
 
+        <!-- Android Auto: message notifications while driving (MessageNotifier, @xml/automotive_app_desc). -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <!-- singleTask: sharing, links and notifications go to the running window (onNewIntent). With singleTop
              the share menu opened a second one, and its outdated draft was sent a second time. -->
         <activity
@@ -291,6 +296,10 @@
         <!-- „Antworten“ in a message notification, also from a watch (MessageNotifier). -->
         <receiver
             android:name=".MessageReplyReceiver"
+            android:exported="false" />
+        <!-- „Gelesen“ in a message notification, also from a watch or Android Auto (MessageNotifier). -->
+        <receiver
+            android:name=".MessageReadReceiver"
             android:exported="false" />
 
         <!-- Scheduled reminders, e.g. to charge the radio (ADR 0085). -->

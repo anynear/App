@@ -224,6 +224,9 @@ class Sos(
     /** Shows the question of [person] again, from the list of open questions. */
     fun askNow(person: String) { _later.value = _later.value - person }
 
+    /** Shows every open question again, e.g. from the SOS button that carries their number. */
+    fun askAllNow() { _later.value = emptySet() }
+
     /** The own answer to [person], also later to take a yes back. */
     suspend fun answer(person: String, agree: Boolean): Boolean = source.answer(person, agree).also { refreshContacts() }
 
