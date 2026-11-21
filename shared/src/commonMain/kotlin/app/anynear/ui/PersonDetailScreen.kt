@@ -1,6 +1,8 @@
 package app.anynear.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -343,9 +345,8 @@ internal fun lastSeenLabel(atMillis: Long, nowMillis: Long = Clock.System.now().
 private fun ShareContactDialog(controller: AppController, peer: String, name: String, onDismiss: () -> Unit) {
     val people by controller.people.collectAsState()
     val members by controller.members.collectAsState()
-    val others = people.filter { p ->
-        p.peer != peer && p.isIn(members, MemberDirectory.DIRECT_CONTACTS)
-    }
+    val search = rememberPeopleSearch(controller, people.filter { p -> p.peer != peer && p.isIn(members, MemberDirectory.DIRECT_CONTACTS) })
+    val others = search.all
     ActionsDialog(texts.people.shareContactWho(name), onDismiss = onDismiss) {
         Text(
             texts.people.shareContactHint(name),
@@ -356,15 +357,19 @@ private fun ShareContactDialog(controller: AppController, peer: String, name: St
         if (others.isEmpty()) {
             Text(texts.people.noOtherContacts, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
-        others.forEach { other ->
-            AppRow(
-                title = other.name,
-                leading = { PersonAvatar(controller, other.peer, other.image, 40.dp) },
-                onClick = {
-                    onDismiss()
-                    controller.introduce(peer, other.peer)
-                },
-            )
+        PeopleSearchField(search, Modifier.padding(vertical = 8.dp))
+        // With many contacts the list scrolls inside the dialog instead of running off-screen.
+        LazyColumn(Modifier.weight(1f, fill = false)) {
+            items(search.found, key = { it.peer }) { other ->
+                AppRow(
+                    title = other.name,
+                    leading = { PersonAvatar(controller, other.peer, other.image, 40.dp) },
+                    onClick = {
+                        onDismiss()
+                        controller.introduce(peer, other.peer)
+                    },
+                )
+            }
         }
     }
 }

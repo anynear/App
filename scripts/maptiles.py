@@ -51,7 +51,15 @@ Aufbau einer Datei (Zahlen als Varint, Vorzeichen im Zickzack, Koordinaten in 1e
         erster Punkt (Breite, Länge), dann die Unterschiede zum Punkt davor
 
 Arten: 1 Autobahn, 2 Hauptstraße, 3 Nebenstraße, 4 Wohnstraße, 5 Weg, 6 Bahn, 10 Wasserfläche, 11 Wasserlauf,
-12 Wald, 13 Grün, 20 Ort, 21 Stadt (nur `base`). Die Objekte stehen in der Reihenfolge, in der sie gezeichnet werden.
+12 Wald, 13 Grün. Die Objekte stehen in der Reihenfolge, in der sie gezeichnet werden.
+
+Orte (ein Punkt mit Namen) tragen ihren Rang in der Art (20.11.2026): 32 + 16 · Typ + Größe, Typ 0 Stadt (`city`),
+1 Kleinstadt (`town`), 2 Dorf (`village`), 3 Weiler (`hamlet`), 4 Stadtteil (`suburb`, `borough`), 5 Viertel
+(`quarter`, `neighbourhood`); Größe = abgerundet 2 · log10(Einwohner), 0 bis 15 (10 ab 100.000, 8 ab 10.000), ohne
+Angabe je Typ ein fester Wert. Andere `place` (Flurnamen, Einzelhöfe, Inseln, Plätze) kommen nicht auf die Karte. Die App
+entscheidet daraus, ab welcher Zoomstufe ein Name erscheint und wer bei Überlappung gewinnt (`ui/MapLabels.kt`).
+Innerhalb einer Datei stehen die Orte nach Einwohnern, kleine zuerst. Ältere Dateien hatten 20 Ort und 21 Stadt;
+die App liest beide weiter.
 """
 
 import calendar
@@ -75,6 +83,31 @@ ROADS = {
 }
 GREEN = {"meadow", "grass", "cemetery", "allotments", "park", "garden", "pitch", "sports_centre"}
 ORDER = {13: 1, 12: 2, 10: 3, 11: 4, 5: 5, 4: 6, 3: 7, 6: 8, 2: 9, 1: 10, 20: 11, 21: 12}
+
+# Places with their rank (twin of `MapLabels` in the app): type and size in the kind.
+RANKED = 32
+PLACE_TYPES = {"city": 0, "town": 1, "village": 2, "hamlet": 3, "suburb": 4, "borough": 4, "quarter": 5, "neighbourhood": 5}
+DEFAULT_SIZE = {"city": 10, "town": 8, "village": 6, "hamlet": 4, "suburb": 8, "borough": 8, "quarter": 6, "neighbourhood": 4}
+
+
+def inhabitants(tags):
+    digits = "".join(ch for ch in tags.get("population", "").split(";")[0] if ch.isdigit())
+    return int(digits) if digits else 0
+
+
+def place_kind(tags):
+    """The kind of a named place with its rank; None for places that do not come on the map."""
+    place = tags.get("place")
+    if place not in PLACE_TYPES or "name" not in tags:
+        return None
+    pop = inhabitants(tags)
+    size = min(15, int(math.floor(2 * math.log10(pop)))) if pop > 0 else DEFAULT_SIZE[place]
+    return RANKED + 16 * PLACE_TYPES[place] + size
+
+
+def order(kind):
+    """Drawing order; places last, by rank, so that an app of before 20.11.2026 still finds them at the end."""
+    return ORDER.get(kind, 11) if kind < RANKED else 11
 
 
 def kind_of(tags):
@@ -284,7 +317,7 @@ def pack(key, stamp, items):
 
 def write(path, key, stamp, features):
     """features: (kind, name or None, [(lat, lon)])."""
-    features = sorted(features, key=lambda f: ORDER[f[0]])
+    features = sorted(features, key=lambda f: order(f[0]))
     out = pack(key, stamp, [(kind, name) + encode(pts) for kind, name, pts in features])
     Path(path).write_bytes(out)
     return len(out)
@@ -369,11 +402,10 @@ def base(src, dst):
     places = []
     for el in elements:
         tags = el.get("tags", {})
-        if el["type"] == "node" and tags.get("place") in ("city", "town") and "name" in tags:
-            digits = "".join(ch for ch in tags.get("population", "") if ch.isdigit())
-            places.append((int(digits) if digits else 0, 21 if tags["place"] == "city" else 20, tags["name"], [(el["lat"], el["lon"])]))
-    # Small before large: the app places names from the end, so the largest cities win the room.
-    for _, kind, name, pts in sorted(places, key=lambda p: p[0]):
+        if el["type"] == "node" and tags.get("place") in ("city", "town") and place_kind(tags):
+            places.append((inhabitants(tags), el["id"], place_kind(tags), tags["name"], [(el["lat"], el["lon"])]))
+    # Small before large: among places of the same rank the app lets the later one win.
+    for _, _, kind, name, pts in sorted(places, key=lambda p: p[:2]):
         features.append((kind, name, pts))
     size = write(dst, "base", stamp, features)
     print("%d Objekte, %d Bytes" % (len(features), size))
@@ -402,10 +434,10 @@ def pick(tags, pts):
 
 
 def place_level(tags):
-    """The level a named place is shown on; None if the node is not one."""
-    if "place" not in tags or "name" not in tags:
+    """The level a named place is shown on; None if the node is not one. Hamlets and quarters only close up."""
+    if not place_kind(tags):
         return None
-    return NEAR if tags["place"] in ("quarter", "neighbourhood") else REGION
+    return NEAR if tags["place"] in ("hamlet", "quarter", "neighbourhood") else REGION
 
 
 def cut(z, kind, pts):
@@ -463,10 +495,9 @@ def tiles(src, out_dir, frame=None):
         picked = pick(tags, pts)
         if picked:
             put(*picked)
-    for el in elements:
-        tags = el.get("tags", {})
-        if el["type"] == "node" and place_level(tags):
-            put(place_level(tags), 20, tags["name"], [(el["lat"], el["lon"])])
+    places = [el for el in elements if el["type"] == "node" and place_level(el.get("tags", {}))]
+    for el in sorted(places, key=lambda el: (inhabitants(el["tags"]), el["id"])):
+        put(place_level(el["tags"]), place_kind(el["tags"]), el["tags"]["name"], [(el["lat"], el["lon"])])
 
     written = {REGION: [], NEAR: []}
     for (z, tx, ty), features in sorted(per_tile.items()):
@@ -590,7 +621,8 @@ def pbf(src, out_dir, frame=None):
         if obj.is_node():
             level = place_level(obj.tags)
             if level:
-                put(obj.id * 4, level, 20, obj.tags["name"], [(obj.location.lat, obj.location.lon)])
+                # The ident sorts the places of a tile: by inhabitants, then by id.
+                put((inhabitants(obj.tags) << 36) | obj.id, level, place_kind(obj.tags), obj.tags["name"], [(obj.location.lat, obj.location.lon)])
         elif obj.is_way():
             if not kind_of(obj.tags):
                 continue  # a member of a relation, without tags of its own
@@ -630,15 +662,16 @@ def pbf(src, out_dir, frame=None):
                 box.append(v)
             count, pos = unvarint(buf, pos)
             blen, pos = unvarint(buf, pos)
-            per_tile.setdefault((z, tx, ty), []).append((ORDER[kind], ident, kind, name, count, buf[pos:pos + blen], *box))
+            per_tile.setdefault((z, tx, ty), []).append((order(kind), kind if kind >= RANKED else 0, ident, kind, name, count, buf[pos:pos + blen], *box))
             pos += blen
         for (z, tx, ty), items in sorted(per_tile.items()):
-            items.sort(key=lambda i: i[:2])  # stable: pieces of one object stay in their order
+            # Stable: pieces of one object stay in their order. Places by rank, small first (the app lets the later win).
+            items.sort(key=lambda i: i[:3])
             key = "%d-%d-%d" % (z, tx, ty)
-            out = pack(key, stamp, [i[2:] for i in items])
+            out = pack(key, stamp, [i[3:] for i in items])
             (out_dir / key).write_bytes(out)
             written[z].append(len(out))
-            n = sum(i[4] for i in items)
+            n = sum(i[5] for i in items)
             points += n
             most = max(most, n)
         path.unlink()

@@ -14,6 +14,9 @@ class BundledMapsTest {
 
     private fun MapPack.names(kind: Int) = (0 until size).filter { kinds[it].toInt() == kind }.mapNotNull { name(it) }
 
+    /** Cities with their rank (ui/MapLabels.kt), in the order of the file. */
+    private fun MapPack.cities() = (0 until size).filter { app.anynear.ui.MapLabels.placeOf(kinds[it].toInt(), level, key)?.type == app.anynear.ui.PlaceType.CITY }.mapNotNull { name(it) }
+
     @Test
     fun theWorldHasItsCountriesInBothLanguages() {
         val world = pack("world")
@@ -23,7 +26,7 @@ class BundledMapsTest {
         assertTrue("Deutschland\tGermany" in countries)
         assertTrue("Frankreich\tFrance" in countries)
         assertTrue((0 until world.size).count { world.kinds[it].toInt() == MapPack.LAND } > 300)
-        assertTrue(world.names(MapPack.CITY).any { MapPack.localName(it, german = false) == "Tokyo" })
+        assertTrue(world.cities().any { MapPack.localName(it, german = false) == "Tokyo" })
         // The whole world: from the far west to the far east.
         assertTrue(world.minX < 0.02f && world.maxX > 0.98f)
     }
@@ -31,15 +34,15 @@ class BundledMapsTest {
     @Test
     fun europeHasRoadsRiversAndCitiesButLeavesGermanyToItsOwnMap() {
         val europe = pack("europe")
-        val cities = europe.names(MapPack.CITY).map { MapPack.localName(it, german = true) }
+        val cities = europe.cities().map { MapPack.localName(it, german = true) }
         assertTrue("Paris" in cities && "Wien" in cities && "Rom" in cities, cities.take(20).toString())
         assertTrue("Berlin" !in cities)
         assertTrue((0 until europe.size).count { europe.kinds[it].toInt() == MapPack.MOTORWAY } > 100)
         assertTrue(europe.names(MapPack.STREAM).isNotEmpty())
         val germany = pack("base")
-        val german = germany.names(MapPack.CITY)
+        val german = germany.cities()
         assertTrue("Berlin" in german && "München" in german)
-        // The largest city is the last one, so that its name is placed first.
+        // The largest city is the last one: among places of the same rank the later one wins.
         assertEquals("Berlin", german.last())
         assertTrue(germany.minX > Outlines.x(5.0).toFloat() && germany.maxX < Outlines.x(16.0).toFloat())
     }

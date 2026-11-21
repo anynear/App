@@ -390,6 +390,9 @@ class PlaceSharer(
                 else -> Sent(level.wire, place.latitude, place.longitude, null, until, t, name)
             }
             val last = sent[target.personId]
+            // The phone could not locate itself (at night in the background, battery saver): it says nothing rather than
+            // a level without a point, which took the last place from the others (21.11.2026).
+            if (level.always && place == null && keepsLast(last, next)) continue
             if (!differs(last, next)) continue
             val shown = if (next.lat != null && next.lon != null && place != null) {
                 Place(next.lat, next.lon, place.atMillis, place.accuracyMeters.takeIf { next.radius == null })
@@ -478,6 +481,10 @@ class PlaceSharer(
 
     /** After the sharing ended by itself: once more with the levels as they are now. */
     private suspend fun syncAgain() = syncLocked()
+
+    /** [next] has no point, but the others still see [last]'s with the same level and end: nothing new to tell. */
+    private fun keepsLast(last: Sent?, next: Sent): Boolean =
+        last != null && last.lat != null && last.level == next.level && last.until == next.until
 
     private fun differs(last: Sent?, next: Sent): Boolean {
         // Someone who never saw anything needs no „aus“.

@@ -16,6 +16,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -173,7 +178,7 @@ internal fun MapScreen(
     controller: AppController,
     onOpenChat: (Conversation) -> Unit,
     onWhoSeesMe: () -> Unit,
-    onCreateCircle: () -> Unit,
+    onMyPlaces: () -> Unit,
 ) {
     val sharing = controller.locationSharing
     val sharer = controller.placeSharer
@@ -200,8 +205,9 @@ internal fun MapScreen(
     val asked by controller.mapCircle.collectAsState()
     LaunchedEffect(asked.second) { if (asked.second != 0L) filter = asked.first }
     var selected by remember { mutableStateOf<String?>(null) }
+    // A coloured district tapped (ADR 0121 §7): where, so that the bubble with its warnings moves with the map.
+    var warningSpot by remember { mutableStateOf<WarningSpot?>(null) }
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
-    var startingLifeSign by remember { mutableStateOf(false) }
 
     // The own dot: located when the tab opens and every two minutes while it is open, every ten seconds on the way to
     // a destination. The place stays on the phone.
@@ -218,13 +224,16 @@ internal fun MapScreen(
         camera.fitPlaces(listOfNotNull(f.latitude to f.longitude, own?.let { it.latitude to it.longitude }))
     }
 
-    val shown = people.filter { it.deviceId != null && (filter == null || filter in it.circleIds) }
+    // The search narrows only the list below the map, not the map.
+    val search = rememberPeopleSearch(controller, people.filter { it.deviceId != null && (filter == null || filter in it.circleIds) })
+    val withApp = search.all
+    val shown = search.found
     val active = remember(areaAlerts, now) { activeAlerts(areaAlerts, now) }
     val warnings = remember(active) { active.flatMap { a -> a.area.map { MapWarning(it.take(5), a.priority) } }.distinct() }
     // Everything paused (20.11.2026): the map steps back, the others stand where they were last known.
     val pausedAll by (controller.locationSharing?.paused ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
     val markers = buildList {
-        for (p in shown) {
+        for (p in withApp) {
             val s = places[p.deviceId]?.takeIf { it.untilMillis !in 1..now } ?: continue
             val place = s.place?.takeIf { !app.anynear.location.PlaceAge.gone(it.atMillis, nextLocalHour(now, 0)) } ?: continue
             add(MapMarker(p.peer, p.name, place.latitude, place.longitude, s.radiusMeters, stale = pausedAll || s.radiusMeters == null && now - place.atMillis > HOUR, image = p.image))
@@ -267,9 +276,10 @@ internal fun MapScreen(
         }
     }
     val lifeSigns = controller.lifeSigns
+    // A life sign starts in the „+“ of a chat (ADR 0121 §23); the map menu leads to the own places instead (20.11.2026).
     val menu = listOfNotNull(
         MenuAction(mt.whoSeesMe, AppIcons.Person, onWhoSeesMe),
-        if (lifeSigns != null && lifeSigns.ownRunning() == null) MenuAction(texts.lifeSigns.start, AppIcons.Uhr) { startingLifeSign = true } else null,
+        if (controller.savedPlaces != null) MenuAction(mt.myPlaces, AppIcons.Karte, onMyPlaces) else null,
     )
     Column(Modifier.fillMaxSize()) {
         AppHeader(mt.title, menu = menu)
@@ -279,8 +289,19 @@ internal fun MapScreen(
             val o = outlines
             val full = maxHeight
             if (o != null) {
-                MapView(o, camera, markers, warnings, kreisNames, packs = packs.values, ground = ground, onMarker = { id -> if (id != OWN_MARKER && id != FOCUS_MARKER) selected = id })
-                MapMarkers(controller, camera, markers) { id -> if (id != OWN_MARKER && id != FOCUS_MARKER) selected = id }
+                MapView(
+                    o, camera, markers, warnings, kreisNames, packs = packs.values, ground = ground,
+                    onTap = { id, _, latitude, longitude ->
+                        // A person goes before the district below; the own place and a destination open nothing.
+                        val person = id?.takeIf { it != OWN_MARKER && it != FOCUS_MARKER }
+                        when (val tap = mapTap(person, o.townAt(latitude, longitude)?.kreis, active)) {
+                            is MapTap.Person -> { warningSpot = null; selected = tap.id }
+                            is MapTap.Warnings -> warningSpot = WarningSpot(latitude, longitude, tap.kreis)
+                            MapTap.Nothing -> warningSpot = null
+                        }
+                    },
+                )
+                MapMarkers(controller, camera, markers) { id -> if (id != OWN_MARKER && id != FOCUS_MARKER) { warningSpot = null; selected = id } }
                 if (pausedAll) Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)))
                 Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     MapButton(AppIcons.Plus, mt.zoomIn) { camera.zoom(1.8f) }
@@ -305,6 +326,18 @@ internal fun MapScreen(
                     }
                     if (markers.size > 1) MapButton(AppIcons.Kreis, mt.showAll) { camera.fitPlaces(markers.map { it.latitude to it.longitude }) }
                 }
+                // The bubble of a tapped warning area lies above the buttons of the map.
+                warningSpot?.let { spot ->
+                    val here = warningsAt(active, spot.kreis)
+                    // Ended or expired meanwhile: the bubble goes.
+                    if (here.isEmpty()) LaunchedEffect(spot) { warningSpot = null }
+                    else WarningBubble(
+                        camera, spot, here, kreisNames, now, viewWidth = constraints.maxWidth.toFloat(),
+                        viewHeight = constraints.maxHeight.toFloat() - with(androidx.compose.ui.platform.LocalDensity.current) { SHEET_CLOSED.toPx() },
+                        onOpen = { alert -> warningSpot = null; controller.alerts?.requestOpen(alert.channelId, alert.id) },
+                        onClose = { warningSpot = null },
+                    )
+                }
                 // Map pieces are still coming (19.11.2026): a small circle, so that the filling map does not feel jerky.
                 // Only after a moment, so that pieces from the phone do not make it flicker.
                 val loadingTiles by (mapTiles?.loading ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
@@ -327,6 +360,7 @@ internal fun MapScreen(
             // for an answer or a destination opens it by itself.
             val needsLook = focus != null || (sharer?.asking?.collectAsState()?.value?.isNotEmpty() == true)
             LaunchedEffect(needsLook) { if (needsLook) sheetOpen = true }
+            LaunchedEffect(sheetOpen) { if (sheetOpen) warningSpot = null }
             val sheetHeight by androidx.compose.animation.core.animateDpAsState(if (sheetOpen) full * 0.62f else SHEET_CLOSED)
             Surface(
                 color = MaterialTheme.colorScheme.background, shadowElevation = 8.dp, shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
@@ -344,7 +378,7 @@ internal fun MapScreen(
                     ) {
                         Box(Modifier.size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.outline))
                         Text(
-                            if (shown.isEmpty()) mt.people else mt.peopleCount(shown.size),
+                            if (withApp.isEmpty()) mt.people else mt.peopleCount(withApp.size),
                             style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp),
                         )
                     }
@@ -388,7 +422,8 @@ internal fun MapScreen(
                     icon = AppIcons.Karte,
                     onClick = { own?.let { camera.fitPlaces(listOf(it.latitude to it.longitude)) } },
                 )
-                if (shown.isEmpty()) {
+                PeopleSearchField(search, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                if (withApp.isEmpty()) {
                     Text(mt.noPeople, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(12.dp))
                 }
                 val known = rememberKnownPlaces(controller)
@@ -408,7 +443,7 @@ internal fun MapScreen(
                     )
                 }
             }
-            if (lifeSigns != null) LifeSignsSection(lifeSigns, controller.circles, onCreateCircle, startingLifeSign, onStartingDone = { startingLifeSign = false })
+            if (lifeSigns != null) LifeSignsSection(lifeSigns)
         }
                 }
             }
@@ -429,10 +464,146 @@ private const val OWN_MARKER = "\u0000own"
 private const val FOCUS_MARKER = "\u0000focus"
 
 /** The active official warning for the district the place lies in, the most urgent first. */
-private fun warningAt(outlines: Outlines?, active: List<Alert>, place: Place): Alert? {
-    val kreis = outlines?.townAt(place.latitude, place.longitude)?.kreis ?: return null
-    return active.firstOrNull { a -> a.area.any { kreis.startsWith(it.take(5)) || it.startsWith(kreis) } }
+private fun warningAt(outlines: Outlines?, active: List<Alert>, place: Place): Alert? =
+    warningsAt(active, outlines?.townAt(place.latitude, place.longitude)?.kreis).firstOrNull()
+
+/** Where a coloured district was tapped. */
+private data class WarningSpot(val latitude: Double, val longitude: Double, val kreis: String)
+
+/**
+ * The warnings of a tapped district (ADR 0121 §7) as a speech bubble like those of the people ([MapMarkers]): its tail
+ * points to where the finger was, above it or, without room there, below. Each warning with level, kind, title,
+ * source, since when and until when, area, the text with what to do, and the way to the full alert under
+ * „Meldungen“; several ones the highest level first. Long ones scroll inside the bubble.
+ */
+@Composable
+private fun WarningBubble(
+    camera: MapCamera, spot: WarningSpot, alerts: List<Alert>, kreisNames: Map<String, String>, now: Long,
+    viewWidth: Float, viewHeight: Float, onOpen: (Alert) -> Unit, onClose: () -> Unit,
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val at = texts.alerts
+    val tail = with(density) { BUBBLE_TAIL.toPx() }
+    val margin = with(density) { 8.dp.toPx() }
+    val corner = with(density) { WARNING_CORNER.toPx() }
+    val width = minOf(viewWidth - 2 * margin, with(density) { WARNING_WIDTH.toPx() })
+    val tip = camera.project(spot.latitude, spot.longitude)
+    val maxHeight = warningPopupMaxHeight(tip.y, viewHeight, tail, margin)
+    var height by remember { mutableStateOf(0f) }
+    val place = placeWarningPopup(tip.x, tip.y, width, height, viewWidth, viewHeight, tail, margin, corner)
+    val surface = MaterialTheme.colorScheme.surface
+    val edge = AppTheme.colors.alarm
+    Box(Modifier.fillMaxSize().clip(androidx.compose.ui.graphics.RectangleShape)) {
+        Canvas(Modifier.fillMaxSize()) {
+            if (height <= 0f) return@Canvas
+            val base = BUBBLE_TAIL_BASE.toPx() / 2
+            val edgeY = if (place.below) place.top else place.top + height
+            val bubble = Path().apply {
+                addRoundRect(androidx.compose.ui.geometry.RoundRect(place.left, place.top, place.left + width, place.top + height, androidx.compose.ui.geometry.CornerRadius(corner)))
+            }
+            val tailPath = Path().apply {
+                moveTo(tip.x, tip.y)
+                lineTo(place.tailX - base, edgeY)
+                lineTo(place.tailX + base, edgeY)
+                close()
+            }
+            val shape = Path.combine(androidx.compose.ui.graphics.PathOperation.Union, bubble, tailPath)
+            translate(0f, 1.5.dp.toPx()) { drawPath(shape, androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.18f)) }
+            drawPath(shape, surface)
+            drawPath(shape, edge, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+        }
+        Column(
+            Modifier
+                .offset { androidx.compose.ui.unit.IntOffset(place.left.roundToInt(), place.top.roundToInt()) }
+                .width(with(density) { width.toDp() })
+                .heightIn(max = with(density) { maxHeight.toDp() })
+                .onSizeChanged { height = it.height.toFloat() }
+                .clip(RoundedCornerShape(WARNING_CORNER)),
+        ) {
+            // The head stays, so that closing is always at hand; only the warnings below scroll.
+            Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(at.mapWarnings(alerts.size), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                androidx.compose.material3.IconButton(onClick = onClose) { Icon(AppIcons.Schliessen, contentDescription = texts.common.close) }
+            }
+            val scroll = rememberScrollState()
+            Box(Modifier.weight(1f, fill = false)) {
+                Column(
+                    Modifier.verticalScroll(scroll).padding(start = 14.dp, end = 4.dp, bottom = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    alerts.forEachIndexed { i, alert ->
+                        if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(end = 10.dp))
+                        WarningEntry(alert, kreisNames, now) { onOpen(alert) }
+                    }
+                }
+                // There is more (20.11.2026): the text fades out at the edge where it goes on, and a thin bar at the
+                // right shows how much there is and where one is, as long as the bubble does not show everything.
+                if (scroll.canScrollBackward) {
+                    Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(SCROLL_FADE).background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(surface, surface.copy(alpha = 0f)))))
+                }
+                if (scroll.canScrollForward) {
+                    Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(SCROLL_FADE).background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(surface.copy(alpha = 0f), surface))))
+                }
+                if (scroll.maxValue > 0) {
+                    val thumb = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                    Canvas(Modifier.matchParentSize().padding(top = 4.dp, bottom = 10.dp, end = 4.dp)) {
+                        val viewport = scroll.viewportSize.toFloat().takeIf { it > 0f } ?: size.height
+                        val content = viewport + scroll.maxValue
+                        val bar = (size.height * viewport / content).coerceAtLeast(24.dp.toPx())
+                        val y = (size.height - bar) * scroll.value / scroll.maxValue
+                        val w = 3.dp.toPx()
+                        drawRoundRect(thumb, topLeft = Offset(size.width - w, y), size = androidx.compose.ui.geometry.Size(w, bar), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w / 2))
+                    }
+                }
+            }
+        }
+    }
 }
+
+/** One warning in the bubble of the map. */
+@Composable
+private fun WarningEntry(alert: Alert, kreisNames: Map<String, String>, now: Long, onOpen: () -> Unit) {
+    val at = texts.alerts
+    Column(Modifier.padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PriorityChip(alert, curated = true)
+            warningKind(alert.source)?.let { kind ->
+                Text(
+                    when (kind) {
+                        WarningKind.Weather -> at.kindWeather
+                        WarningKind.Flood -> at.kindFlood
+                        WarningKind.Police -> at.kindPolice
+                        WarningKind.CivilProtection -> at.kindCivilProtection
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
+        alert.title?.ifBlank { null }?.let { Text(it, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+        val names = areaNames(alert.area, kreisNames, at.states)
+        val details = listOfNotNull(
+            alert.source?.let { at.fromSource(it) },
+            at.validSince(formatDayAndTime(alert.timestampMillis, now)),
+            at.validUntil(formatFutureDayAndTime(alert.untilMillis, now)),
+            names.takeIf { it.isNotEmpty() }?.let { n ->
+                at.area(if (n.size <= AREA_NAMES) n.joinToString(", ") else n.take(AREA_NAMES).joinToString(", ") + " " + at.moreAreas(n.size - AREA_NAMES))
+            },
+        )
+        details.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        // Description and what to do, as the source wrote them (the relay sends both as one text).
+        if (alert.text.isNotBlank() && alert.text != alert.title) Text(alert.text, style = MaterialTheme.typography.bodyMedium)
+        AppButton(at.openInAlerts, onOpen, kind = ButtonKind.Secondary, icon = AppIcons.Glocke)
+    }
+}
+
+private val WARNING_WIDTH = 340.dp
+private val WARNING_CORNER = 16.dp
+
+/** How far the text fades out where the bubble goes on. */
+private val SCROLL_FADE = 28.dp
+
+/** At most this many names of the area, then „und n weitere“. */
+private const val AREA_NAMES = 4
 
 @Composable
 private fun MapButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
@@ -445,41 +616,103 @@ private fun MapButton(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
 }
 
 /**
- * The people on the map with their picture and name (ADR 0121 §1), above the drawn map: the own one with the name from
- * the own profile. The picture sits on the place; for an area on its centre, the area itself is drawn below.
+ * The people on the map (ADR 0121 §1), above the drawn map: each one a speech bubble with the picture (or the initials)
+ * and the name, whose tip points exactly to the place; the own one with the name from the own profile and an orange
+ * edge. For an area the tip points to its centre, the area itself is drawn below. Where bubbles would cover each other,
+ * they are fanned out around the place ([placeBubbles], 20.11.2026).
  */
 @Composable
 private fun MapMarkers(controller: AppController, camera: MapCamera, markers: List<MapMarker>, onMarker: (String) -> Unit) {
     val myDevice by controller.myDeviceId.collectAsState()
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val width = with(density) { MARKER_WIDTH.roundToPx() }
-    val half = with(density) { (MARKER_AVATAR / 2).roundToPx() }
+    val style = MaterialTheme.typography.labelLarge
+    // The own one last, so that it lies on top.
+    val people = markers.filter { !it.place }.sortedBy { it.own }
+    // The size each bubble really has once laid out; until then a guess from the length of the name.
+    val measured = remember { androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.unit.IntSize>() }
+    val guess = with(density) { (BUBBLE_AVATAR + BUBBLE_PAD * 4).toPx() } to with(density) { (BUBBLE_AVATAR + BUBBLE_PAD * 2).toPx() }
+    fun sizeOf(m: MapMarker) = measured[m.id]?.let { androidx.compose.ui.geometry.Size(it.width.toFloat(), it.height.toFloat()) }
+        ?: androidx.compose.ui.geometry.Size(guess.first + with(density) { (m.label.length * 8).dp.toPx() }, guess.second)
+    val tail = with(density) { BUBBLE_TAIL.toPx() }
+    val gap = with(density) { 4.dp.toPx() }
+    // Only the distances count, so moving the map does not change the layout, zooming may.
+    val spots by remember(people) {
+        androidx.compose.runtime.derivedStateOf {
+            placeBubbles(people.map { m -> val size = sizeOf(m); camera.project(m.latitude, m.longitude).let { Bubble(m.id, it.x, it.y, size.width, size.height) } }, tail, gap)
+        }
+    }
+    val surface = MaterialTheme.colorScheme.surface
+    val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+    val orange = BrandPalette.Signalorange
     Box(Modifier.fillMaxSize().clip(androidx.compose.ui.graphics.RectangleShape)) {
-        // The own one last, so that it lies on top.
-        markers.filter { !it.place }.sortedBy { it.own }.forEach { m ->
-            Column(
-                Modifier.size(width = MARKER_WIDTH, height = MARKER_AVATAR + 26.dp)
-                    .offset { camera.project(m.latitude, m.longitude).let { androidx.compose.ui.unit.IntOffset(it.x.roundToInt() - width / 2, it.y.roundToInt() - half) } }
-                    .alpha(if (m.stale) 0.6f else 1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
+        // The bubbles with their tails, drawn in one piece so that the edge runs around both.
+        Canvas(Modifier.fillMaxSize()) {
+            val corner = (BUBBLE_AVATAR / 2 + BUBBLE_PAD).toPx()
+            val base = BUBBLE_TAIL_BASE.toPx() / 2
+            people.forEachIndexed { i, m ->
+                val tip = camera.project(m.latitude, m.longitude)
+                val spot = spots.getOrNull(i) ?: return@forEachIndexed
+                val size = sizeOf(m)
+                val centre = Offset(tip.x + spot.dx, tip.y + spot.dy)
+                val toTip = tip - centre
+                val length = toTip.getDistance().takeIf { it > 0f } ?: return@forEachIndexed
+                val across = Offset(-toTip.y / length * base, toTip.x / length * base)
+                val bubble = Path().apply {
+                    addRoundRect(androidx.compose.ui.geometry.RoundRect(centre.x - size.width / 2, centre.y - size.height / 2, centre.x + size.width / 2, centre.y + size.height / 2, androidx.compose.ui.geometry.CornerRadius(corner)))
+                }
+                val tailPath = Path().apply {
+                    moveTo(tip.x, tip.y)
+                    lineTo(centre.x + across.x, centre.y + across.y)
+                    lineTo(centre.x - across.x, centre.y - across.y)
+                    close()
+                }
+                val shape = Path.combine(androidx.compose.ui.graphics.PathOperation.Union, bubble, tailPath)
+                val alpha = if (m.stale) 0.6f else 1f
+                // A soft shadow below, so that the bubble stands out from the light map.
+                translate(0f, 1.5.dp.toPx()) { drawPath(shape, androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.18f * alpha)) }
+                drawPath(shape, surface.copy(alpha = alpha))
+                drawPath(shape, if (m.own) orange.copy(alpha = alpha) else outline.copy(alpha = outline.alpha * alpha), style = androidx.compose.ui.graphics.drawscope.Stroke((if (m.own) 2.dp else 1.5.dp).toPx()))
+            }
+        }
+        people.forEachIndexed { i, m ->
+            Row(
+                Modifier
+                    .offset {
+                        val tip = camera.project(m.latitude, m.longitude)
+                        val spot = spots.getOrNull(i) ?: BubbleSpot(0f, 0f)
+                        val size = sizeOf(m)
+                        androidx.compose.ui.unit.IntOffset((tip.x + spot.dx - size.width / 2).roundToInt(), (tip.y + spot.dy - size.height / 2).roundToInt())
+                    }
+                    .onSizeChanged { measured[m.id] = it }
+                    .clip(RoundedCornerShape(BUBBLE_AVATAR / 2 + BUBBLE_PAD))
+                    .clickable(onClickLabel = m.label, role = Role.Button) { onMarker(m.id) }
+                    .alpha(if (m.stale) 0.6f else 1f)
+                    .padding(BUBBLE_PAD),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(BUBBLE_PAD),
             ) {
                 val seed = if (m.own) app.anynear.mesh.PeerId.device(myDevice.orEmpty()) else m.id
-                Box(
-                    Modifier.size(MARKER_AVATAR).clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(if (m.own) app.anynear.ui.BrandPalette.Signalorange else MaterialTheme.colorScheme.surface)
-                        .clickable(onClickLabel = m.label, role = Role.Button) { onMarker(m.id) }.padding(3.dp),
-                ) { PersonAvatar(controller, seed, m.image, MARKER_AVATAR - 6.dp) }
-                Text(
-                    m.label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
-                )
+                if (m.image != null) {
+                    PersonAvatar(controller, seed, m.image, BUBBLE_AVATAR)
+                } else {
+                    // No picture: the initials, in the colour the generated picture of the person would have.
+                    val tones = AppTheme.colors.avatarTones
+                    val tone = tones[remember(seed, tones.size) { app.anynear.images.AvatarPattern.person(seed, tones.size).tone }]
+                    Box(Modifier.size(BUBBLE_AVATAR).clip(CircleShape).background(if (m.own) orange else tone.background), contentAlignment = Alignment.Center) {
+                        Text(initials(m.label), style = MaterialTheme.typography.labelMedium, color = if (m.own) androidx.compose.ui.graphics.Color.White else tone.pattern, maxLines = 1)
+                    }
+                }
+                Text(m.label, style = style, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = BUBBLE_TEXT_MAX).padding(end = BUBBLE_PAD))
             }
         }
     }
 }
 
-private val MARKER_WIDTH = 120.dp
-private val MARKER_AVATAR = 44.dp
+private val BUBBLE_AVATAR = 30.dp
+private val BUBBLE_PAD = 4.dp
+private val BUBBLE_TEXT_MAX = 120.dp
+private val BUBBLE_TAIL = 12.dp
+private val BUBBLE_TAIL_BASE = 14.dp
 
 /** Always on the map: for whom the own place is visible; a tap opens „Wer sieht mich?“ (ADR 0121 §1, §4.5). */
 @Composable
@@ -884,6 +1117,18 @@ internal fun PlacePickerDialog(controller: AppController, title: String, onDismi
     }
 }
 
+/** „Meine Orte“ as its own page, opened from the ⋮ menu of the map (20.11.2026; before it was part of „Wer sieht mich?“). */
+@Composable
+internal fun MyPlacesScreen(controller: AppController, onBack: () -> Unit) {
+    val saved = controller.savedPlaces ?: return onBack()
+    Column(Modifier.fillMaxSize()) {
+        AppHeader(texts.map.myPlaces, leading = { HeaderBackButton(onBack) })
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            MyPlacesSection(controller, saved)
+        }
+    }
+}
+
 /** „Meine Orte“ (ADR 0121 §13): the places the person named, where it adds, changes and removes them. */
 @Composable
 private fun MyPlacesSection(controller: AppController, saved: app.anynear.location.SavedPlaces) {
@@ -1099,9 +1344,10 @@ internal fun WhoSeesMeScreen(controller: AppController, onBack: () -> Unit) {
                     )
                 }
             }
-            val withApp = people.filter { it.deviceId != null }
-            if (withApp.isNotEmpty()) AppSection(mt.stepPersons, footer = mt.stepPersonsFooter) {
-                withApp.forEach { p ->
+            val search = rememberPeopleSearch(controller, people.filter { it.deviceId != null })
+            if (search.all.isNotEmpty()) AppSection(mt.stepPersons, footer = mt.stepPersonsFooter) {
+                PeopleSearchField(search, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                search.found.forEach { p ->
                     val id = p.deviceId!!
                     val own = persons[id]
                     val inCircles = p.circleIds.filter { it != MemberDirectory.DIRECT_CONTACTS }
@@ -1117,7 +1363,6 @@ internal fun WhoSeesMeScreen(controller: AppController, onBack: () -> Unit) {
                     )
                 }
             }
-            controller.savedPlaces?.let { MyPlacesSection(controller, it) }
             AppSection(mt.sourceTitle, footer = mt.openOnly) {
                 val here = source == null || source == myDevice
                 AppRow(title = if (here) mt.sourceThis else mt.sourceOther, icon = AppIcons.Karte)

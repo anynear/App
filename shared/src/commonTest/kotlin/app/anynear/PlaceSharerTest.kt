@@ -116,6 +116,26 @@ class PlaceSharerTest {
     }
 
     @Test
+    fun withoutALocatedPlaceTheLastOneIsNotTakenAway() = runTest {
+        val s = setup(listOf(anna))
+        s.sharing.answer(ShareLevel.WhenNeeded)
+        s.sharing.setPersonLevel("anna", ShareLevel.Exact)
+        s.sharer.sync()
+        assertNotNull(s.source.sent.last().place)
+        val before = s.source.sent.size
+        // At night the phone cannot locate itself: nothing goes out, Anna keeps the last place.
+        s.hooks.place = null
+        t += 25L * 24 * 3_600_000L
+        s.sharer.sync()
+        assertEquals(before, s.source.sent.size)
+        // A lower level still goes out at once, without a point.
+        s.sharing.setPersonLevel("anna", ShareLevel.WhenNeeded)
+        s.sharer.sync()
+        assertEquals(ShareLevel.WhenNeeded, s.source.sent.last().level)
+        assertNull(s.source.sent.last().place)
+    }
+
+    @Test
     fun someoneNewInACircleSeesThePlaceOnlyAfterTheOk() = runTest {
         val s = setup(listOf(anna, tom))
         s.sharing.answer(ShareLevel.WhenNeeded)
