@@ -269,7 +269,8 @@ private fun HelpersPage(controller: AppController, sos: Sos, onDone: () -> Unit)
     var chosenCircles by remember { mutableStateOf(saved.circles) }
     var chosenPersons by remember { mutableStateOf(saved.persons) }
     val shownCircles = controller.lifeSigns?.choices(circles) ?: circles.filter { !it.removed }
-    val shownPeople = people.filter { it.deviceId != null }
+    val search = rememberPeopleSearch(controller, people.filter { it.deviceId != null })
+    val shownPeople = search.all
     PageFrame(st.noHelpersTitle, sos::close) {
         Text(st.noHelpersText, style = MaterialTheme.typography.bodyLarge)
         if (shownCircles.isEmpty() && shownPeople.isEmpty()) Text(st.nobodyYet, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -284,7 +285,8 @@ private fun HelpersPage(controller: AppController, sos: Sos, onDone: () -> Unit)
             }
         }
         if (shownPeople.isNotEmpty()) AppSection(st.persons) {
-            shownPeople.forEach { p ->
+            PeopleSearchField(search, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+            search.found.forEach { p ->
                 val id = p.deviceId!!
                 val on = id in chosenPersons
                 AppRow(

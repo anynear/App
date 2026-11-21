@@ -3,6 +3,7 @@ package app.anynear.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -356,7 +357,7 @@ private fun EndAlertDialog(alerts: Alerts, alert: Alert, onDismiss: () -> Unit) 
 
 /** Small badge with the priority; „Alarm“ in the alarm colour. Text next to it, never colour alone. */
 @Composable
-private fun PriorityChip(alert: Alert, curated: Boolean) {
+internal fun PriorityChip(alert: Alert, curated: Boolean) {
     val colors = AppTheme.colors
     val (bg, fg) = when {
         alert.ended -> colors.safeContainer to colors.onSafeContainer
@@ -391,7 +392,7 @@ private fun StatusLabel(status: AlertStatus) {
  * details ([ChannelDetailScreen]): settings on this device, subscribers, addresses, leaving.
  */
 @Composable
-internal fun ChannelScreen(alerts: Alerts, channelId: String, onBack: () -> Unit) {
+internal fun ChannelScreen(alerts: Alerts, channelId: String, onBack: () -> Unit, focusAlert: String? = null) {
     val channels by alerts.channels.collectAsState()
     val all by alerts.alerts.collectAsState()
     val region by alerts.region.collectAsState()
@@ -442,10 +443,17 @@ internal fun ChannelScreen(alerts: Alerts, channelId: String, onBack: () -> Unit
                     Text(texts.alerts.noHistory, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
                 }
                 history.forEach { alert ->
-                    AlertCard(
-                        alert, channel, now, big = false, image = if (alert.attachments.isEmpty()) null else ({ AlertAttachments(alerts, alert) }),
-                        onEnd = if (canEnd(alert, channel, replaced, now)) ({ ending = alert }) else null,
-                    )
+                    // Opened from a warning on the map (ADR 0121 §7): that alert is brought into view.
+                    val focused = alert.id == focusAlert
+                    val bring = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+                    if (focused) LaunchedEffect(alert.id) { kotlinx.coroutines.delay(150); bring.bringIntoView() }
+                    Box(Modifier.bringIntoViewRequester(bring)) {
+                        AlertCard(
+                            alert, channel, now, big = focused && alert.statusAt(now) == AlertStatus.Active,
+                            image = if (alert.attachments.isEmpty()) null else ({ AlertAttachments(alerts, alert) }),
+                            onEnd = if (canEnd(alert, channel, replaced, now)) ({ ending = alert }) else null,
+                        )
+                    }
                 }
             }
         }

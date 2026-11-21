@@ -18,7 +18,7 @@ entpackt sind:
 Schreibt `world.amp` (Länder als Flächen, Ländernamen, große Städte der Welt) und `europe.amp` (Fernstraßen, Flüsse,
 Seen und Städte Europas ohne Deutschland; Deutschland steht genauer in `base.amp` aus `scripts/maptiles.py`).
 Das Format ist das von `scripts/maptiles.py`. Namen stehen als „Deutsch<Tab>Englisch“, wenn sie sich unterscheiden.
-Arten zusätzlich: 22 Land (ein Punkt, der Name), 30 Landfläche.
+Arten zusätzlich: 22 Land (ein Punkt, der Name), 30 Landfläche. Städte mit ihrem Rang wie in `scripts/maptiles.py`.
 """
 
 import struct
@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from maptiles import chain, length_km, simplify, write, ORDER  # noqa: E402
+from maptiles import chain, length_km, place_kind, simplify, write, ORDER  # noqa: E402
 
 ORDER.update({30: 0, 22: 13})
 
@@ -147,9 +147,9 @@ def main(src, dst):
         name = both(row["NAME_DE"], row["NAME_EN"] or row["NAME"])
         if in_europe(lat, lon):
             if row["ADM0_A3"] != "DEU" and (pop >= 100_000 or capital):
-                places.append((pop, 21 if pop >= 500_000 or capital else 20, name, lat, lon, europe))
+                places.append((pop, place_kind({"place": "city", "name": name, "population": str(pop)}), name, lat, lon, europe))
         elif pop >= 2_000_000 or (capital and pop >= 300_000):
-            places.append((pop, 21, name, lat, lon, world))
+            places.append((pop, place_kind({"place": "city", "name": name, "population": str(pop)}), name, lat, lon, world))
     for pop, kind, name, lat, lon, into in sorted(places, key=lambda p: p[0]):
         into.append((kind, name, [(lat, lon)]))
 

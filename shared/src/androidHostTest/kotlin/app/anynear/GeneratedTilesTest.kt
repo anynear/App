@@ -46,7 +46,9 @@ class GeneratedTilesTest {
             MapPack.MOTORWAY, MapPack.MAIN, MapPack.SIDE, MapPack.STREET, MapPack.PATH, MapPack.RAIL,
             MapPack.WATER, MapPack.STREAM, MapPack.WOOD, MapPack.GREEN, MapPack.PLACE,
         )
-        assertTrue(known.containsAll(kinds), "unbekannte Arten: ${kinds - known}")
+        // Places with their rank (ui/MapLabels.kt), written since 20.11.2026.
+        val places = kinds.filter { app.anynear.ui.MapLabels.placeOf(it, MapPack.REGION, "") != null }.toSet()
+        assertTrue(known.containsAll(kinds - places), "unbekannte Arten: ${kinds - known - places}")
         println("GeneratedTilesTest: ${files.size} Kacheln, $objects Objekte, $points Punkte, Arten $kinds")
     }
 }

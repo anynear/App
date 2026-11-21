@@ -109,12 +109,19 @@ class Alerts(
     /** Channel that the UI should open, e.g. after tapping a notification. */
     val openRequest: StateFlow<String?> = _openRequest.asStateFlow()
 
-    fun requestOpen(channelId: String) {
+    private val _openAlert = MutableStateFlow<String?>(null)
+
+    /** With [openRequest]: the alert to show in the channel, e.g. from a warning on the map (ADR 0121 §7). */
+    val openAlert: StateFlow<String?> = _openAlert.asStateFlow()
+
+    fun requestOpen(channelId: String, alertId: String? = null) {
+        _openAlert.value = alertId
         _openRequest.value = channelId
     }
 
     fun consumeOpenRequest() {
         _openRequest.value = null
+        _openAlert.value = null
     }
 
     private val _notice = MutableStateFlow<String?>(null)

@@ -47,27 +47,20 @@ import app.anynear.lifesigns.LifeSignLoudness
 import app.anynear.lifesigns.LifeSignTemplate
 import app.anynear.lifesigns.LifeSigns
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
 /**
- * Section „Lebenszeichen“ at the top of „Meldungen“ (ADR 0083 §1, §5): run the own one, watch others. Starting is in the
- * ⋮ menu of „Meldungen“ (ADR 0101); [starting] opens the start dialog from there. Without a running one the section is
- * not shown at all.
+ * Section „Lebenszeichen“ on the map (ADR 0083 §1, §5): run the own one, watch others. Starting is in the „+“ of a chat
+ * (ADR 0121 §23). Without a running one the section is not shown at all.
  */
 @Composable
 internal fun LifeSignsSection(
     lifeSigns: LifeSigns,
-    circles: StateFlow<List<Circle>>,
-    onCreateCircle: () -> Unit,
-    starting: Boolean,
-    onStartingDone: () -> Unit,
 ) {
     val all by lifeSigns.statuses.collectAsState()
     val exactMissing by lifeSigns.exactAlarmMissing.collectAsState()
     val fullScreen by lifeSigns.fullScreen.collectAsState()
-    val circleList by circles.collectAsState()
     val now = rememberSecondNow()
     val own = all.firstOrNull { it.own && it.phase != AliveStatus.ENDED }
     val watched = all.filter { !it.own && it.phase != AliveStatus.ENDED }
@@ -88,12 +81,6 @@ internal fun LifeSignsSection(
     }
     if (fullScreen && own != null) {
         FullScreenCheckIn(lifeSigns, own, now, onConfirm = { scope.launch { lifeSigns.confirm(own.plan.id) } }, onEnd = { ending = true })
-    }
-    if (starting) {
-        StartDialog(lifeSigns, lifeSigns.choices(circleList), onDismiss = onStartingDone, onCreateCircle = {
-            onStartingDone()
-            onCreateCircle()
-        })
     }
     if (ending && own != null) {
         AppDialog(
@@ -258,10 +245,6 @@ private fun WatchedCard(lifeSigns: LifeSigns, s: AliveStatus, now: Long) {
         }
     }
 }
-
-@Composable
-private fun StartDialog(lifeSigns: LifeSigns, circles: List<Circle>, onDismiss: () -> Unit, onCreateCircle: () -> Unit) =
-    LifeSignStartDialog(lifeSigns, circles, onDismiss, onCreateCircle)
 
 /**
  * Starting a check-in (ADR 0083 §5.1). From the map the person chooses the circle. From the „+“ of a conversation

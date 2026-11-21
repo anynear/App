@@ -130,6 +130,8 @@ private sealed interface Detail {
     data object Settings : Detail
     /** „Wer sieht mich?“ (ADR 0121 §4.5). */
     data object WhoSeesMe : Detail
+    /** „Meine Orte“, from the ⋮ menu of the map. */
+    data object MyPlaces : Detail
     data object Help : Detail
     data object Troubleshooting : Detail
     data object About : Detail
@@ -151,7 +153,7 @@ private sealed interface Detail {
     data class PasswordEdit(val loginId: String?) : Detail
 
     /** A channel under „Meldungen“ (ADR 0062 §9). */
-    data class AlertChannel(val channelId: String) : Detail
+    data class AlertChannel(val channelId: String, val alertId: String? = null) : Detail
 }
 
 @Composable
@@ -303,7 +305,7 @@ private fun MainScreen(controller: AppController) {
             open = null
             openPublic = null
             newMessage = false
-            details = if (it.startsWith(LifeSigns.CHANNEL_PREFIX) || place) emptyList() else listOf(Detail.AlertChannel(it))
+            details = if (it.startsWith(LifeSigns.CHANNEL_PREFIX) || place) emptyList() else listOf(Detail.AlertChannel(it, alerts?.openAlert?.value))
             // Question or ongoing notification tapped: straight to the big button.
             if (it.startsWith(LifeSigns.CHANNEL_PREFIX)) controller.lifeSigns?.openFullScreen()
             alerts?.consumeOpenRequest()
@@ -495,6 +497,7 @@ private fun MainScreen(controller: AppController) {
                                 is Detail.Connections -> ConnectionsScreen(controller, onBack = closeDetail, start = detail.start)
                                 Detail.Settings -> SettingsPageScreen(controller, onBack = closeDetail)
                                 Detail.WhoSeesMe -> WhoSeesMeScreen(controller, onBack = closeDetail)
+                                Detail.MyPlaces -> MyPlacesScreen(controller, onBack = closeDetail)
                                 Detail.Help -> HelpScreen(controller, onBack = closeDetail, onOpenChat = openChat)
                                 Detail.Troubleshooting -> TroubleshootingScreen(controller, onBack = closeDetail, onOpenChat = openChat)
                                 Detail.About -> AboutScreen(controller, onBack = closeDetail)
@@ -545,7 +548,7 @@ private fun MainScreen(controller: AppController) {
                                         details = details.dropLast(1).let { if (detail.loginId == null) it + Detail.PasswordLogin(id) else it }
                                     },
                                 )
-                                is Detail.AlertChannel -> if (alerts != null) ChannelScreen(alerts, detail.channelId, onBack = closeDetail)
+                                is Detail.AlertChannel -> if (alerts != null) ChannelScreen(alerts, detail.channelId, onBack = closeDetail, focusAlert = detail.alertId)
                                 is Detail.PersonInfo -> PersonDetailScreen(
                                     controller = controller,
                                     peer = detail.peer,
@@ -619,7 +622,7 @@ private fun MainScreen(controller: AppController) {
                                         controller,
                                         onOpenChat = openChat,
                                         onWhoSeesMe = { showDetail(Detail.WhoSeesMe) },
-                                        onCreateCircle = { creatingCircle = true },
+                                        onMyPlaces = { showDetail(Detail.MyPlaces) },
                                     )
                                     tab == Tab.Files -> FilesScreen(
                                         controller,

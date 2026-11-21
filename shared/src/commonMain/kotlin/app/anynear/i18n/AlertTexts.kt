@@ -169,6 +169,20 @@ interface AlertTexts {
     val channelAlarmDescription: String
     val silence: String
     val open: String
+
+    // Warnings on the map (ADR 0121 §7): a tap on a coloured district
+    fun mapWarnings(count: Int): String
+    val kindWeather: String
+    val kindFlood: String
+    val kindPolice: String
+    val kindCivilProtection: String
+    fun validSince(time: String): String
+    fun area(names: String): String
+    fun moreAreas(count: Int): String
+    val openInAlerts: String
+
+    /** States of Germany by the first two digits of the regional key. */
+    val states: Map<String, String>
 }
 
 internal object AlertTextsDe : AlertTexts {
@@ -324,6 +338,22 @@ internal object AlertTextsDe : AlertTexts {
     override val channelAlarmDescription = "Laut, auch bei stummem Handy und bei „Nicht stören“."
     override val silence = "Ton aus"
     override val open = "Öffnen"
+
+    override fun mapWarnings(count: Int) = if (count == 1) "Amtliche Warnung hier" else "$count amtliche Warnungen hier"
+    override val kindWeather = "Unwetter"
+    override val kindFlood = "Hochwasser"
+    override val kindPolice = "Polizei"
+    override val kindCivilProtection = "Bevölkerungsschutz"
+    override fun validSince(time: String) = "gilt seit $time"
+    override fun area(names: String) = "Gebiet: $names"
+    override fun moreAreas(count: Int) = "und $count weitere"
+    override val openInAlerts = "In „Meldungen“ ansehen"
+    override val states = mapOf(
+        "01" to "Schleswig-Holstein", "02" to "Hamburg", "03" to "Niedersachsen", "04" to "Bremen",
+        "05" to "Nordrhein-Westfalen", "06" to "Hessen", "07" to "Rheinland-Pfalz", "08" to "Baden-Württemberg",
+        "09" to "Bayern", "10" to "Saarland", "11" to "Berlin", "12" to "Brandenburg",
+        "13" to "Mecklenburg-Vorpommern", "14" to "Sachsen", "15" to "Sachsen-Anhalt", "16" to "Thüringen",
+    )
 }
 
 internal object AlertTextsEn : AlertTexts {
@@ -479,4 +509,20 @@ internal object AlertTextsEn : AlertTexts {
     override val channelAlarmDescription = "Loud, even when your phone is on silent or in “Do Not Disturb”."
     override val silence = "Silence"
     override val open = "Open"
+
+    override fun mapWarnings(count: Int) = if (count == 1) "Official warning here" else "$count official warnings here"
+    override val kindWeather = "Severe weather"
+    override val kindFlood = "Flood"
+    override val kindPolice = "Police"
+    override val kindCivilProtection = "Civil protection"
+    override fun validSince(time: String) = "in effect since $time"
+    override fun area(names: String) = "Area: $names"
+    override fun moreAreas(count: Int) = "and $count more"
+    override val openInAlerts = "View in “Alerts”"
+    override val states = mapOf(
+        "01" to "Schleswig-Holstein", "02" to "Hamburg", "03" to "Lower Saxony", "04" to "Bremen",
+        "05" to "North Rhine-Westphalia", "06" to "Hesse", "07" to "Rhineland-Palatinate", "08" to "Baden-Württemberg",
+        "09" to "Bavaria", "10" to "Saarland", "11" to "Berlin", "12" to "Brandenburg",
+        "13" to "Mecklenburg-Western Pomerania", "14" to "Saxony", "15" to "Saxony-Anhalt", "16" to "Thuringia",
+    )
 }
