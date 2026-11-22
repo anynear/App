@@ -21,6 +21,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertFalse
+import kotlinx.coroutines.async
 import kotlin.test.assertTrue
 
 /** Calling the helpers (ADR 0083 §2–§4, ADR 0121 §13): who is called, what goes along, and the alarm at a helper. */
@@ -114,6 +116,17 @@ class SosTest {
         cards.clear()
         Sos(CoroutineScope(Dispatchers.Unconfined), later, store, Hooks(), sharing = null, now = { t0 }, nameOf = { "" }).also { it.onCard = { p, c -> cards += p to c } }.start()
         assertTrue(cards.isEmpty())
+    }
+
+    /** Saying yes to a question: one card, not one per list the person is in (crashed the chat, 22.11.2026). */
+    @Test
+    fun aYesToAQuestionGivesOneCard() = runTest {
+        val source = Source().apply { asking = listOf(app.anynear.anmp.core.SosAsk("ben", t0)) }
+        val cards = mutableListOf<Pair<String, Int>>()
+        val s = sos(source)
+        s.onCard = { p, c -> cards += p to c }
+        assertTrue(s.answer("ben", true))
+        assertEquals(listOf("ben" to app.anynear.sos.CARD_WE_YES), cards)
     }
 
     @Test
@@ -408,5 +421,92 @@ class SosTest {
         assertEquals(AlertSound.Alarm, AlertSound.allowedFor(curated = false, chosen = AlertSound.Official))
         assertEquals(AlertSound.Warning, AlertSound.allowedFor(curated = false, chosen = AlertSound.Warning))
         assertEquals(AlertSound.Official, AlertSound.allowedFor(curated = true, chosen = AlertSound.Warning))
+    }
+
+    private class PreciseHooks(precise: Boolean, private val lastingOnlyInSettings: Boolean = false) : NoOpPlatformHooks() {
+        val precise = kotlinx.coroutines.flow.MutableStateFlow(precise)
+        val allowed = kotlinx.coroutines.flow.MutableStateFlow(true)
+        var requested = 0
+        var settings = 0
+        override val preciseLocationAllowed: kotlinx.coroutines.flow.StateFlow<Boolean> get() = precise
+        override val locationAllowed: kotlinx.coroutines.flow.StateFlow<Boolean> get() = allowed
+        override val preciseLastingOnlyInSettings: Boolean get() = lastingOnlyInSettings
+        override fun requestPreciseLocation() { requested++ }
+        override fun openLocationSettings() { settings++ }
+    }
+
+    /** 22.11.2026: with SOS contacts but without the precise location the app says so, also when it is taken back later. */
+    @Test
+    fun sosContactsNeedThePreciseLocation() = runTest {
+        val hooks = PreciseHooks(precise = true)
+        val s = Sos(CoroutineScope(Dispatchers.Unconfined), Source(), ObservedKeyValueStore(InMemoryStore()), hooks, sharing = null, now = { t0 }, nameOf = { "" }).also { it.start() }
+        assertFalse(s.needsPrecise.value)
+        hooks.precise.value = false
+        // Nobody chosen: nothing to say.
+        assertFalse(s.needsPrecise.value)
+        s.setHelpers(SosHelpers(persons = setOf("anna")))
+        assertTrue(s.needsPrecise.value)
+        // Taken back in the system's settings, given again: the line goes.
+        hooks.precise.value = true
+        assertFalse(s.needsPrecise.value)
+        hooks.precise.value = false
+        assertTrue(s.needsPrecise.value)
+        // Switched off: no contacts, nothing to say.
+        assertTrue(s.switchOff())
+        assertTrue(s.helpers.value.isEmpty)
+        assertFalse(s.needsPrecise.value)
+    }
+
+    /** ADR 0125 §4: the sheet for SOS contacts only once; after that only the line on every page leads to the system. */
+    @Test
+    fun preciseIsAskedOnlyOnce() = runTest {
+        val hooks = PreciseHooks(precise = false)
+        val store = ObservedKeyValueStore(InMemoryStore())
+        val access = app.anynear.location.LocationAccess(hooks, store, waitMillis = 1_000)
+        val s = Sos(CoroutineScope(Dispatchers.Unconfined), Source(), store, hooks, sharing = null, now = { t0 }, nameOf = { "" }).also { it.access = access; it.start() }
+        val first = backgroundScope.async { s.askPrecise() }
+        testScheduler.runCurrent()
+        assertNotNull(access.asking.value)
+        access.answer(true)
+        testScheduler.runCurrent()
+        assertEquals(1, hooks.requested)
+        hooks.precise.value = true
+        testScheduler.runCurrent()
+        assertTrue(first.await())
+        hooks.precise.value = false
+        // Asked before: no sheet, no question.
+        assertFalse(s.askPrecise())
+        assertNull(access.asking.value)
+        assertEquals(1, hooks.requested)
+        // The line still leads to the question.
+        s.fixPrecise()
+        assertEquals(2, hooks.requested)
+    }
+
+    /** iPhone: the question gives the precise location only while the app is open, so the settings instead (ADR 0125 §6). */
+    @Test
+    fun iphoneGoesToTheSettingsForThePreciseLocation() = runTest {
+        val hooks = PreciseHooks(precise = false, lastingOnlyInSettings = true)
+        val store = ObservedKeyValueStore(InMemoryStore())
+        val access = app.anynear.location.LocationAccess(hooks, store, lastingPreciseOnlyInSettings = { hooks.preciseLastingOnlyInSettings })
+        val s = Sos(CoroutineScope(Dispatchers.Unconfined), Source(), store, hooks, sharing = null, now = { t0 }, nameOf = { "" }).also { it.access = access; it.start() }
+        s.fixPrecise()
+        assertEquals(1, hooks.settings)
+        assertEquals(0, hooks.requested)
+        // Not allowed at all yet: the system's question first.
+        hooks.allowed.value = false
+        s.fixPrecise()
+        assertEquals(1, hooks.requested)
+    }
+
+    /** A running own call is not switched off with SOS: it ends with „Alles gut“. */
+    @Test
+    fun switchingOffKeepsARunningOwnCall() = runTest {
+        val source = Source()
+        val s = sos(source)
+        s.setHelpers(SosHelpers(persons = setOf("anna")))
+        assertEquals(Sos.Raise.Sent, s.raise())
+        assertFalse(s.switchOff())
+        assertFalse(s.helpers.value.isEmpty)
     }
 }

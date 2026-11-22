@@ -160,6 +160,18 @@ class MapLabelsTest {
     }
 
     @Test
+    fun aTownAndItsQuarterOfTheSameNameAreNamedOnce() {
+        // Idstein and its quarter „Idstein“ a little below: one name, not the same twice.
+        val town = label("Idstein", eltville, 500f, 500f)
+        // As on the tablet: about one and a half names apart, below and to the side.
+        val quarter = label("Idstein", suburb, 590f, 545f)
+        assertEquals(listOf("Idstein"), MapLabels.choose(listOf(town, quarter), 1000f, 1000f).map { it.text })
+        // Far apart, two places of the same name both keep theirs.
+        val other = label("Idstein", suburb, 500f, 900f)
+        assertEquals(2, MapLabels.choose(listOf(town, other), 1000f, 1000f).size)
+    }
+
+    @Test
     fun namesKeepTheirRoom() {
         val a = label("Eltville", eltville, 500f, 500f)
         // 8 px of room: a box 6 px away is too close, one 20 px away is fine.

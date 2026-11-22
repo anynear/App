@@ -105,7 +105,9 @@ class AndroidPlatformHooks(private val context: Context) : PlatformHooks {
 
     override fun setLocationInUse(reason: String, text: String?) {
         if (text == null) sharingReasons.remove(reason) else sharingReasons[reason] = text
-        if (sharingReasons.isEmpty()) LocationShareService.stop(context) else LocationShareService.start(context, sharingReasons.values.last())
+        // Only a check-in locates (ADR 0125 §7): its own notification is the one for locating, no second one.
+        val checkInOnly = sharingReasons.keys == setOf(app.anynear.lifesigns.LifeSigns.IN_USE)
+        if (sharingReasons.isEmpty()) LocationShareService.stop(context) else LocationShareService.start(context, sharingReasons.values.last(), checkInOnly)
     }
 
     override fun requestBackgroundLocation() {

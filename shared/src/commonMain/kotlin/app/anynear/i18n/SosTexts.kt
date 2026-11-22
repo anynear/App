@@ -34,6 +34,9 @@ interface SosTexts {
     fun askText(name: String): String
     val askNotice: String
     val contactFor: String
+
+    /** With a person we are SOS contact for, whose phone does not send its precise place with a call (ADR 0125 §8). */
+    val noPrecise: String
     val openAsks: String
     fun openAsksCount(count: Int): String
     val withdraw: String
@@ -74,12 +77,27 @@ interface SosTexts {
     fun ownMissedText(circle: String): String
     val ownMissedNoPlace: String
     val ownMissedBanner: String
+
+    // SOS needs the precise location, and can be switched off (22.11.2026).
+    val preciseBanner: String
+    val preciseTitle: String
+    val preciseText: String
+    val preciseAllow: String
+    val preciseAsked: String
+    val switchOff: String
+    val switchOffTitle: String
+    val switchOffText: String
+    val switchOffConfirm: String
+    fun mapSos(name: String): String
+    val mapSosOwn: String
+    fun mapSosLine(time: String): String
+    val mapSosNoPlace: String
 }
 
 internal object SosTextsDe : SosTexts {
     override fun card(card: Int, name: String) = when (card) {
         1 -> "$name fragt, ob du SOS-Kontakt bist"
-        2 -> "Du hast $name gefragt, ob $name dein SOS-Kontakt ist"
+        2 -> "Du hast $name als SOS-Kontakt angefragt"
         3 -> "$name ist jetzt dein SOS-Kontakt"
         4 -> "$name möchte nicht dein SOS-Kontakt sein"
         5 -> "Du bist jetzt SOS-Kontakt von $name"
@@ -117,6 +135,7 @@ internal object SosTextsDe : SosTexts {
     override fun askText(name: String) = "Ruft $name Hilfe oder bleibt ein Lebenszeichen aus, klingelt dein Handy laut, auch nachts. Du kannst das jederzeit zurücknehmen."
     override val askNotice = "Öffne anynear, um zu antworten."
     override val contactFor = "Du bist SOS-Kontakt für"
+    override val noPrecise = "Standort im Notfall nicht verfügbar"
     override val openAsks = "Offene Anfragen"
     override fun openAsksCount(count: Int) = if (count == 1) "1 offene Anfrage" else "$count offene Anfragen"
     override val withdraw = "Antippen, um es zurückzunehmen"
@@ -156,6 +175,19 @@ internal object SosTextsDe : SosTexts {
     override fun ownMissedText(circle: String) = "Dein Lebenszeichen blieb aus. Deshalb ist „$circle“ gewarnt."
     override val ownMissedNoPlace = "Dein Standort geht nicht mit, weil du ihn mit diesem Kreis nicht teilst."
     override val ownMissedBanner = "Lebenszeichen blieb aus: Deine SOS-Kontakte sind gewarnt. Antippen"
+    override val preciseBanner = "SOS braucht deinen genauen Standort. Antippen"
+    override val preciseTitle = "Genauer Standort fehlt"
+    override val preciseText = "Ohne genauen Standort finden dich deine SOS-Kontakte nicht. Erlaube ihn oder schalte SOS aus."
+    override val preciseAllow = "Genauen Standort erlauben"
+    override val preciseAsked = "Gespeichert. Erlaube noch den genauen Standort, damit dich deine SOS-Kontakte finden."
+    override val switchOff = "SOS ausschalten"
+    override val switchOffTitle = "SOS ausschalten?"
+    override val switchOffText = "Deine SOS-Kontakte werden entfernt und erfahren es. Zum Einschalten wählst du sie neu."
+    override val switchOffConfirm = "Ausschalten"
+    override fun mapSos(name: String) = "SOS · $name"
+    override val mapSosOwn = "SOS · Du"
+    override fun mapSosLine(time: String) = "Braucht Hilfe · seit $time. Antippen"
+    override val mapSosNoPlace = "Standort unbekannt"
 }
 
 internal object SosTextsEn : SosTexts {
@@ -199,6 +231,7 @@ internal object SosTextsEn : SosTexts {
     override fun askText(name: String) = "If $name calls for help or misses a check-in, your phone rings loudly, also at night. You can take this back at any time."
     override val askNotice = "Open anynear to answer."
     override val contactFor = "You are an SOS contact for"
+    override val noPrecise = "Location not available in an emergency"
     override val openAsks = "Open requests"
     override fun openAsksCount(count: Int) = if (count == 1) "1 open request" else "$count open requests"
     override val withdraw = "Tap to take it back"
@@ -238,4 +271,17 @@ internal object SosTextsEn : SosTexts {
     override fun ownMissedText(circle: String) = "Your check-in stopped. That's why “$circle” has been warned."
     override val ownMissedNoPlace = "Your location doesn't go along, because you don't share it with this circle."
     override val ownMissedBanner = "Check-in stopped: your SOS contacts have been warned. Tap"
+    override val preciseBanner = "SOS needs your precise location. Tap"
+    override val preciseTitle = "Precise location missing"
+    override val preciseText = "Without your precise location your SOS contacts can't find you. Allow it or switch SOS off."
+    override val preciseAllow = "Allow precise location"
+    override val preciseAsked = "Saved. Now allow your precise location so your SOS contacts can find you."
+    override val switchOff = "Switch SOS off"
+    override val switchOffTitle = "Switch SOS off?"
+    override val switchOffText = "Your SOS contacts are removed and are told. To switch it on, choose them again."
+    override val switchOffConfirm = "Switch off"
+    override fun mapSos(name: String) = "SOS · $name"
+    override val mapSosOwn = "SOS · You"
+    override fun mapSosLine(time: String) = "Needs help · since $time. Tap"
+    override val mapSosNoPlace = "Location unknown"
 }

@@ -174,6 +174,71 @@ internal fun SosBanner(controller: AppController) {
 }
 
 /**
+ * A line on every page while SOS contacts are chosen but the phone gives no precise location (22.11.2026), e.g. because
+ * the permission was taken back in the system's settings. It stays until the location is allowed again or SOS is
+ * switched off; a tap says why and offers both.
+ */
+@Composable
+internal fun SosPreciseBanner(controller: AppController) {
+    val sos = controller.sos ?: return
+    val needs by sos.needsPrecise.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    if (!needs) return
+    Surface(
+        color = AppTheme.colors.warningContainer, contentColor = AppTheme.colors.onWarningContainer,
+        modifier = Modifier.fillMaxWidth().clickable(onClickLabel = texts.sos.preciseTitle, role = Role.Button) { open = true },
+    ) {
+        Text(texts.sos.preciseBanner, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+    }
+    if (open) SosPreciseDialog(sos, onDismiss = { open = false })
+}
+
+/** Why the precise location is needed, with the way to allow it and the way to switch SOS off instead. */
+@Composable
+private fun SosPreciseDialog(sos: Sos, onDismiss: () -> Unit) {
+    val st = texts.sos
+    var confirmOff by remember { mutableStateOf(false) }
+    if (confirmOff) {
+        SosSwitchOffDialog(sos, onDismiss = { confirmOff = false; onDismiss() })
+        return
+    }
+    AppDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(st.preciseTitle) },
+        text = { Text(st.preciseText) },
+        confirmButton = { AppButton(st.preciseAllow, { sos.fixPrecise(); onDismiss() }) },
+        dismissButton = { AppButton(st.switchOff, { confirmOff = true }, kind = ButtonKind.Quiet) },
+    )
+}
+
+/** „SOS ausschalten?“: the SOS contacts are taken out and learn it. */
+@Composable
+private fun SosSwitchOffDialog(sos: Sos, onDismiss: () -> Unit) {
+    val st = texts.sos
+    AppDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(st.switchOffTitle) },
+        text = { Text(st.switchOffText) },
+        confirmButton = { AppButton(st.switchOffConfirm, { sos.switchOff(); onDismiss() }, kind = ButtonKind.Danger) },
+        dismissButton = { AppButton(st.cancel, onDismiss, kind = ButtonKind.Quiet) },
+    )
+}
+
+/** On the SOS pages: the precise location is missing, and the way to allow it. */
+@Composable
+private fun PreciseMissing(sos: Sos) {
+    val needs by sos.needsPrecise.collectAsState()
+    if (!needs) return
+    Surface(color = AppTheme.colors.warningContainer, contentColor = AppTheme.colors.onWarningContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(texts.sos.preciseTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(texts.sos.preciseText, style = MaterialTheme.typography.bodyMedium)
+            AppButton(texts.sos.preciseAllow, sos::fixPrecise, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary, icon = AppIcons.Karte)
+        }
+    }
+}
+
+/**
  * The question of someone who asks this person to be its SOS contact (ADR 0121 §25, ADR 0123 §3), opened from a list
  * of open questions; never by itself. Yes lets its calls ring here; no, or no answer, and they are only shown.
  */
@@ -244,8 +309,11 @@ private fun RaisePage(controller: AppController, sos: Sos) {
         return
     }
     val names = circles.filter { it.id in helpers.circles }.map { it.name } + people.filter { it.deviceId in helpers.persons }.map { it.name }
+    var switchingOff by remember { mutableStateOf(false) }
+    if (switchingOff) SosSwitchOffDialog(sos, onDismiss = { switchingOff = false })
     PageFrame(st.title, sos::close) {
         Text(st.goesTo(names.joinToString(", ").ifEmpty { "?" }), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        PreciseMissing(sos)
         // Who said yes (ADR 0121 §25): only their phones ring; without a yes a call is just a notice there.
         val contacts by sos.contacts.collectAsState()
         val yes = contacts.count { it.state == app.anynear.anmp.core.SosContact.AGREED }
@@ -274,6 +342,8 @@ private fun RaisePage(controller: AppController, sos: Sos) {
         else BadgedBox(badge = { OpenAsksBadge(asks.size) }, Modifier.semantics { stateDescription = st.openAsksCount(asks.size) }) {
             AppButton(st.chooseHelpers, { choosing = true }, kind = ButtonKind.Quiet)
         }
+        // Not while a call goes out or counts down: that one is ended with „Alles gut“ or „Abbrechen“.
+        if (!busy && !counting) AppButton(st.switchOff, { switchingOff = true }, kind = ButtonKind.Quiet)
     }
 }
 
@@ -296,6 +366,7 @@ private fun HelpersPage(controller: AppController, sos: Sos, onDone: () -> Unit)
             openAsks.forEach { a -> AppRow(title = st.askTitle(sos.name(a.person)), icon = AppIcons.Person, chevron = true, onClick = { sos.askNow(a.person) }) }
         }
         Text(st.noHelpersText, style = MaterialTheme.typography.bodyLarge)
+        PreciseMissing(sos)
         if (shownCircles.isEmpty() && shownPeople.isEmpty()) Text(st.nobodyYet, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (shownCircles.isNotEmpty()) AppSection(st.circles) {
             shownCircles.forEach { c ->
@@ -321,10 +392,15 @@ private fun HelpersPage(controller: AppController, sos: Sos, onDone: () -> Unit)
         }
         // Whose SOS contact this person is, and the way to take it back.
         val agreed by sos.agreed.collectAsState()
+        // Whose calls come without the precise place (ADR 0125 §8): said with the person.
+        val noPrecise by controller.sosNoPrecise.collectAsState()
         val scope = rememberCoroutineScope()
         if (agreed.isNotEmpty()) AppSection(st.contactFor) {
             agreed.forEach { person ->
-                AppRow(title = sos.name(person), subtitle = st.withdraw, icon = AppIcons.Person, onClick = { scope.launch { sos.answer(person, false) } })
+                AppRow(
+                    title = sos.name(person), subtitle = if (person in noPrecise) st.noPrecise + "\n" + st.withdraw else st.withdraw,
+                    icon = AppIcons.Person, onClick = { scope.launch { sos.answer(person, false) } },
+                )
             }
         }
         Text(st.not112, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -332,7 +408,10 @@ private fun HelpersPage(controller: AppController, sos: Sos, onDone: () -> Unit)
             st.save,
             {
                 // Who was ended through a circle stays left out (ADR 0123 §3), unless chosen alone now.
-                sos.setHelpers(SosHelpers(chosenCircles, chosenPersons, saved.except - chosenPersons))
+                val helpers = SosHelpers(chosenCircles, chosenPersons, saved.except - chosenPersons)
+                sos.setHelpers(helpers)
+                // SOS contacts need the precise location (22.11.2026): asked now, but saved either way, never blocked.
+                if (!helpers.isEmpty) scope.launch { sos.askPrecise() }
                 onDone()
             },
             // Nobody chosen can be saved only to take the helpers away again; the button in the header then shows „not set up“.
@@ -372,8 +451,8 @@ private fun RunningPage(controller: AppController, sos: Sos, call: SosCall) {
     }
 }
 
-private fun caringText(sos: Sos, call: SosCall): String {
-    val names = call.caring.map(sos::name)
+private fun caringText(sos: Sos, call: SosCall, without: String? = null): String {
+    val names = call.caring.filter { it != without }.map(sos::name)
     return when (names.size) {
         0 -> texts.sos.nobodyCares
         1 -> texts.sos.cares(names.single())
@@ -425,7 +504,10 @@ private fun HelperPage(controller: AppController, sos: Sos, call: SosCall) {
         } else {
             Text(st.noPlace, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(caringText(sos, call), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        // The own name is not listed: „Du kümmerst dich“ says it (else the same twice, with the own name).
+        if (call.caring.any { it != me } || me !in call.caring) {
+            Text(caringText(sos, call, without = me), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        }
         if (me in call.caring) {
             Text(st.youCare, style = MaterialTheme.typography.titleMedium, color = AppTheme.colors.safe)
         } else {

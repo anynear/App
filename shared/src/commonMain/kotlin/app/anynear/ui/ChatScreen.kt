@@ -2,6 +2,7 @@ package app.anynear.ui
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -872,9 +873,16 @@ private fun MessageBubble(
     // something typed: a card in the middle, the same on both sides, that names who it is from.
     val event = message.spot != null
     val dark = outgoing && !failed && !event
+    // Opened, the actions grow below the bubble; with the newest message they would stay under the input field.
+    val bring = remember(message.localId) { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    if (expanded) LaunchedEffect(message.localId) {
+        kotlinx.coroutines.delay(150)
+        bring.bringIntoView()
+    }
     Row(
         Modifier
             .fillMaxWidth()
+            .then(Modifier.bringIntoViewRequester(bring))
             .then(if (highlighted) Modifier.background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp)).padding(4.dp) else Modifier),
         horizontalArrangement = if (event) Arrangement.Center else if (outgoing) Arrangement.End else Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Bottom,
@@ -1655,7 +1663,11 @@ private fun LifeSignCard(controller: AppController, status: app.anynear.anmp.cor
             ended -> controller.showMapFor(Conversation.Circle(plan.circleId))
             call != null && !call.own -> controller.sos?.open(call.id)
             call != null -> controller.sos?.open()
-            status.own -> lifeSigns.openFullScreen()
+            // The screen of the own check-in lives on the map tab: open it there, else the tap shows nothing here.
+            status.own -> {
+                lifeSigns.openFullScreen()
+                controller.showMap()
+            }
             else -> controller.showMapFor(Conversation.Circle(plan.circleId))
         }
     }

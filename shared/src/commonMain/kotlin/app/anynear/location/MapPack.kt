@@ -227,6 +227,8 @@ class MapTiles(
     private val busy = mutableSetOf<String>()
     private val missing = mutableMapOf<String, Long>()
     private val used = ArrayList<String>()
+    /** Tiles from the phone already compared with the network since the start. */
+    private val checked = mutableSetOf<String>()
     private var roots: Map<String, MapOffer>? = null
     private var rootsAt = 0L
     private val regions = mutableMapOf<String, Map<String, MapOffer>>()
@@ -251,14 +253,20 @@ class MapTiles(
                 }
             }
             for (key in todo) {
-                val pack = runCatching {
-                    withContext(Dispatchers.Default) { files.read(TILE + key)?.let(MapPack::parse) } ?: download(key, now)
-                }.getOrNull()
+                val kept = runCatching { withContext(Dispatchers.Default) { files.read(TILE + key)?.let(MapPack::parse) } }.getOrNull()
+                val pack = kept ?: runCatching { download(key, now) }.getOrNull()
                 state.withLock {
                     busy -= key
                     _loading.value = busy.isNotEmpty()
                     if (pack != null) put(key, pack) else missing[key] = now
                 }
+            }
+            // Tiles from the phone are shown at once and then compared with what the network offers: a tile of an
+            // earlier map (22.11.2026: place names without their rank) is replaced by the new one.
+            for (key in todo) {
+                if (state.withLock { key !in _loaded.value || !checked.add(key) }) continue
+                val newer = runCatching { download(key, now, kept = true) }.getOrNull() ?: continue
+                state.withLock { if (key in _loaded.value) put(key, newer) }
             }
         }
     }
@@ -274,9 +282,14 @@ class MapTiles(
         _loaded.value = all
     }
 
-    private suspend fun download(key: String, now: Long): MapPack? = lock.withLock {
+    /**
+     * Fetches the tile [key] as the network offers it now. With [kept] only when that is another object than the
+     * one on the phone, and not again and again without a network.
+     */
+    private suspend fun download(key: String, now: Long, kept: Boolean = false): MapPack? = lock.withLock {
         val from = source ?: return@withLock null
         val region = MapPack.regionOf(key) ?: return@withLock null
+        if (kept && roots == null && rootsAt != 0L && now - rootsAt < RETRY_MILLIS) return@withLock null
         if (roots == null || now - rootsAt > ROOTS_FRESH_MILLIS) {
             roots = from.roots()?.flatMap { parseOffers(it) }?.groupBy { it.key }?.mapValues { (_, list) -> list.maxBy { it.stamp } } ?: roots
             rootsAt = now
@@ -292,15 +305,19 @@ class MapTiles(
             parseOffers(bytes).associateBy { it.key }.also { regions[region] = it }
         }
         val offer = list[key] ?: return@withLock null
+        if (kept && files.read(TILE_ID + key)?.decodeToString() == offer.objectId) return@withLock null
         val bytes = from.fetch(offer.objectId) ?: return@withLock null
         val pack = withContext(Dispatchers.Default) { MapPack.parse(bytes) }?.takeIf { it.key == key } ?: return@withLock null
         files.write(TILE + key, bytes)
+        files.write(TILE_ID + key, offer.objectId.encodeToByteArray())
         pack
     }
 
     companion object {
         const val DIR_NAME = "maps"
         private const val TILE = "t-"
+        /** The object a stored tile came from; tiles of before 22.11.2026 have none and are fetched once more. */
+        private const val TILE_ID = "o-"
         private const val LIST = "l-"
         private const val LIST_ID = "i-"
         private const val MAX_IN_MEMORY = 48

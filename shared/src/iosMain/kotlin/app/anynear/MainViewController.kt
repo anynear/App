@@ -123,6 +123,8 @@ private class IosPlatformHooks : NoOpPlatformHooks() {
 
     override fun requestPreciseLocation() = location.requestPrecise()
 
+    override val preciseLastingOnlyInSettings: Boolean = true
+
     override suspend fun currentPlace(): app.anynear.location.Place? = location.place()
 
     override val backgroundLocationAllowed: StateFlow<Boolean> = location.always

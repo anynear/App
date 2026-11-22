@@ -138,6 +138,13 @@ interface PlatformHooks {
     fun requestPreciseLocation() = requestLocation()
 
     /**
+     * The system grants the exact location for good only in its settings once the app is allowed approximately (iOS:
+     * the question gives it only while the app is open; for good it is the switch „Genauer Standort“). A call for help
+     * from the pocket needs it for good (22.11.2026), so then [openLocationSettings] instead of the question.
+     */
+    val preciseLastingOnlyInSettings: Boolean get() = false
+
+    /**
      * Where the phone is, as exact as the system allows, with time and accuracy; `null` if not allowed or not
      * obtainable right now. In the background the system usually gives nothing without „Immer“.
      */

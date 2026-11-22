@@ -212,7 +212,10 @@ internal fun SosEventCard(controller: AppController, message: ChatMessage, card:
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(if (good) AppIcons.Haken else AppIcons.Person, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
-            Text(message.text, style = MaterialTheme.typography.titleSmall, color = accent)
+            // The current name, also after „Namen ändern“; the stored text keeps the name of the moment it came.
+            val people by controller.people.collectAsState()
+            val name = personId?.let { id -> people.firstOrNull { it.deviceId == id }?.name }
+            Text(name?.let { texts.sos.card(card, it) } ?: message.text, style = MaterialTheme.typography.titleSmall, color = accent)
         }
         if (card != app.anynear.sos.CARD_ASKED_US || sos == null || personId == null) return@Column
         val newest = remember(all, message.localId) {

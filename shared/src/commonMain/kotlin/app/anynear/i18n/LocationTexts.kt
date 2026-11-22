@@ -24,6 +24,26 @@ interface LocationTexts {
     val allowText: String
     fun metres(value: Int): String
     fun kilometres(value: String): String
+
+    // The one sheet and the hint line for the permission of an action (ADR 0125).
+    val accessTitle: String
+    val accessAllow: String
+    val accessSkip: String
+    val accessOff: String
+    val accessSosContact: String
+    val accessLifeSign: String
+    val accessShare: String
+    val accessSendPlace: String
+    val accessLevel: String
+    val accessAlways: String
+    val missingTitle: String
+    val roughTitle: String
+    val offTitle: String
+    val lifeSignMissing: String
+    val alwaysLostTitle: String
+    val alwaysLostText: String
+    val alwaysLostFix: String
+    val alwaysLostLater: String
 }
 
 internal object LocationTextsDe : LocationTexts {
@@ -49,6 +69,24 @@ internal object LocationTextsDe : LocationTexts {
     override val allowText = "Ohne die Erlaubnis für den genauen Standort kann anynear ihn nicht oder nur ungefähr mitschicken."
     override fun metres(value: Int) = "$value m"
     override fun kilometres(value: String) = "$value km"
+    override val accessTitle = "Standort erlauben"
+    override val accessAllow = "Erlauben"
+    override val accessSkip = "Ohne Standort weiter"
+    override val accessOff = "Schalte dafür auch den Standort am Handy ein."
+    override val accessSosContact = "Damit deine SOS-Kontakte dich im Notfall finden, braucht anynear deinen genauen Standort. Er geht nur bei SOS hinaus."
+    override val accessLifeSign = "Damit deine SOS-Kontakte dich finden, wenn du nicht antwortest, ortet anynear, solange das Lebenszeichen läuft. Dein Standort geht nur dann hinaus."
+    override val accessShare = "Damit die anderen sehen, wo du gerade bist, braucht anynear deinen genauen Standort, solange du teilst."
+    override val accessSendPlace = "Damit anynear deinen Standort senden kann, braucht es den genauen Standort."
+    override val accessLevel = "Damit dich die anderen im Notfall finden, braucht anynear deinen genauen Standort."
+    override val accessAlways = "Damit dein Standort auch aktuell ist, wenn anynear geschlossen ist, wähle „Immer erlauben“. Sonst aktualisiert er sich nur, wenn du die App öffnest."
+    override val missingTitle = "Standort fehlt"
+    override val roughTitle = "Standort nur ungefähr"
+    override val offTitle = "Standort am Handy aus"
+    override val lifeSignMissing = "Antwortest du nicht, finden dich deine SOS-Kontakte nicht. Tippen zum Erlauben."
+    override val alwaysLostTitle = "Standort nicht mehr aktuell"
+    override val alwaysLostText = "Dein Handy erlaubt anynear nicht mehr, den Standort im Hintergrund zu bestimmen. Wer ihn sieht, sieht ihn nur noch aktuell, wenn du die App öffnest."
+    override val alwaysLostFix = "Wieder erlauben"
+    override val alwaysLostLater = "So lassen"
 }
 
 internal object LocationTextsEn : LocationTexts {
@@ -74,4 +112,22 @@ internal object LocationTextsEn : LocationTexts {
     override val allowText = "Without the permission for the precise location, anynear can't include it, or only approximately."
     override fun metres(value: Int) = "$value m"
     override fun kilometres(value: String) = "$value km"
+    override val accessTitle = "Allow location"
+    override val accessAllow = "Allow"
+    override val accessSkip = "Continue without location"
+    override val accessOff = "Also turn on location on your phone."
+    override val accessSosContact = "So your SOS contacts can find you in an emergency, anynear needs your precise location. It only goes out with SOS."
+    override val accessLifeSign = "So your SOS contacts can find you if you don't answer, anynear locates you while the check-in runs. Your location only goes out then."
+    override val accessShare = "So the others see where you are right now, anynear needs your precise location while you share."
+    override val accessSendPlace = "To send your location, anynear needs your precise location."
+    override val accessLevel = "So the others can find you in an emergency, anynear needs your precise location."
+    override val accessAlways = "So your location stays current when anynear is closed, choose “Allow all the time”. Otherwise it only updates when you open the app."
+    override val missingTitle = "Location missing"
+    override val roughTitle = "Location only approximate"
+    override val offTitle = "Location is off on your phone"
+    override val lifeSignMissing = "If you don't answer, your SOS contacts can't find you. Tap to allow."
+    override val alwaysLostTitle = "Location no longer current"
+    override val alwaysLostText = "Your phone no longer lets anynear find your location in the background. Those who see it only see it current when you open the app."
+    override val alwaysLostFix = "Allow again"
+    override val alwaysLostLater = "Leave it"
 }

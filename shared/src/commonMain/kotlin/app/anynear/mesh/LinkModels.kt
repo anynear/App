@@ -335,10 +335,10 @@ val ChatMessage.radioText: String
  * stand-in text with its link for older apps. `null` without a place.
  */
 val ChatMessage.spotLine: String?
-    get() = spot?.let { spotLineOf(it.kind, it.label, outgoing) }
+    get() = spot?.let { spotLineOf(it.kind, it.label, outgoing, it.level) }
 
 /** [spotLine] for a place of the kind [kind] with the name [label]; also for the wake-up without the running app. */
-fun spotLineOf(kind: Int, label: String?, outgoing: Boolean): String {
+fun spotLineOf(kind: Int, label: String?, outgoing: Boolean, level: Int? = null): String {
     val mt = app.anynear.i18n.texts.map
     return when (kind) {
         ChatSpot.MEET -> label?.let { mt.spotMeetText(it) } ?: mt.spotMeet
@@ -346,7 +346,12 @@ fun spotLineOf(kind: Int, label: String?, outgoing: Boolean): String {
         ChatSpot.ALL -> mt.shareAll
         ChatSpot.ARRIVED -> if (outgoing) mt.arrivedOwn else mt.noticeArrived(label)
         ChatSpot.SHARE -> mt.mutualNotice
-        ChatSpot.SHARED -> mt.mutualAnswerNotice
+        // The answer says yes or no; only without a level (older app) the general line.
+        ChatSpot.SHARED -> when {
+            level == null -> mt.mutualAnswerNotice
+            level > 0 -> mt.mutualAcceptedNotice
+            else -> mt.mutualDeclinedNotice
+        }
         ChatSpot.ENDED -> if (outgoing) mt.sharingEndedOwnNotice else mt.sharingEndedNotice
         ChatSpot.WITHDRAWN -> mt.sharingWithdrawnNotice
         else -> if (outgoing) mt.spotHereOwn else mt.noticeHere

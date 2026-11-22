@@ -38,9 +38,21 @@ class LocationShareService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val text = intent?.getStringExtra(EXTRA_TEXT) ?: lastText
         lastText = text
+        val checkIn = (intent?.getBooleanExtra(EXTRA_CHECK_IN, lastCheckIn) ?: lastCheckIn).also { lastCheckIn = it }
         try {
             val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(text), type)
+            // Only a check-in locates: its notification stands for it (ADR 0125 §7), otherwise the own one.
+            val own = CheckInNotifier.current?.takeIf { checkIn }
+            if (own != null) {
+                if (shownId == NOTIFICATION_ID) ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                ServiceCompat.startForeground(this, CheckInNotifier.NOTIFICATION_ID, own, type)
+                shownId = CheckInNotifier.NOTIFICATION_ID
+            } else {
+                // From the check-in's notification to the own one: the check-in's stays where it is.
+                if (shownId == CheckInNotifier.NOTIFICATION_ID) ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(text), type)
+                shownId = NOTIFICATION_ID
+            }
             listen()
         } catch (e: SecurityException) {
             // No permission for a start from the background: the sharing continues when the app is opened.
@@ -52,6 +64,9 @@ class LocationShareService : Service() {
         }
         return START_STICKY
     }
+
+    /** Which notification the service shows now, 0 = none yet. */
+    private var shownId = 0
 
     override fun onDestroy() {
         if (listening) runCatching { getSystemService(LocationManager::class.java)?.removeUpdates(listener) }
@@ -101,13 +116,18 @@ class LocationShareService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 7
         private const val EXTRA_TEXT = "text"
+        private const val EXTRA_CHECK_IN = "check_in"
+        private var lastCheckIn = false
         private const val MIN_MILLIS = 60_000L
         private const val MIN_METRES = 30f
         private var lastText = ""
 
         /** Starts the service with [text] in its notification, or updates the text. `false` if the system refused. */
-        fun start(context: Context, text: String): Boolean = try {
-            ContextCompat.startForegroundService(context, Intent(context, LocationShareService::class.java).putExtra(EXTRA_TEXT, text))
+        fun start(context: Context, text: String, checkInOnly: Boolean = false): Boolean = try {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, LocationShareService::class.java).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_CHECK_IN, checkInOnly),
+            )
             true
         } catch (e: IllegalStateException) {
             false
