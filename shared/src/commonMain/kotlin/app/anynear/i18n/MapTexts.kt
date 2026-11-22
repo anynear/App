@@ -175,6 +175,8 @@ interface MapTexts {
     val mutualNoMessage: String
     val mutualNotice: String
     val mutualAnswerNotice: String
+    val mutualAcceptedNotice: String
+    val mutualDeclinedNotice: String
     fun mutualAskBy(name: String, exact: Boolean): String
     fun mutualAskOwn(name: String, exact: Boolean): String
     val mutualChange: String
@@ -224,12 +226,6 @@ interface MapTexts {
     val shareAllLeave: String
     val mapLoading: String
     val phoneTitle: String
-    val needAlwaysTitle: String
-    val needAlwaysText: String
-    val needLocationTitle: String
-    val needLocationText: String
-    val needAllow: String
-    val needLater: String
     val phoneAlways: String
     val phoneAlwaysText: String
     val phoneWhileOpen: String
@@ -444,6 +440,8 @@ internal object MapTextsDe : MapTexts {
     override val mutualNoMessage = "Ich möchte meinen Standort nicht teilen."
     override val mutualNotice = "Möchte, dass ihr euch gegenseitig seht"
     override val mutualAnswerNotice = "Standort freigeben: Es gibt etwas Neues"
+    override val mutualAcceptedNotice = "Standortfreigabe angenommen"
+    override val mutualDeclinedNotice = "Standortfreigabe abgelehnt"
     override fun mutualAskBy(name: String, exact: Boolean) = "$name möchte, dass ihr euch gegenseitig ${if (exact) "genau" else "ungefähr"} seht"
     override fun mutualAskOwn(name: String, exact: Boolean) = "Du hast $name gefragt: gegenseitig ${if (exact) "genau" else "ungefähr"} sehen"
     override val mutualChange = "Ändern kannst du das unter „Wer sieht mich?“."
@@ -493,12 +491,6 @@ internal object MapTextsDe : MapTexts {
     override val shareAllLeave = "Aussteigen"
     override val mapLoading = "Karte wird geladen"
     override val phoneTitle = "Dein Handy"
-    override val needAlwaysTitle = "Standort „Immer“ erlauben"
-    override val needAlwaysText = "Mit „Ungefähr“ oder „Genau“ sehen die gewählten Personen, wo du zuletzt warst. Damit das stimmt, liest anynear deinen Standort auch, wenn die App nicht offen ist: immer dann, wenn sie eine Nachricht empfängt. Dafür braucht dein Handy die Einstellung „Immer zulassen“. Was hinausgeht, bestimmst nur du hier in anynear."
-    override val needLocationTitle = "Standort erlauben"
-    override val needLocationText = "Damit deine SOS-Kontakte bei einem Hilferuf sehen, wo du bist, braucht anynear deinen genauen Standort, während du die App benutzt. Ohne Hilferuf geht dabei nichts hinaus."
-    override val needAllow = "Weiter"
-    override val needLater = "Später"
     override val phoneAlways = "Standort immer erlaubt"
     override val phoneAlwaysText = "Alles gilt so, wie du es hier einstellst."
     override val phoneWhileOpen = "Standort nur bei offener App"
@@ -713,6 +705,8 @@ internal object MapTextsEn : MapTexts {
     override val mutualNoMessage = "I don't want to share my location."
     override val mutualNotice = "Would like you to see each other"
     override val mutualAnswerNotice = "Share location: there is news"
+    override val mutualAcceptedNotice = "Location sharing accepted"
+    override val mutualDeclinedNotice = "Location sharing declined"
     override fun mutualAskBy(name: String, exact: Boolean) = "$name would like you to see each other ${if (exact) "precisely" else "approximately"}"
     override fun mutualAskOwn(name: String, exact: Boolean) = "You asked $name: see each other ${if (exact) "precisely" else "approximately"}"
     override val mutualChange = "You can change this under “Who sees me?”."
@@ -762,12 +756,6 @@ internal object MapTextsEn : MapTexts {
     override val shareAllLeave = "Leave"
     override val mapLoading = "Loading the map"
     override val phoneTitle = "Your phone"
-    override val needAlwaysTitle = "Allow location “all the time”"
-    override val needAlwaysText = "With “Approximate” or “Precise” the people you chose see where you were last. To keep that right, anynear also reads your location when the app is not open: whenever it receives a message. Your phone needs the setting “Allow all the time” for that. What goes out is decided only by you, here in anynear."
-    override val needLocationTitle = "Allow location"
-    override val needLocationText = "So that your SOS contacts see where you are when you call for help, anynear needs your precise location while you use the app. Without a call for help nothing goes out."
-    override val needAllow = "Continue"
-    override val needLater = "Later"
     override val phoneAlways = "Location always allowed"
     override val phoneAlwaysText = "Everything applies as you set it here."
     override val phoneWhileOpen = "Location only while the app is open"

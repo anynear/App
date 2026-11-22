@@ -178,6 +178,8 @@ fun App(controller: AppController) {
                 val sosRunning = sosRunning(controller) && setupDone && !revoked && !eraseWaiting
                 Box(Modifier.fillMaxWidth().background(if (sosRunning) AppTheme.colors.alarm else AppTheme.colors.header).windowInsetsTopHeight(WindowInsets.statusBars))
                 if (sosRunning) SosBanner(controller)
+                // SOS contacts chosen, but no precise location (22.11.2026): said on every page until it is fixed.
+                else if (setupDone && !revoked && !eraseWaiting) SosPreciseBanner(controller)
                 // On the Mac and the iPad the window is much wider than a phone: content as a centred
                 // column, otherwise buttons and input fields stretch across the full width.
                 // The main view divides up the width itself (sidebar, see MainScreen).
@@ -671,6 +673,7 @@ private fun MainScreen(controller: AppController) {
         AppHint.PAIRING -> PairingTroubleDialog(controller)
         AppHint.RADIO_SOFTWARE_NOTICE -> RadioSoftwareNotice(controller)
         AppHint.LOCATION_SHARE -> LocationShareDialog(controller)
+        AppHint.LOCATION_ALWAYS_LOST -> controller.locationAccess?.let { AlwaysLostDialog(it) }
         null -> if (!linkOpen) {
             AppUpdateDialog(controller)
             OldAppDialog(controller)
@@ -678,6 +681,8 @@ private fun MainScreen(controller: AppController) {
             if (backgroundHint == null && accessHint && alerts != null) AlarmAccessDialog(alerts)
         }
     }
+    // The sheet for the location permission of an action (ADR 0125 §2), above everything the action opened.
+    LocationAccessSheet(controller)
 }
 
 /**

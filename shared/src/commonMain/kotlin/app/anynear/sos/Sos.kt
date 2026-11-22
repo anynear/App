@@ -16,6 +16,10 @@ import app.anynear.data.KeyValueStore
 import app.anynear.data.ObservedKeyValueStore
 import app.anynear.i18n.texts
 import app.anynear.lifesigns.LifeSignLoudness
+import app.anynear.location.LocationAccess
+import app.anynear.location.LocationAccessState
+import app.anynear.location.LocationNeed
+import app.anynear.location.LocationPurpose
 import app.anynear.location.LocationSharing
 import app.anynear.location.Place
 import kotlinx.coroutines.CancellationException
@@ -258,12 +262,9 @@ class Sos(
         _contacts.value = source.contacts()
         _asks.value = source.asks()
         _agreed.value = source.agreed()
-        if (watching) {
-            val now = Triple(_contacts.value.associate { it.person to it.state }, _asks.value.map { it.person }.toSet(), _agreed.value.toSet())
-            // Nothing seen yet (the first start with cards): no news, only the state to compare with from now on.
-            readSeen()?.let { before -> if (before != now) cardsFor(before) }
-            writeSeen(now)
-        }
+        // One after the other: an own step and the core's event about it come almost at once, and both compared with the
+        // same old state wrote the same card twice („… ist nicht mehr dein SOS-Kontakt“, 22.11.2026).
+        if (watching) cardChecks.trySend(Unit)
         // Asked for the first time: a quiet notice, the answer is given in the app.
         val told = store.getString(KEY_ASKS_TOLD)?.split(',')?.toSet().orEmpty()
         val open = _asks.value.map { it.person }
@@ -295,6 +296,16 @@ class Sos(
      */
     val asking: StateFlow<String?> = _asking.asStateFlow()
 
+    private val cardChecks = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+
+    /** Compares with the state the cards last saw and writes the cards for what changed; only from [cardChecks]. */
+    private fun checkCards() {
+        val now = Triple(_contacts.value.associate { it.person to it.state }, _asks.value.map { it.person }.toSet(), _agreed.value.toSet())
+        // Nothing seen yet (the first start with cards): no news, only the state to compare with from now on.
+        readSeen()?.let { before -> if (before != now) cardsFor(before) }
+        writeSeen(now)
+    }
+
     private fun readSeen(): Triple<Map<String, Int>, Set<String>, Set<String>>? {
         val raw = store.getString(KEY_CARDS_SEEN) ?: return null
         val parts = raw.split('|').associate { it.substringBefore(':') to it.substringAfter(':', "").split(',').filter(String::isNotEmpty) }
@@ -313,7 +324,8 @@ class Sos(
         val asks = _asks.value.map { it.person }.toSet()
         val agreed = _agreed.value.toSet()
         val chosen = _helpers.value.persons
-        for (p in contactsBefore.keys + contacts.keys + asksBefore + asks + agreedBefore + agreed) {
+        // A set: a person in several of these lists gets its cards once, not once per list.
+        for (p in (contactsBefore.keys + contacts.keys + asksBefore + asks + agreedBefore + agreed).toSet()) {
             val cards = sosCards(p in asksBefore, p in asks, p in agreedBefore, p in agreed, contactsBefore[p], contacts[p], p in chosen)
             cards.forEach { runCatching { onCard(p, it) } }
         }
@@ -359,8 +371,13 @@ class Sos(
     fun agreedCount(): Int = _contacts.value.count { it.state == SosContact.AGREED }
 
     fun start() {
+        // The permission can be taken back in the system's settings at any time: the line follows it.
+        scope.launch {
+            kotlinx.coroutines.flow.combine(hooks.locationAllowed, hooks.preciseLocationAllowed) { _, _ -> }.collect { refreshPrecise() }
+        }
         scope.launch { source.changes.collect { refresh() } }
         scope.launch { source.contactChanges.collect { refreshContacts() } }
+        scope.launch { for (check in cardChecks) checkCards() }
         // Once the core has loaded what it knows: the calls, the open questions and whose calls ring here. Read earlier,
         // the lists are empty, and after a restart a call of someone this person said yes to would stay quiet
         // (found on a tablet, 20.11.2026).
@@ -379,6 +396,7 @@ class Sos(
                 observed.changes.collect {
                     if (it != KEY_HELPERS) return@collect
                     _helpers.value = readHelpers()
+                    refreshPrecise()
                     askContacts()
                 }
             }
@@ -444,6 +462,7 @@ class Sos(
         val before = _helpers.value
         store.putString(KEY_HELPERS, (helpers.circles.map { "c:$it" } + helpers.persons.map { "p:$it" } + helpers.except.map { "x:$it" }).sorted().joinToString(",").takeIf { it.isNotEmpty() })
         _helpers.value = helpers
+        refreshPrecise()
         // Who is no longer chosen is forgotten as a contact; who is new gets the question (ADR 0121 §25).
         val still = (helpers.circles.flatMap(membersOf) + helpers.persons).toSet() - helpers.except
         val gone = (before.circles.flatMap(membersOf) + before.persons).toSet() - before.except - still
@@ -453,6 +472,53 @@ class Sos(
             refreshContacts()
         }
         askContacts()
+    }
+
+    /** The one check of the phone's location permission (ADR 0125); `null` in tests that do without. */
+    var access: LocationAccess? = null
+        set(value) {
+            field = value
+            refreshPrecise()
+        }
+
+    private val _needsPrecise = MutableStateFlow(false)
+
+    /**
+     * SOS contacts are chosen, but the phone gives no precise location (22.11.2026, ADR 0125): permission missing or only
+     * approximate, also when it was taken back in the system's settings later. The app says so on every page until it is
+     * allowed again or SOS is switched off; a call still goes out without it, never blocked.
+     */
+    val needsPrecise: StateFlow<Boolean> = _needsPrecise.asStateFlow()
+
+    private fun refreshPrecise() {
+        val precise = access?.state(LocationNeed.Precise)?.let { it == LocationAccessState.Ok } ?: hooks.preciseLocationAllowed.value
+        _needsPrecise.value = !_helpers.value.isEmpty && !precise
+    }
+
+    /** The next step towards the precise location, without the sheet: switch on, the system's question or its settings. */
+    fun fixPrecise() {
+        val a = access
+        if (a != null) a.fix(LocationNeed.Precise, LocationPurpose.SosContact)
+        else if (!hooks.locationServicesOn()) hooks.openLocationSettings() else hooks.requestPreciseLocation()
+    }
+
+    /**
+     * When SOS contacts are chosen: the sheet once (ADR 0125 §4), then the system; `true` if the precise place is
+     * allowed then. The choice is saved either way: it never waits on this.
+     */
+    suspend fun askPrecise(): Boolean {
+        val a = access ?: return hooks.preciseLocationAllowed.value
+        return a.ensure(LocationNeed.Precise, LocationPurpose.SosContact) == LocationAccessState.Ok
+    }
+
+    /**
+     * „SOS ausschalten“ (22.11.2026): all SOS contacts are taken out, and they learn it; nothing rings any more and the
+     * sign in the header shows „not set up“. A running own call is ended with „Alles gut“ first, never by this.
+     */
+    fun switchOff(): Boolean {
+        if (own() != null) return false
+        setHelpers(SosHelpers())
+        return true
     }
 
     /** Opens the page: for calling, or the running own call. */

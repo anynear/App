@@ -5,6 +5,7 @@ import app.anynear.anmp.core.radio.ProfileDeviation
 import app.anynear.anmp.core.radio.RadioProfile
 import app.anynear.anmp.core.radio.RadioProfile.DeviceConfigSnapshot
 import app.anynear.mesh.DeviceSetupCheck
+import app.anynear.mesh.SdkMeshLink
 import app.anynear.mesh.check
 import okio.ByteString.Companion.encodeUtf8
 import org.meshtastic.proto.Channel
@@ -216,8 +217,9 @@ class RadioProfileTest {
         val ownPart = "ä".repeat(17) // 34 bytes, under the old 5-byte prefix exactly 39 bytes
         val suffix = DeviceName.suffixOf("PINA $ownPart")!!
         assertTrue(DeviceName.isValidSuffix(suffix))
-        assertEquals("ä".repeat(12), suffix)
-        assertTrue(DeviceName.longName(suffix).encodeToByteArray().size <= 39)
+        assertEquals("ä".repeat(5), suffix)
+        // Firmware 2.8 keeps at most 24 bytes of the long name.
+        assertTrue(DeviceName.longName(suffix).encodeToByteArray().size <= 24)
     }
 
     @Test
@@ -311,9 +313,10 @@ class RadioProfileTest {
 
     private fun gps(mode: Config.PositionConfig.GpsMode) = Config.PositionConfig.Builder().also { it.gps_mode = mode }.build()
 
-    private fun user(longName: String, id: String = "") = User.Builder().also {
+    private fun user(longName: String, id: String = "", shortName: String = "") = User.Builder().also {
         it.id = id
         it.long_name = longName
+        it.short_name = shortName
     }.build()
 
     private fun channel(index: Int, name: String, role: Channel.Role, precision: Int) = Channel.Builder().also { c ->
@@ -324,4 +327,20 @@ class RadioProfileTest {
             it.module_settings = ModuleSettings.Builder().also { m -> m.position_precision = precision }.build()
         }.build()
     }.build()
+
+    @Test
+    fun nameCountsAsDoneOnFirmware27And28() {
+        val id = "!9e9d1998"
+        val short = DeviceName.shortName("Reh 1998", id)
+        // 2.7 and 2.8 store a name within 24 bytes unchanged.
+        assertTrue(SdkMeshLink.hasName(user("anynear.app | Reh 1998", id, short), "Reh 1998"))
+        // A longer name (written by an older app) is shortened by 2.8 when saving and still counts as written.
+        val longSuffix = "Fluffington"
+        val longShort = DeviceName.shortName(longSuffix, id)
+        assertTrue(SdkMeshLink.hasName(user("anynear.app | Fluffington", id, longShort), longSuffix))
+        assertTrue(SdkMeshLink.hasName(user("anynear.app | Fluffingto", id, longShort), longSuffix))
+        assertFalse(SdkMeshLink.hasName(user("anynear.app | Garten", id, short), "Reh 1998"))
+        assertFalse(SdkMeshLink.hasName(user("anynear.app | Reh 1998", id, "AXXX"), "Reh 1998"))
+        assertFalse(SdkMeshLink.hasName(null, "Reh 1998"))
+    }
 }

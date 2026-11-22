@@ -168,7 +168,7 @@ class WakeTexts(private val core: AnmpCore, private val store: KeyValueStore) {
         val known = (m.conversation as? CoreConversation.Circle)?.let { core.membersOf(it.circleId) }.orEmpty() + core.membersOf(MemberState.CONTACTS)
         val sender = known.lastOrNull { it.deviceId == m.fromDevice }?.let(::nameOf) ?: m.fromName
         // A place says what its card says (ADR 0121 §26), not the stand-in text with its link.
-        val text = m.spot?.let { app.anynear.mesh.spotLineOf(it.kind, it.label, outgoing = false) }
+        val text = m.spot?.let { app.anynear.mesh.spotLineOf(it.kind, it.label, outgoing = false, level = it.level) }
             ?: m.text.ifEmpty { RadioAnnouncement.radioText("", m.attachments.mapNotNull { AttachmentKind.fromWire(it.type) }) }
         return when (val c = m.conversation) {
             is CoreConversation.Circle -> {

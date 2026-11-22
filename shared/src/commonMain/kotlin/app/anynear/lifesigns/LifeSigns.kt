@@ -66,6 +66,8 @@ class LifeSigns(
     private val isSupport: (String) -> Boolean = { false },
     /** Who sees the place „wenn etwas ist“ (ADR 0121 §10); without it no place is ever handed to the core. */
     private val sharing: LocationSharing? = null,
+    /** The one check of the location permission (ADR 0125): asked when a check-in that sends the place starts. */
+    val access: app.anynear.location.LocationAccess? = null,
     /**
      * `true`: a check-in nobody confirmed rings as a call for the helpers ([app.anynear.sos.Sos], ADR 0083 §5.4), so
      * this class shows neither its loud alarm nor the quiet hint before it: only the call warns the helpers.
@@ -116,6 +118,13 @@ class LifeSigns(
         sharing?.let { s ->
             scope.launch { s.default.collect { placeChanged() } }
             scope.launch { s.circles.collect { placeChanged() } }
+            // While the own check-in runs the phone keeps locating (ADR 0125 §7); what it finds is handed in at once.
+            scope.launch {
+                s.placeUpdates.collect { place ->
+                    val own = _statuses.value.firstOrNull { it.own && it.phase != AliveStatus.ENDED } ?: return@collect
+                    runCatching { updatePlace(own.plan.id, place) }.onFailure { if (it is CancellationException) throw it }
+                }
+            }
         }
         // While the process runs, look at the next deadline (at least every minute); in deep sleep the alarm wakes it.
         scope.launch {
@@ -138,6 +147,7 @@ class LifeSigns(
         hooks.showCheckIn(own?.let { checkInOf(it, t) })
         if (own == null) _fullScreen.value = false
         own?.let { refreshPlace(it, t) }
+        locateLive(own)
         val next = source.nextAt(t)
         hooks.scheduleExactWake(next)
         _exactMissing.value = next != null && !hooks.exactAlarmsAllowed()
@@ -194,6 +204,7 @@ class LifeSigns(
         log("Lebenszeichen gestartet: ${r.label}")
         placeTriedAt = 0L
         evaluate()
+        askAccess(targetOf(plan))
         return true
     }
 
@@ -207,6 +218,7 @@ class LifeSigns(
         log("Lebenszeichen gestartet: $label")
         placeTriedAt = 0L
         evaluate()
+        askAccess(targetOf(plan))
         return plan.id
     }
 
@@ -309,6 +321,30 @@ class LifeSigns(
         scope.launch { runCatching { updatePlace(status.plan.id) }.onFailure { if (it is CancellationException) throw it } }
     }
 
+    /** What the own running check-in last told the system about locating, so it is told only on a change. */
+    private var liveText: String? = null
+
+    /**
+     * The phone keeps locating while the own check-in runs and its place may go to the helpers (ADR 0125 §7), with the
+     * check-in's notification (Android) or the system's sign (iPhone); the place still leaves the phone only with
+     * „nicht bestätigt“.
+     */
+    private fun locateLive(own: AliveStatus?) {
+        val text = own?.takeIf { sharing != null && sharesPlace(targetOf(it.plan)) }?.let { app.anynear.i18n.texts.lifeSigns.locatingNotice }
+        if (text == liveText) return
+        liveText = text
+        hooks.setLocationInUse(IN_USE, text)
+    }
+
+    /** A check-in that may send the place asks once for what it needs (ADR 0125 §3); it runs either way. */
+    private fun askAccess(target: String) {
+        val access = access ?: return
+        if (!sharesPlace(target)) return
+        val need = app.anynear.location.LocationNeed.PreciseWhileActive
+        if (access.state(need) == app.anynear.location.LocationAccessState.Ok) return
+        scope.launch { access.ensure(need, app.anynear.location.LocationPurpose.LifeSign) }
+    }
+
     private fun placeChanged() {
         val own = _statuses.value.firstOrNull { it.own && it.phase != AliveStatus.ENDED } ?: return
         placeTriedAt = now()
@@ -319,14 +355,14 @@ class LifeSigns(
      * Hands the core the place for the own check-in [planId] if the person shares it with that circle „wenn etwas
      * ist“; otherwise the core forgets it. The core sends it only with „nicht bestätigt“.
      */
-    private suspend fun updatePlace(planId: String) = placeLock.withLock {
+    private suspend fun updatePlace(planId: String, given: app.anynear.location.Place? = null) = placeLock.withLock {
         val sharing = sharing ?: return@withLock
         val plan = source.statuses(now()).firstOrNull { it.own && it.plan.id == planId && it.phase != AliveStatus.ENDED }?.plan ?: return@withLock
         if (levelOf(targetOf(plan)) != ShareLevel.WhenNeeded) {
             if (plan.position != null) source.setPlace(plan.id, null)
             return@withLock
         }
-        val place = sharing.place() ?: return@withLock
+        val place = given ?: sharing.place() ?: return@withLock
         // The system may answer with an older place than the one already handed in.
         if (plan.position?.let { it.at >= place.atMillis } == true) return@withLock
         source.setPlace(plan.id, place, trailBefore(place))
@@ -443,6 +479,9 @@ class LifeSigns(
     private fun <T> read(key: String, parse: (String) -> T): T? = store.getString(key)?.let { runCatching { parse(it) }.getOrNull() }
 
     companion object {
+        /** The reason for [PlatformHooks.setLocationInUse] while the own check-in runs. */
+        const val IN_USE = "lifesign"
+
         /** ID of a check-in's notifications; tapping opens „Meldungen“. */
         const val CHANNEL_PREFIX = "alive:"
         const val ACTION_OK = "ok"

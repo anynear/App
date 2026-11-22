@@ -164,6 +164,10 @@ private fun OwnCard(lifeSigns: LifeSigns, s: AliveStatus, now: Long, onConfirm: 
                     s.plan.position?.let { lt.ownPlaceShared(formatDayAndTime(it.at, now)) } ?: lt.ownPlaceUnknown,
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                // What the phone does not allow, as a line to fix it (ADR 0125 §4, §5).
+                lifeSigns.access?.let {
+                    LocationAccessRow(it, app.anynear.location.LocationNeed.PreciseWhileActive, app.anynear.location.LocationPurpose.LifeSign, texts.location.lifeSignMissing)
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                 AppButton(lt.allGood, onConfirm, Modifier.weight(1f), kind = if (asking) ButtonKind.Main else ButtonKind.Primary, icon = AppIcons.Haken)

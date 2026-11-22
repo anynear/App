@@ -3,6 +3,9 @@ package app.anynear.i18n
 /** Check-ins (ADR 0083 §5): templates, question „Alles gut?“, the helpers' view. */
 interface LifeSignTexts {
     val section: String
+
+    /** While the own check-in runs the phone locates (ADR 0125 §7); shown where the system asks for a text. */
+    val locatingNotice: String
     val intro: String
     val start: String
     val startTitle: String
@@ -103,6 +106,7 @@ interface LifeSignTexts {
 }
 
 internal object LifeSignTextsDe : LifeSignTexts {
+    override val locatingNotice = "Lebenszeichen läuft. Dein Standort geht nur an deine SOS-Kontakte, wenn du nicht antwortest."
     override val section = "Lebenszeichen"
     override val intro = "Bist du eine Zeit lang allein? Dein Handy fragt ab und zu „Alles gut?“. Antwortest du nicht, " +
         "werden die Menschen in deinem Kreis gewarnt."
@@ -199,6 +203,7 @@ internal object LifeSignTextsDe : LifeSignTexts {
 }
 
 internal object LifeSignTextsEn : LifeSignTexts {
+    override val locatingNotice = "Check-in running. Your location goes to your SOS contacts only if you don't answer."
     override val section = "Check-ins"
     override val intro = "Alone for a while? Your phone asks “All good?” now and then. If you don't answer, the people in " +
         "your circle are warned."

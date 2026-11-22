@@ -212,7 +212,7 @@ class LocationSharing(
         writeMap(KEY_PERSONS, next)
         _persons.value = next
         setUntil("p:$personId", untilMillis.takeIf { level != null } ?: 0)
-        if (level != null && level != ShareLevel.Off) askSystem(level)
+        if (level != null && level != ShareLevel.Off) askSystem(level, timed = untilMillis > 0)
     }
 
     /**
@@ -285,9 +285,29 @@ class LocationSharing(
         _until.value = next
     }
 
-    /** The system permission a level needs: the exact place for everything but the area alone. */
-    private fun askSystem(level: ShareLevel) {
-        if (level != ShareLevel.Off && !allowed.value) hooks.requestPreciseLocation()
+    /**
+     * The one check for permissions (ADR 0125); without it, as before, only the system's question for the exact place.
+     * Set by the app.
+     */
+    var access: LocationAccess? = null
+
+    /**
+     * What the phone must allow for [level] (ADR 0125 §1, §3): for a time it is an action that locates while it runs,
+     * a level that shows the place all the time needs „Immer“, „Nur bei SOS“ the exact place. Never holds up the setting.
+     */
+    private fun askSystem(level: ShareLevel, timed: Boolean = false) {
+        if (level == ShareLevel.Off) return
+        val access = access ?: run {
+            if (!allowed.value) hooks.requestPreciseLocation()
+            return
+        }
+        val (need, purpose) = when {
+            timed -> LocationNeed.PreciseWhileActive to LocationPurpose.Share
+            level.always -> LocationNeed.Always to LocationPurpose.Level
+            else -> LocationNeed.Precise to LocationPurpose.Level
+        }
+        if (access.state(need) == LocationAccessState.Ok) return
+        scope.launch { access.ensure(need, purpose) }
     }
 
     /**
@@ -297,7 +317,8 @@ class LocationSharing(
     fun answer(level: ShareLevel) {
         store.putString(KEY_DEFAULT, level.id)
         _default.value = level
-        askSystem(level)
+        // The answer itself is the consent: straight to the system, without the sheet (ADR 0125 §3).
+        if (level != ShareLevel.Off && !allowed.value) hooks.requestPreciseLocation()
     }
 
     /**
@@ -311,10 +332,9 @@ class LocationSharing(
         writeMap(KEY_CIRCLES, next)
         _circles.value = next
         setUntil("c:$circleId", untilMillis.takeIf { circleId in next } ?: 0)
-        if (level != null && level.always) {
-            approve(members)
-            askSystem(level)
-        }
+        if (level != null && level.always) approve(members)
+        // Back at the default: that one was asked for already.
+        if (level != null && circleId in next) askSystem(level, timed)
     }
 
     private fun writeMap(key: String, map: Map<String, ShareLevel>) =
