@@ -66,6 +66,8 @@ internal fun ChatListScreen(
     onOpenPublic: (PublicChannel) -> Unit = {},
     /** Circle page or person page, from the long-press actions. */
     onOpenInfo: (Conversation) -> Unit = {},
+    /** „Anfragen“ (ADR 0123 §6). */
+    onOpenRequests: () -> Unit = {},
 ) {
     val entries by controller.chatList.collectAsState()
     val unread by controller.unreadCount.collectAsState()
@@ -75,7 +77,7 @@ internal fun ChatListScreen(
     val bluetoothHint by controller.bluetoothHint.collectAsState()
     val suggestedDevice by controller.suggestedDevice.collectAsState()
     val loading by controller.historyLoading.collectAsState()
-    val requests by controller.contactRequests.collectAsState()
+    val waiting = openRequestsToMe(controller)
     val publicRadio = controller.publicRadio
     val publicChannels by (publicRadio?.available ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }).collectAsState()
     val communityOffer by (publicRadio?.offer ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) }).collectAsState()
@@ -86,7 +88,6 @@ internal fun ChatListScreen(
     var deleting by remember { mutableStateOf<ChatListEntry?>(null) }
     val now = Clock.System.now().toEpochMilliseconds()
     var query by rememberSaveable { mutableStateOf("") }
-    var requestsOpen by rememberSaveable { mutableStateOf(false) }
     val uiScope = rememberCoroutineScope()
     // The search covers the name and the last message, the way the row shows them.
     // Circles live here since the tab „Kreise“ is the map (ADR 0121 §1): a filter replaces the list of circles.
@@ -121,6 +122,8 @@ internal fun ChatListScreen(
             menu = listOf(
                 MenuAction(texts.map.newMessage, AppIcons.Nachrichten, onNewMessage),
                 MenuAction(texts.map.newCircle, AppIcons.Kreis) { creating = true },
+                // Also when nothing is open (ADR 0123 §6): one finds what one asked for.
+                MenuAction(texts.people.requestsPage, AppIcons.Person, onOpenRequests),
             ),
         )
         // A running call for the helpers, the own one or one of someone we help (ADR 0083 §2).
@@ -148,25 +151,11 @@ internal fun ChatListScreen(
                         // In the list, so that both scroll along with large font and the button covers nothing.
                         // After a crash ask once whether we get a report (ADR 0082).
                         item(key = "crash-report") { CrashCard(controller, onOpen) }
-                        // Persons asking to become a contact (ADR 0116): agree or decline; what they wrote waits until then.
-                        // Several requests are one card that unfolds, so that they do not push the chats out of sight.
-                        if (requests.size > 1) {
+                        // Everything that waits for an answer, contacts, location and SOS alike (ADR 0123 §6): one line
+                        // that leads to the list „Anfragen“, so that the chats stay in sight.
+                        if (waiting > 0) {
                             item(key = "requests") {
-                                RequestsCard(requests.size, requestsOpen) { requestsOpen = !requestsOpen }
-                            }
-                        }
-                        if (requests.size == 1 || requestsOpen) {
-                            requests.forEach { r ->
-                                item(key = "request-${r.person}") {
-                                    PermissionCard(
-                                        texts.people.requestTitle(r.name),
-                                        controller.requestOrigin(r),
-                                        onAllow = { uiScope.launch { controller.acceptContactRequestNow(r.person)?.let(onOpen) } },
-                                        onLater = { controller.declineContactRequest(r.person) },
-                                        allowLabel = texts.people.requestAgree,
-                                        laterLabel = texts.people.requestDecline,
-                                    )
-                                }
+                                RequestsLine(waiting, onOpenRequests)
                             }
                         }
                         item(key = "emergency-card") { EmergencyCardReminder(controller) }
@@ -357,19 +346,11 @@ private fun PermissionCard(
     }
 }
 
-/** Several contact requests at once: their number, unfolds the single requests below. */
+/** Requests wait for the own answer (ADR 0123 §6): their number; a tap opens the list „Anfragen“. */
 @Composable
-private fun RequestsCard(count: Int, open: Boolean, onToggle: () -> Unit) {
+private fun RequestsLine(count: Int, onOpen: () -> Unit) {
     AppSection(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
-        SectionContent {
-            Text(texts.people.requestsTitle(count), style = MaterialTheme.typography.titleMedium)
-            AppButton(
-                if (open) texts.people.requestsHide else texts.people.requestsShow,
-                onToggle,
-                Modifier.fillMaxWidth(),
-                kind = if (open) ButtonKind.Quiet else ButtonKind.Secondary,
-            )
-        }
+        AppRow(title = texts.people.requestsRow(count), icon = AppIcons.Person, chevron = true, onClick = onOpen)
     }
 }
 

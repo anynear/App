@@ -2,7 +2,9 @@ package app.anynear
 
 import app.anynear.ui.Bubble
 import app.anynear.ui.BubbleSpot
+import app.anynear.ui.bubbleEdge
 import app.anynear.ui.covers
+import app.anynear.ui.edgeAt
 import app.anynear.ui.placeBubbles
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -103,5 +105,62 @@ class MapBubblesTest {
         val spots = placeBubbles(bubbles, tail, gap)
         val reversed = placeBubbles(bubbles.reversed(), tail, gap).reversed()
         assertEquals(spots, reversed)
+    }
+
+    private fun area(key: String, x: Float, y: Float, ring: Float = 200f) = Bubble(key, x, y, 120f, 40f, ring)
+
+    @Test
+    fun theEdgeOfACellRunsThroughItsCornersAndSides() {
+        // Pointy-top: a corner at the top, the middle of a side to the right.
+        assertEquals(BubbleSpot(0f, -100f), edgeAt(100f, -90.0))
+        val side = edgeAt(100f, 0.0)
+        assertEquals(86.6f, side.dx, 0.01f)
+        assertEquals(0f, side.dy)
+    }
+
+    @Test
+    fun anAreaAloneSitsOnTheTopCornerOfItsCell() {
+        assertEquals(listOf(BubbleSpot(0f, -200f)), placeBubbles(listOf(area("a", 0f, 0f)), tail, gap))
+    }
+
+    @Test
+    fun severalInOneCellAreSpreadAlongItsEdge() {
+        val bubbles = listOf(area("c", 0f, 0f), area("a", 0f, 0f), area("b", 0f, 0f))
+        val spots = placeBubbles(bubbles, tail, gap)
+        assertFree(bubbles, spots)
+        // a at the top, b and c a third of the way round each, all on the edge, none in the middle.
+        assertEquals(BubbleSpot(0f, -200f), spots[1])
+        assertEquals(edgeAt(200f, 30.0), spots[2])
+        assertEquals(edgeAt(200f, 150.0), spots[0])
+    }
+
+    @Test
+    fun anAreaBubbleKeepsOffAnExactPlaceInItsCell() {
+        // Someone exact just below the top corner: the area bubble moves along the edge instead of covering the place.
+        val bubbles = listOf(area("a", 0f, 0f), bubble("b", 0f, -190f))
+        val spots = placeBubbles(bubbles, tail, gap)
+        assertFree(bubbles, spots)
+        assertTrue(spots[0] != BubbleSpot(0f, -200f))
+        assertFalse(kotlin.math.abs(spots[0].dx) < 64f && kotlin.math.abs(spots[0].dy + 190f) < 24f)
+    }
+
+    @Test
+    fun theMiddleOfACellIsNoPlaceToKeepFree() {
+        // An exact bubble may stand above the centre of a cell: nobody is there.
+        val bubbles = listOf(area("a", 0f, 0f), bubble("b", 0f, 40f))
+        assertEquals(BubbleSpot(0f, -30f), placeBubbles(bubbles, tail, gap)[1])
+    }
+
+    @Test
+    fun theTailStartsAtTheEdgeOfTheBubble() {
+        // A pill 120 × 40: the edge is 20 above, 60 beside the centre, and on the round end in between.
+        assertEquals(20f, bubbleEdge(120f, 40f, 0f, -1f), 0.01f)
+        assertEquals(60f, bubbleEdge(120f, 40f, 1f, 0f), 0.01f)
+        // At 45° still through the straight top, at (20, 20).
+        assertEquals(20f * kotlin.math.sqrt(2f), bubbleEdge(120f, 40f, 1f, 1f), 0.01f)
+        // Flatter, through the round end around (40, 0) with radius 20.
+        val d = bubbleEdge(120f, 40f, 3f, 1f)
+        val n = kotlin.math.sqrt(10f)
+        assertEquals(20f, kotlin.math.hypot(d * 3 / n - 40f, d / n), 0.01f)
     }
 }

@@ -72,6 +72,50 @@ class SosTest {
     private fun sos(source: Source = Source(), hooks: Hooks = Hooks(), store: ObservedKeyValueStore = ObservedKeyValueStore(InMemoryStore())) =
         Sos(CoroutineScope(Dispatchers.Unconfined), source, store, hooks, sharing = null, now = { t0 }, nameOf = { if (it == "anna") "Anna" else "" }).also { it.start() }
 
+    /** ADR 0123 §3: someone ended through a circle stays left out, also on the next start and on other devices. */
+    @Test
+    fun whoWasEndedThroughACircleIsNotAskedAgain() = runTest {
+        val store = ObservedKeyValueStore(InMemoryStore())
+        val source = Source()
+        val s = Sos(CoroutineScope(Dispatchers.Unconfined), source, store, Hooks(), sharing = null, now = { t0 }, nameOf = { "" }, membersOf = { if (it == "familie") listOf("ben", "tom") else emptyList() })
+        s.start()
+        s.setHelpers(SosHelpers(circles = setOf("familie")))
+        assertTrue(s.endContact("ben"))
+        assertEquals(setOf("ben"), s.helpers.value.except)
+        assertTrue(store.getString(Sos.KEY_HELPERS)!!.split(',').contains("x:ben"))
+        // The next start reads it back; asking again leaves Ben out.
+        val again = Sos(CoroutineScope(Dispatchers.Unconfined), source, store, Hooks(), sharing = null, now = { t0 }, nameOf = { "" }, membersOf = { listOf("ben", "tom") })
+        assertEquals(setOf("ben"), again.helpers.value.except)
+        // Chosen alone later: asked again.
+        again.askPerson("ben")
+        assertTrue("ben" !in again.helpers.value.except)
+        assertEquals(setOf("ben"), again.helpers.value.persons)
+    }
+
+    /** ADR 0123 §5: what changed while the app was closed gets its card at the next start; the first start says nothing. */
+    @Test
+    fun cardsAlsoForWhatHappenedWhileTheAppWasClosed() = runTest {
+        val store = ObservedKeyValueStore(InMemoryStore())
+        val cards = mutableListOf<Pair<String, Int>>()
+        val first = Source()
+        sos(first, store = store).onCard = { p, c -> cards += p to c }
+        // The first start: Anna's yes was there before, it is no news.
+        assertTrue(cards.isEmpty())
+        // Closed; meanwhile Ben asked and the yes for Anna was taken back on another device.
+        val later = Source().apply {
+            agreedTo = emptyList()
+            asking = listOf(app.anynear.anmp.core.SosAsk("ben", t0))
+        }
+        val s = Sos(CoroutineScope(Dispatchers.Unconfined), later, store, Hooks(), sharing = null, now = { t0 }, nameOf = { "" })
+        s.onCard = { p, c -> cards += p to c }
+        s.start()
+        assertEquals(setOf("ben" to app.anynear.sos.CARD_ASKED_US, "anna" to app.anynear.sos.CARD_OVER_FOR_US), cards.toSet())
+        // Started again without changes: no card twice.
+        cards.clear()
+        Sos(CoroutineScope(Dispatchers.Unconfined), later, store, Hooks(), sharing = null, now = { t0 }, nameOf = { "" }).also { it.onCard = { p, c -> cards += p to c } }.start()
+        assertTrue(cards.isEmpty())
+    }
+
     @Test
     fun withoutHelpersNothingGoesOutAndTheHelpersAreASettingOfThePerson() = runTest {
         val source = Source()

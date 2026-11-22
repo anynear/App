@@ -215,7 +215,7 @@ internal fun ChatScreen(
     if (sharingAll && conversation is Conversation.Circle) ShareAllDialog(controller, conversation.circleId, onDismiss = { sharingAll = false })
     if (sharingPlace) ShareMyPlaceDialog(controller, conversation, onDismiss = { sharingPlace = false })
     if (meeting) MeetingPointDialog(controller, conversation, onDismiss = { meeting = false })
-    if (askingMutual) MutualPlaceDialog(controller, conversation, onDismiss = { askingMutual = false })
+    if (askingMutual) controller.sharingPerson(conversation)?.let { SharingDialog(controller, it, onDismiss = { askingMutual = false }) }
     // Shared from another app or forwarded into this chat (also while it is open): into the draft, which then is
     // stored as usual. Only after the stored draft is loaded, so that loading does not displace it.
     val additions by controller.draftAdditions.collectAsState()
@@ -454,6 +454,11 @@ internal fun ChatScreen(
                     // Inside the item of the message that follows, so that the positions of the messages stay as they are.
                     lifeSignCards[message.localId]?.forEach { LifeSignCard(controller, it, Modifier.padding(bottom = 6.dp)) }
                     val note = message.system
+                    // A step about SOS contacts (ADR 0123 §5): a card like the others about places.
+                    note?.sos?.let { card ->
+                        SosEventCard(controller, message, card)
+                        return@items
+                    }
                     if (note != null) {
                         // Invite again, as long as the removed person is not already back in the circle.
                         val circleId = (conversation as? Conversation.Circle)?.circleId
@@ -628,7 +633,7 @@ internal fun ChatScreen(
                                 controller.askWhere(conversation)
                             },
                         )
-                        // With one person who has anynear (ADR 0121 §28): both see each other for good, if both agree.
+                        // With one person who has anynear (ADR 0123 §2): both see each other for good, once both agreed.
                         if (conversation is Conversation.Direct && controller.locationSharing != null && controller.findPerson(conversation.peer)?.deviceId != null) DropdownMenuItem(
                             text = { Text(texts.map.mutualStart) },
                             leadingIcon = { Icon(AppIcons.Karte, contentDescription = null) },
@@ -1412,8 +1417,8 @@ private fun SpotCard(controller: AppController, message: ChatMessage, spot: app.
         ShareAllCard(controller, message, spot, senderName, color)
         return
     }
-    if (spot.kind == app.anynear.mesh.ChatSpot.SHARE || spot.kind == app.anynear.mesh.ChatSpot.SHARED) {
-        MutualPlaceCard(controller, message, spot, senderName, color)
+    if (spot.kind in app.anynear.mesh.ChatSpot.SHARE..app.anynear.mesh.ChatSpot.WITHDRAWN) {
+        SharingCard(controller, message, spot, senderName, color)
         return
     }
     val who = senderName ?: controller.findPerson(message.fromPeer.orEmpty())?.name ?: controller.senderLabel(message)
@@ -1516,144 +1521,6 @@ private fun placeSendText(result: AppController.PlaceSend): String = when (resul
     else -> texts.map.spotNeedsPlace
 }
 
-
-/**
- * „Standort freigeben“ (ADR 0121 §28): first what the person and the other already show each other, also when it was
- * set up elsewhere (a circle, „Wer sieht mich?“); then, if there is more to ask for, the level. The own place is shown
- * at it from then on.
- */
-@Composable
-private fun MutualPlaceDialog(controller: AppController, conversation: Conversation, onDismiss: () -> Unit) {
-    val mt = texts.map
-    val name = (conversation as? Conversation.Direct)?.let { controller.peerName(it.peer) }.orEmpty()
-    val person = (conversation as? Conversation.Direct)?.let { controller.findPerson(it.peer) }
-    val id = person?.deviceId
-    val sharing = controller.locationSharing
-    val persons by (sharing?.persons ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, app.anynear.location.ShareLevel>()) }).collectAsState()
-    val places by (controller.placeSharer?.places ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, app.anynear.location.SharedPlace>()) }).collectAsState()
-    // Read so that the state follows a change on another own device while the dialog is open.
-    sharing?.let { s -> s.circles.collectAsState().value; s.default.collectAsState().value; s.paused.collectAsState().value; s.approved.collectAsState().value }
-    persons.size
-    // What the other shows back, unless its time is over.
-    val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
-    val theirs = id?.let { places[it] }?.takeIf { it.untilMillis == 0L || it.untilMillis > now }?.level
-    val between = if (sharing == null || id == null) null
-    else sharing.between(id, person?.circleIds.orEmpty().filter { it != app.anynear.people.MemberDirectory.DIRECT_CONTACTS }, theirs)
-    val askable = between?.askable ?: listOf(app.anynear.location.ShareLevel.Area, app.anynear.location.ShareLevel.Exact)
-    var level by remember(between?.suggested) { mutableStateOf(between?.suggested ?: app.anynear.location.ShareLevel.Area) }
-    AppDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(mt.mutualTitle(name)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (between != null && between.exists) {
-                    // The sharing that holds already, so that a second tap does not look like a fresh start.
-                    val both = between.both
-                    if (both != null) Text(mt.mutualBoth(name, both == app.anynear.location.ShareLevel.Exact), style = MaterialTheme.typography.titleSmall)
-                    Text(mt.mutualMine(name, levelName(between.mine)), style = MaterialTheme.typography.bodyMedium)
-                    Text(mt.mutualTheirs(name, levelName(between.theirs)), style = MaterialTheme.typography.bodyMedium)
-                    if (between.open) Text(mt.mutualWaiting(name), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(mt.mutualChange, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (askable.isNotEmpty()) {
-                    Text(if (between?.exists == true) mt.mutualMore else mt.mutualText, style = MaterialTheme.typography.bodyMedium)
-                    listOf(
-                        Triple(app.anynear.location.ShareLevel.Area, mt.mutualArea, mt.mutualAreaText),
-                        Triple(app.anynear.location.ShareLevel.Exact, mt.mutualExact, mt.mutualExactText),
-                    ).filter { it.first in askable }.forEach { (l, title, text) ->
-                        AppRow(
-                            title = title, subtitle = text, onClick = { level = l },
-                            leading = { androidx.compose.material3.RadioButton(selected = level == l, onClick = { level = l }) },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            if (askable.isEmpty()) AppButton(texts.common.done, onDismiss, kind = ButtonKind.Quiet)
-            else AppButton(mt.mutualSend, {
-                controller.askMutualPlace(conversation, level)
-                onDismiss()
-            }, kind = ButtonKind.Quiet)
-        },
-        dismissButton = if (askable.isEmpty()) null else ({ AppButton(texts.common.cancel, onDismiss, kind = ButtonKind.Quiet) }),
-    )
-}
-
-/** The question and its answer as cards (ADR 0121 §28). The question takes the answer; answered, it says how. */
-@Composable
-private fun MutualPlaceCard(controller: AppController, message: ChatMessage, spot: app.anynear.mesh.ChatSpot, senderName: String?, color: Color) {
-    val mt = texts.map
-    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
-    val who = senderName ?: controller.findPerson(message.fromPeer.orEmpty())?.name ?: controller.senderLabel(message)
-    val other = (message.conversation as? Conversation.Direct)?.let { controller.peerName(it.peer) } ?: who
-    val exact = spot.level == app.anynear.location.ShareLevel.Exact.wire
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (spot.kind == app.anynear.mesh.ChatSpot.SHARED) {
-            val agreed = (spot.level ?: 0) > 0
-            val all by controller.messages.collectAsState()
-            // An answer follows a question of the other side; anything else says that someone lowered later what both agreed on.
-            val answers = remember(all, message.localId) {
-                all.lastOrNull {
-                    it.conversation == message.conversation && it.timestampMillis < message.timestampMillis &&
-                        (it.spot?.kind == app.anynear.mesh.ChatSpot.SHARE || it.spot?.kind == app.anynear.mesh.ChatSpot.SHARED)
-                }?.let { it.spot?.kind == app.anynear.mesh.ChatSpot.SHARE && it.outgoing != message.outgoing } == true
-            }
-            if (!answers) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(AppIcons.Karte, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
-                    Text(if (message.outgoing) mt.mutualLoweredOwn(other, agreed) else mt.mutualLoweredBy(who, agreed), style = MaterialTheme.typography.titleSmall, color = color)
-                }
-                Text(if (message.outgoing) mt.mutualLoweredOwnText(other) else mt.mutualLoweredText(who, agreed), style = MaterialTheme.typography.labelMedium, color = quiet)
-                // „Weiter zeigen“: giving more than one gets is the person's own choice, never the default.
-                val sharing = controller.locationSharing
-                val id = (message.conversation as? Conversation.Direct)?.let { controller.findPerson(it.peer)?.deviceId }
-                if (!message.outgoing && sharing != null && id != null) {
-                    val persons by sharing.persons.collectAsState()
-                    val newest = remember(all, message.localId) { all.lastOrNull { it.conversation == message.conversation && it.spot?.kind == app.anynear.mesh.ChatSpot.SHARED }?.localId == message.localId }
-                    val kept = remember(persons, newest) { sharing.kept(id).takeIf { newest } }
-                    kept?.let { AppButton(mt.mutualKeep(levelName(it)), { controller.keepShowingPlace(message.conversation) }, kind = ButtonKind.Quiet) }
-                }
-                return@Column
-            }
-            val accent = if (agreed) AppTheme.colors.safe else color
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(if (agreed) AppIcons.Haken else AppIcons.Schliessen, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
-                Text(
-                    when {
-                        agreed -> if (message.outgoing) mt.mutualAgreedOwn(exact) else mt.mutualAgreedBy(who, exact)
-                        else -> if (message.outgoing) mt.mutualRefusedOwn else mt.mutualRefusedBy(who)
-                    },
-                    style = MaterialTheme.typography.titleSmall, color = accent,
-                )
-            }
-            Text(if (!agreed && !message.outgoing) mt.mutualRefusedBack else mt.mutualChange, style = MaterialTheme.typography.labelMedium, color = quiet)
-            return@Column
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(AppIcons.Karte, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
-            Text(if (message.outgoing) mt.mutualAskOwn(other, exact) else mt.mutualAskBy(who, exact), style = MaterialTheme.typography.titleSmall, color = color)
-        }
-        val all by controller.messages.collectAsState()
-        // Answered once the other side sent its answer after this question.
-        val answered = remember(all, message.localId) {
-            all.any {
-                it.conversation == message.conversation && it.timestampMillis > message.timestampMillis && it.outgoing != message.outgoing &&
-                    it.spot?.kind == app.anynear.mesh.ChatSpot.SHARED
-            }
-        }
-        when {
-            answered -> Unit
-            message.outgoing -> Text(mt.mutualOwnHint, style = MaterialTheme.typography.labelMedium, color = quiet)
-            else -> {
-                Text(mt.mutualAlready(who, exact), style = MaterialTheme.typography.labelMedium, color = quiet)
-                AppButton(mt.mutualYes(exact), { controller.answerMutualPlace(message.conversation, if (exact) app.anynear.location.ShareLevel.Exact else app.anynear.location.ShareLevel.Area) }, kind = ButtonKind.Secondary, icon = AppIcons.Haken)
-                if (exact) AppButton(mt.mutualOnlyArea, { controller.answerMutualPlace(message.conversation, app.anynear.location.ShareLevel.Area) }, kind = ButtonKind.Quiet)
-                AppButton(mt.mutualNo, { controller.answerMutualPlace(message.conversation, null) }, kind = ButtonKind.Quiet)
-            }
-        }
-    }
-}
 
 /** The cut-out of the map in a message with a place (ADR 0121 §13): it does not move; a tap opens the map there. */
 @Composable

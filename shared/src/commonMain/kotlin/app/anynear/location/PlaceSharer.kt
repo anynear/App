@@ -149,6 +149,15 @@ class PlaceSharer(
     /** What the others share with us, by person ID. */
     val places: StateFlow<Map<String, SharedPlace>> = _places.asStateFlow()
 
+    /**
+     * Reads again what the others share, once the core has loaded its state (21.11.2026). This sharer is made before the
+     * core opens, and the core reports no change for what it merely loads: without this, the places of the others were
+     * gone after every restart until each one sent anew.
+     */
+    fun reload() {
+        _places.value = seen(_places.value.ifEmpty { loadKept() })
+    }
+
     private val _asking = MutableStateFlow<List<String>>(emptyList())
 
     /** Persons whose request „Standort anfragen“ is not answered yet. */

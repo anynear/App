@@ -466,4 +466,14 @@ class PlaceSharerTest {
         assertTrue(s.sharer.live())
         assertTrue(s.hooks.inUse.isNotEmpty())
     }
+
+    @Test
+    fun whatTheCoreLoadsLaterShowsAfterReload() {
+        // The sharer is made before the core has loaded its state, and loading reports no change.
+        val s = setup(listOf(anna))
+        assertTrue(s.sharer.places.value.isEmpty())
+        s.source.shared = listOf(SharedPlace("anna", ShareLevel.Area, Place(50.11, 8.68, t, 0), 1155, 0, t))
+        s.sharer.reload()
+        assertEquals(setOf("anna"), s.sharer.places.value.keys)
+    }
 }

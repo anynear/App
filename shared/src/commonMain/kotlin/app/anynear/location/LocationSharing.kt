@@ -135,7 +135,20 @@ class LocationSharing(
     fun levelFor(personId: String, circleIds: List<String>, evenPaused: Boolean = false): ShareLevel {
         // [evenPaused]: what holds for a call for help, which goes also while everything is paused.
         if (_paused.value && !evenPaused) return ShareLevel.Off
-        held("p:$personId", _persons.value[personId])?.let { return it }
+        val base = held("p:$personId", _persons.value[personId]) ?: run {
+            val most = circleIds.map(::level).maxByOrNull { it.wire } ?: _default.value ?: ShareLevel.Off
+            if (most.always && personId !in _approved.value) ShareLevel.WhenNeeded else most
+        }
+        // A sharing both agreed on gives at least its level (ADR 0123 §8).
+        val agreed = shared(personId)
+        return if (agreed != null && agreed.wire > base.wire) agreed else base
+    }
+
+    /**
+     * What [personId] sees through [circleIds] alone, without its own setting and without a sharing (ADR 0123 §8): a
+     * person's own setting may only be lower than this; more goes through „Standort freigeben“.
+     */
+    fun circleLevelFor(personId: String, circleIds: List<String>): ShareLevel {
         val most = circleIds.map(::level).maxByOrNull { it.wire } ?: _default.value ?: ShareLevel.Off
         return if (most.always && personId !in _approved.value) ShareLevel.WhenNeeded else most
     }
@@ -191,123 +204,51 @@ class LocationSharing(
 
     /**
      * Sets what [personId] sees, apart from its circles; `null`: follow the circles again. [untilMillis] > 0 limits it.
-     * Lowering it below what both agreed on ends or lowers the agreement for both ([onMutualLowered], ADR 0121 §28).
-     * [quiet]: a step of the app itself (a sharing for a time, an answer), which tells nobody; a `null` then goes back
-     * to what both agreed on, if anything.
+     * [quiet] is kept for callers of the app itself; it changes nothing any more. More than the circles give goes only
+     * through a sharing both agreed on ([shared], ADR 0123 §8); that one is not touched here.
      */
-    fun setPersonLevel(personId: String, level: ShareLevel?, untilMillis: Long = 0, quiet: Boolean = false) {
-        val set = level ?: agreed(personId).takeIf { quiet }
-        val next = if (set == null) _persons.value - personId else _persons.value + (personId to set)
+    fun setPersonLevel(personId: String, level: ShareLevel?, untilMillis: Long = 0, @Suppress("UNUSED_PARAMETER") quiet: Boolean = false) {
+        val next = if (level == null) _persons.value - personId else _persons.value + (personId to level)
         writeMap(KEY_PERSONS, next)
         _persons.value = next
         setUntil("p:$personId", untilMillis.takeIf { level != null } ?: 0)
-        if (set != null && set != ShareLevel.Off) askSystem(set)
-        if (quiet) return
-        store.putString(KEY_KEPT + personId, null)
-        val agreed = agreed(personId) ?: return
-        val shown = set?.takeIf { it.always }
-        if ((shown?.wire ?: 0) >= agreed.wire) return
-        // The person lowers what it shows: the agreement holds at most that from now on, and the other side is told.
-        setAgreed(personId, shown)
-        if (shown == null) store.putString(KEY_MUTUAL + personId, null)
-        runCatching { onMutualLowered(personId, shown?.wire ?: 0) }
+        if (level != null && level != ShareLevel.Off) askSystem(level)
     }
 
     /**
-     * The person lowered what it shows [personId] below what both agreed on; the level it shows now, 0 for nothing. The
-     * app tells the other side, which then shows the same.
+     * „Standort freigeben“ (ADR 0123 §2): the level both agreed to show each other with [personId], from the core; `null`
+     * for none. Set by the app once the core is there.
      */
-    var onMutualLowered: (personId: String, level: Int) -> Unit = { _, _ -> }
-
-    /** What the person and [personId] agreed to show each other (ADR 0121 §28), or `null`. */
-    fun agreed(personId: String): ShareLevel? = store.getString(KEY_AGREED + personId)?.let { id -> ShareLevel.entries.firstOrNull { it.id == id } }
-
-    private fun setAgreed(personId: String, level: ShareLevel?) = store.putString(KEY_AGREED + personId, level?.id)
-
-    private fun before(personId: String): ShareLevel? = store.getString(KEY_MUTUAL + personId)?.let { id -> ShareLevel.entries.firstOrNull { it.id == id } }
-
-    private fun rememberBefore(personId: String) {
-        if (store.getString(KEY_MUTUAL + personId) == null) store.putString(KEY_MUTUAL + personId, _persons.value[personId]?.id ?: MUTUAL_NONE)
-    }
+    var shared: (personId: String) -> ShareLevel? = { null }
 
     /**
-     * Where the person and [personId] stand with each other, for „Standort freigeben“ (ADR 0121 §28): what it shows
-     * [personId] now (through [circleIds] or its own setting), what [personId] shows back ([theirs], from the shared
-     * places), what both agreed on and whether the own question is still open. Also a sharing set up elsewhere counts.
+     * Where the person and [personId] stand with each other, for „Standort freigeben“ (ADR 0123 §7): what it shows
+     * [personId] now (through [circleIds], its own setting or the sharing), what [personId] shows back ([theirs], from
+     * the shared places), the sharing both agreed on and an open question ([asked], by the own person if [askedByUs]).
      */
-    fun between(personId: String, circleIds: List<String>, theirs: ShareLevel?): Between =
-        Between(levelFor(personId, circleIds), theirs ?: ShareLevel.Off, agreed(personId), mutualOpen(personId))
+    fun between(personId: String, circleIds: List<String>, theirs: ShareLevel?, asked: ShareLevel? = null, askedByUs: Boolean = false): Between =
+        Between(levelFor(personId, circleIds), theirs ?: ShareLevel.Off, shared(personId), asked, askedByUs)
 
     /**
-     * „Standort freigeben“ (ADR 0121 §28): the person shows [personId] its place at [level] from now on and
-     * asks for the same. What held before is kept, to go back to after a no ([mutualAnswered]).
+     * What the app kept itself before the sharing moved into the core (ADR 0123 §9): the agreed level and an own open
+     * question per person, together with what the person showed before asking. [adopt] hands each to the core; once it
+     * took it, what was shown for the agreement goes back to what held before, and the old keys are gone. Idempotent.
      */
-    fun askMutual(personId: String, level: ShareLevel) {
-        rememberBefore(personId)
-        store.putString(KEY_OPEN + personId, "1")
-        approve(listOf(personId))
-        setPersonLevel(personId, level, quiet = true)
-    }
-
-    /**
-     * [personId] answered the own question with [level] (wire value, 0 for no): after a no the person shows what it
-     * showed before asking; after a yes to less than asked it shows that, too.
-     */
-    fun mutualAnswered(personId: String, level: Int) {
-        if (!mutualOpen(personId)) return
-        store.putString(KEY_OPEN + personId, null)
-        val to = ShareLevel.entries.firstOrNull { it.wire == level && it.always }
-        if (to == null) {
-            val back = before(personId)
-            store.putString(KEY_MUTUAL + personId, null)
-            setAgreed(personId, null)
-            setPersonLevel(personId, back, quiet = true)
-            return
+    suspend fun migrateMutual(known: Collection<String>, adopt: suspend (personId: String, level: ShareLevel?, asked: ShareLevel?) -> Boolean) {
+        // The store cannot list its keys; every question and agreement set the person's own level, so those are enough.
+        val ids = (_persons.value.keys + known).toSet()
+        for (id in ids) {
+            val agreed = store.getString(KEY_AGREED + id)?.let(ShareLevel::of)?.takeIf { it.always }
+            val open = store.getString(KEY_OPEN + id) != null
+            val before = store.getString(KEY_MUTUAL + id)
+            if (agreed == null && !open && before == null) continue
+            val asked = if (open) _persons.value[id]?.takeIf { it.always } else null
+            // `false`: the core knows this person already, which is just as good; a failure: try again at the next start.
+            if ((agreed != null || asked != null) && runCatching { adopt(id, agreed, asked) }.isFailure) continue
+            // What was shown for the question or the agreement: back to what held before; the sharing gives it now.
+            if (before != null) setPersonLevel(id, ShareLevel.of(before.takeIf { it != MUTUAL_NONE }))
+            listOf(KEY_AGREED, KEY_OPEN, KEY_MUTUAL, KEY_KEPT).forEach { store.putString(it + id, null) }
         }
-        setAgreed(personId, to)
-        if ((_persons.value[personId]?.wire ?: 0) > to.wire) setPersonLevel(personId, to, quiet = true)
-    }
-
-    /** `true` while the own question to [personId] has no answer yet. */
-    fun mutualOpen(personId: String): Boolean = store.getString(KEY_OPEN + personId) != null
-
-    /** The person says yes to the question of [personId], at [level]: both show each other that from now on. */
-    fun agreeMutual(personId: String, level: ShareLevel) {
-        rememberBefore(personId)
-        approve(listOf(personId))
-        setAgreed(personId, level)
-        setPersonLevel(personId, level, quiet = true)
-    }
-
-    /**
-     * [personId] lowered what it shows to [level] (wire value, 0 for nothing): the person shows the same from now on,
-     * so that nobody gives without getting. What it showed is kept for „Weiter zeigen“ ([keepShowing]). `false` if
-     * there was no agreement above [level].
-     */
-    fun remoteLowered(personId: String, level: Int): Boolean {
-        val agreed = agreed(personId) ?: return false
-        val to = ShareLevel.entries.firstOrNull { it.wire == level && it.always }
-        if ((to?.wire ?: 0) >= agreed.wire) return false
-        _persons.value[personId]?.let { store.putString(KEY_KEPT + personId, it.id) }
-        setAgreed(personId, to)
-        if (to == null) {
-            val back = before(personId)
-            store.putString(KEY_MUTUAL + personId, null)
-            setPersonLevel(personId, back, quiet = true)
-        } else if ((_persons.value[personId]?.wire ?: 0) > to.wire) {
-            setPersonLevel(personId, to, quiet = true)
-        }
-        return true
-    }
-
-    /** What the person showed [personId] before the other side lowered, while „Weiter zeigen“ is on offer. */
-    fun kept(personId: String): ShareLevel? = store.getString(KEY_KEPT + personId)?.let { id -> ShareLevel.entries.firstOrNull { it.id == id } }
-
-    /** „Weiter zeigen“: the person shows [personId] again what it showed, on its own. */
-    fun keepShowing(personId: String) {
-        val level = kept(personId) ?: return
-        store.putString(KEY_KEPT + personId, null)
-        setPersonLevel(personId, level, quiet = true)
     }
 
     /** The answer to „Tom ist neu in „Familie“. Soll er sehen, wo du bist?“ (ADR 0121 §5), also for everyone at once. */
@@ -442,19 +383,17 @@ class LocationSharing(
 }
 
 /**
- * Where the person and someone else stand with each other ([LocationSharing.between]): [mine] is what the person shows,
- * [theirs] what the other shows back, [agreed] what both agreed on, [open] while the own question has no answer yet.
+ * Where the person and someone else stand with each other ([LocationSharing.between], ADR 0123 §7): [mine] is what the
+ * person shows, [theirs] what the other shows back, [shared] the sharing both agreed on, [asked] an open question (by
+ * the own person if [askedByUs]).
  */
-data class Between(val mine: ShareLevel, val theirs: ShareLevel, val agreed: ShareLevel?, val open: Boolean) {
-    /** Something is shared all the time in either direction, agreed on or asked for: there is a sharing to show. */
-    val exists: Boolean get() = mine.always || theirs.always || agreed != null || open
+data class Between(val mine: ShareLevel, val theirs: ShareLevel, val shared: ShareLevel?, val asked: ShareLevel? = null, val askedByUs: Boolean = false) {
+    /** A sharing holds or a question waits. */
+    val exists: Boolean get() = shared != null || asked != null
 
-    /** The level both show each other all the time, the lower of the two; `null` if one of them does not. */
-    val both: ShareLevel? get() = if (mine.always && theirs.always) minOf(mine, theirs, compareBy { it.wire }) else null
+    /** The levels it makes sense to ask for: those the sharing is not at already, and not the one asked for. */
+    val askable: List<ShareLevel> get() = listOf(ShareLevel.Area, ShareLevel.Exact).filter { it != shared && it != asked }
 
-    /** The levels it still makes sense to ask for: those above what both show already. Empty: nothing more to ask. */
-    val askable: List<ShareLevel> get() = listOf(ShareLevel.Area, ShareLevel.Exact).filter { it.wire > (both?.wire ?: 0) }
-
-    /** The level to start the choice at: never below what the person shows already, so asking does not lower it. */
+    /** The level to start the choice at: never below what the person shows already. */
     val suggested: ShareLevel? get() = askable.firstOrNull { it.wire >= mine.wire } ?: askable.lastOrNull()
 }

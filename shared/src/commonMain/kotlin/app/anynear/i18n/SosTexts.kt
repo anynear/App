@@ -2,6 +2,9 @@ package app.anynear.i18n
 
 /** Calling the helpers (ADR 0083 §2–§4, ADR 0121 §13). Never „Notruf“ for this: it warns the helpers (ADR 0083 §9). */
 interface SosTexts {
+    /** A step about SOS contacts as a card in the chat (ADR 0123 §5), [card] as in [app.anynear.sos.CARD_ASKED_US]. */
+    fun card(card: Int, name: String): String
+
     val title: String
     val button: String
     val buttonLabel: String
@@ -30,9 +33,6 @@ interface SosTexts {
     fun askTitle(name: String): String
     fun askText(name: String): String
     val askNotice: String
-    val askYes: String
-    val askNo: String
-    val askLater: String
     val contactFor: String
     val openAsks: String
     fun openAsksCount(count: Int): String
@@ -77,6 +77,17 @@ interface SosTexts {
 }
 
 internal object SosTextsDe : SosTexts {
+    override fun card(card: Int, name: String) = when (card) {
+        1 -> "$name fragt, ob du SOS-Kontakt bist"
+        2 -> "Du hast $name gefragt, ob $name dein SOS-Kontakt ist"
+        3 -> "$name ist jetzt dein SOS-Kontakt"
+        4 -> "$name möchte nicht dein SOS-Kontakt sein"
+        5 -> "Du bist jetzt SOS-Kontakt von $name"
+        6 -> "Du hast abgelehnt, SOS-Kontakt von $name zu sein"
+        7 -> "Du bist nicht mehr SOS-Kontakt von $name"
+        else -> "$name ist nicht mehr dein SOS-Kontakt"
+    }
+
     override val title = "Hilfe rufen"
     override val button = "SOS"
     override val buttonLabel = "Hilfe rufen. Fünfmal schnell tippen löst mit Rückzähler aus."
@@ -105,9 +116,6 @@ internal object SosTextsDe : SosTexts {
     override fun askTitle(name: String) = "$name möchte dich als SOS-Kontakt"
     override fun askText(name: String) = "Ruft $name Hilfe oder bleibt ein Lebenszeichen aus, klingelt dein Handy laut, auch nachts. Du kannst das jederzeit zurücknehmen."
     override val askNotice = "Öffne anynear, um zu antworten."
-    override val askYes = "Ja, einverstanden"
-    override val askNo = "Nein"
-    override val askLater = "Später"
     override val contactFor = "Du bist SOS-Kontakt für"
     override val openAsks = "Offene Anfragen"
     override fun openAsksCount(count: Int) = if (count == 1) "1 offene Anfrage" else "$count offene Anfragen"
@@ -151,6 +159,17 @@ internal object SosTextsDe : SosTexts {
 }
 
 internal object SosTextsEn : SosTexts {
+    override fun card(card: Int, name: String) = when (card) {
+        1 -> "$name asks whether you'll be their SOS contact"
+        2 -> "You asked $name to be your SOS contact"
+        3 -> "$name is now your SOS contact"
+        4 -> "$name doesn't want to be your SOS contact"
+        5 -> "You're now $name's SOS contact"
+        6 -> "You declined to be $name's SOS contact"
+        7 -> "You're no longer $name's SOS contact"
+        else -> "$name is no longer your SOS contact"
+    }
+
     override val title = "Call for help"
     override val button = "SOS"
     override val buttonLabel = "Call for help. Five quick taps start it with a countdown."
@@ -179,9 +198,6 @@ internal object SosTextsEn : SosTexts {
     override fun askTitle(name: String) = "$name wants you as an SOS contact"
     override fun askText(name: String) = "If $name calls for help or misses a check-in, your phone rings loudly, also at night. You can take this back at any time."
     override val askNotice = "Open anynear to answer."
-    override val askYes = "Yes, I agree"
-    override val askNo = "No"
-    override val askLater = "Later"
     override val contactFor = "You are an SOS contact for"
     override val openAsks = "Open requests"
     override fun openAsksCount(count: Int) = if (count == 1) "1 open request" else "$count open requests"

@@ -286,6 +286,8 @@ class AppController(
     val mapTiles: app.anynear.location.MapTiles? = null,
     /** Calling the helpers (ADR 0083 §2); `null` in tests without a platform. */
     val sos: app.anynear.sos.Sos? = null,
+    /** „Standort freigeben“ as the core keeps it (ADR 0123); `null` in tests without a platform. */
+    val sharings: app.anynear.location.Sharings? = null,
     /** The places the person named (ADR 0121 §13); `null` in tests without a platform. */
     val savedPlaces: app.anynear.location.SavedPlaces? = null,
     val circlePlaces: app.anynear.location.CirclePlaces? = null,
@@ -393,46 +395,55 @@ class AppController(
         scope.launch { placeSharer?.sync() }
     }
 
+    // --- „Standort freigeben“ (ADR 0123 §2) ----------------------------------------------------------------------
+    // Every step is a card in the chat with the person; the core keeps the state from the cards on every own device.
+
+    /** The person ID for the core of [conversation], if it is one person with anynear. */
+    fun sharingPerson(conversation: Conversation): String? = (conversation as? Conversation.Direct)?.let { findPerson(it.peer)?.deviceId }
+
+    private fun directOf(personId: String): Conversation? = people.value.firstOrNull { it.deviceId == personId }?.let { Conversation.Direct(it.peer) }
+
+    private fun sendSharingCard(personId: String, text: String, kind: Int, level: Int? = null): Boolean {
+        val conversation = directOf(personId) ?: return false
+        if (send(conversation, text, spot = ChatSpot(kind, level = level)) is SendResult.Rejected) return false
+        sharings?.refresh()
+        scope.launch { placeSharer?.sync() }
+        return true
+    }
+
+    /** Asks [personId] that both see each other at [level]; nothing goes out before the yes. `false` if it did not go out. */
+    fun askSharing(personId: String, level: app.anynear.location.ShareLevel): Boolean =
+        sendSharingCard(personId, app.anynear.i18n.texts.map.mutualMessage, ChatSpot.SHARE, level.wire)
+
+    /** The answer to the open question of [personId]: [accept] at the level asked for, or no. */
+    fun answerSharing(personId: String, accept: Boolean): Boolean {
+        val (level, byUs) = sharings?.asked(personId) ?: return false
+        if (byUs) return false
+        val mt = app.anynear.i18n.texts.map
+        return sendSharingCard(personId, if (accept) mt.mutualYesMessage else mt.mutualNoMessage, ChatSpot.SHARED, if (accept) level.wire else 0)
+    }
+
     /**
-     * „Standort freigeben“ (ADR 0121 §28) with the person of [conversation]: from now on it sees the own place
-     * at [level], and is asked to show the same. `false` if that is not a person with anynear or nothing went out.
+     * A step about SOS contacts with [personId] as a card in the chat with it (ADR 0123 §5); kept on this device only,
+     * every own device makes its own from what the core tells it.
      */
-    fun askMutualPlace(conversation: Conversation, level: app.anynear.location.ShareLevel): Boolean {
-        val id = (conversation as? Conversation.Direct)?.let { findPerson(it.peer)?.deviceId } ?: return false
-        val sharing = locationSharing ?: return false
-        val mt = app.anynear.i18n.texts.map
-        if (send(conversation, mt.mutualMessage, spot = ChatSpot(ChatSpot.SHARE, level = level.wire)) is SendResult.Rejected) return false
-        sharing.askMutual(id, level)
-        scope.launch { placeSharer?.sync() }
-        return true
-    }
-
-    /** The answer to [askMutualPlace] of the other person: [level] is what it sees from now on, `null` for no. */
-    fun answerMutualPlace(conversation: Conversation, level: app.anynear.location.ShareLevel?): Boolean {
-        val id = (conversation as? Conversation.Direct)?.let { findPerson(it.peer)?.deviceId } ?: return false
-        val sharing = locationSharing ?: return false
-        val mt = app.anynear.i18n.texts.map
-        if (send(conversation, if (level == null) mt.mutualNoMessage else mt.mutualYesMessage, spot = ChatSpot(ChatSpot.SHARED, level = level?.wire ?: 0)) is SendResult.Rejected) return false
-        if (level != null) {
-            sharing.agreeMutual(id, level)
-            scope.launch { placeSharer?.sync() }
-        }
-        return true
-    }
-
-    /** The own place was lowered below what both agreed on (ADR 0121 §28): the other side reads it in the chat. */
-    fun tellMutualLowered(personId: String, level: Int) {
+    fun addSosCard(personId: String, card: Int) {
         val person = people.value.firstOrNull { it.deviceId == personId } ?: return
-        val mt = app.anynear.i18n.texts.map
-        send(Conversation.Direct(person.peer), if (level == 0) mt.mutualEndedMessage else mt.mutualLoweredMessage, spot = ChatSpot(ChatSpot.SHARED, level = level))
-        scope.launch { placeSharer?.sync() }
+        val text = app.anynear.i18n.texts.sos.card(card, person.name)
+        messageStore.addSystem("sos-$card-$personId-${kotlin.time.Clock.System.now().toEpochMilliseconds()}", Conversation.Direct(person.peer), text, SystemNote(sos = card))
     }
 
-    /** „Weiter zeigen“ on the card that says the other side lowered: the own place stays as it was, on its own. */
-    fun keepShowingPlace(conversation: Conversation) {
-        val id = (conversation as? Conversation.Direct)?.let { findPerson(it.peer)?.deviceId } ?: return
-        locationSharing?.keepShowing(id)
-        scope.launch { placeSharer?.sync() }
+    /** Takes back the own open question to [personId]. */
+    fun withdrawSharing(personId: String): Boolean {
+        if (sharings?.asked(personId)?.second != true) return false
+        return sendSharingCard(personId, app.anynear.i18n.texts.map.sharingWithdrawnMessage, ChatSpot.WITHDRAWN)
+    }
+
+    /** Ends the sharing with [personId] for both, and an open question with it. */
+    fun endSharing(personId: String): Boolean {
+        val s = sharings?.of(personId) ?: return false
+        if (!s.active && !s.open) return false
+        return sendSharingCard(personId, app.anynear.i18n.texts.map.mutualEndedMessage, ChatSpot.ENDED)
     }
 
     /** „Wo bist du?“ into [conversation] (ADR 0121 §8): the others answer with their place if they want. */
@@ -2451,6 +2462,8 @@ class AppController(
             // read receipt for it.
             loadingSince()
             val me = core.start()
+            // What the others share was loaded with the core just now; the sharer made before it has not seen it yet.
+            placeSharer?.reload()
             _myDeviceId.value = me.deviceId
             _myPersonId.value = me.personId
             launch { refreshContactRequests() }
@@ -2710,6 +2723,7 @@ class AppController(
             // Read by [app.anynear.sos.Sos].
             is CoreEvent.SosAsked -> Unit
             is CoreEvent.SosContactsChanged -> Unit
+            is CoreEvent.SharingChanged -> Unit
             is CoreEvent.Have -> onHave(event.hash, event.ref)
             is CoreEvent.ReadElsewhere -> {
                 val conversation = conversationOf(event.conversation)
@@ -2804,17 +2818,6 @@ class AppController(
         if (e.forwarded) e.mid?.let { core.confirmReceipt(e.fromDevice, it, AnmpArrived.INTERNET) }
         val read = !own && readOnArrival(conversation, message.timestampMillis)
         val added = messageStore.addOnline(e.objectId, message, read)
-        // The answer to „Standort freigeben“ (ADR 0121 §28): after a no the own place goes back to what it was.
-        if (added && !own && conversation is Conversation.Direct) message.spot?.takeIf { it.kind == ChatSpot.SHARED }?.let { answer ->
-            findPerson(conversation.peer)?.deviceId?.let { id ->
-                // The answer to the own question, or the other side lowering later what both agreed on.
-                val sharing = locationSharing
-                if (sharing != null) {
-                    if (sharing.mutualOpen(id)) sharing.mutualAnswered(id, answer.level ?: 0) else sharing.remoteLowered(id, answer.level ?: 0)
-                }
-                scope.launch { placeSharer?.sync() }
-            }
-        }
         if (message.attachments.isNotEmpty() || message.link?.image != null) downloadWake.trySend(Unit)
         // A person that still asks to become a contact (ADR 0116): one notice for the request, none per message.
         if (added && !read && !e.fromRequest) onReceived(conversation)
@@ -5168,7 +5171,15 @@ class AppController(
         val devices = entries.map { it.deviceId }.toSet()
         val inCircle = memberDirectory.members.value.any { it.deviceId in devices && it.circleId != MemberDirectory.DIRECT_CONTACTS }
         if (!inCircle) entries.map { it.nodeNum }.filter { it != 0 }.distinct().forEach { contactRepository.remove(it) }
-        scope.launch { core.removeContact(id) }
+        // Removing a contact ends every sharing with it (ADR 0123 §4); the person reads it in the chat, while it still can.
+        if (!inCircle) endSharing(id)
+        scope.launch {
+            if (!inCircle) {
+                sos?.contacts?.value?.firstOrNull { it.person == id }?.let { runCatching { sos.endContact(id) } }
+                if (sos?.agreed?.value?.contains(id) == true) runCatching { sos.answer(id, false) }
+            }
+            core.removeContact(id)
+        }
     }
 
     fun findPerson(peer: String): Person? = Person.find(people.value, peer)

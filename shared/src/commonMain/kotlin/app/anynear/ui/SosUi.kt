@@ -89,7 +89,6 @@ internal fun SosHeaderButton(controller: AppController) {
         }
         delay(TAP_WAIT_MILLIS)
         taps = 0
-        sos.askAllNow()
         sos.open()
     }
     // Someone asks to have this person as SOS contact: the number on the button leads to the question.
@@ -111,7 +110,7 @@ internal fun SosHeaderButton(controller: AppController) {
         Box(
             Modifier.fillMaxSize().clip(CircleShape)
                 .then(if (ready) Modifier.background(red.copy(alpha = if (running) 1f else 0.92f)) else Modifier.border(2.dp, red.copy(alpha = 0.55f), CircleShape))
-                .clickable(onClickLabel = if (ready) st.buttonLabel else st.buttonSetUp, role = Role.Button) { if (ready) taps++ else { sos.askAllNow(); sos.open() } }
+                .clickable(onClickLabel = if (ready) st.buttonLabel else st.buttonSetUp, role = Role.Button) { if (ready) taps++ else sos.open() }
                 .then(if (asks.isNotEmpty()) Modifier.semantics { stateDescription = st.openAsksCount(asks.size) } else Modifier),
             contentAlignment = Alignment.Center,
         ) {
@@ -175,28 +174,23 @@ internal fun SosBanner(controller: AppController) {
 }
 
 /**
- * Someone asks this person to be its SOS contact (ADR 0121 §25): asked once, on any page. Yes lets its calls ring
- * here; no, or no answer, and they are only shown. „Später“ asks again the next time the app is opened.
+ * The question of someone who asks this person to be its SOS contact (ADR 0121 §25, ADR 0123 §3), opened from a list
+ * of open questions; never by itself. Yes lets its calls ring here; no, or no answer, and they are only shown.
  */
 @Composable
 private fun SosAskDialog(sos: Sos) {
     val st = texts.sos
     val asks by sos.asks.collectAsState()
+    val asking by sos.asking.collectAsState()
     val scope = rememberCoroutineScope()
-    val later by sos.later.collectAsState()
-    val ask = asks.firstOrNull { it.person !in later } ?: return
+    val ask = asks.firstOrNull { it.person == asking } ?: return
     val name = sos.name(ask.person)
     AppDialog(
-        onDismissRequest = { sos.askLater(ask.person) },
+        onDismissRequest = sos::closeAsk,
         title = { Text(st.askTitle(name)) },
         text = { Text(st.askText(name)) },
-        confirmButton = { AppButton(st.askYes, { scope.launch { sos.answer(ask.person, true) } }) },
-        dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppButton(st.askLater, { sos.askLater(ask.person) }, kind = ButtonKind.Quiet)
-                AppButton(st.askNo, { scope.launch { sos.answer(ask.person, false) } }, kind = ButtonKind.Quiet)
-            }
-        },
+        confirmButton = { AppButton(texts.map.sharingAccept, { scope.launch { sos.answer(ask.person, true) } }) },
+        dismissButton = { AppButton(texts.map.sharingDecline, { scope.launch { sos.answer(ask.person, false) } }, kind = ButtonKind.Quiet) },
     )
 }
 
@@ -296,7 +290,7 @@ private fun HelpersPage(controller: AppController, sos: Sos, onDone: () -> Unit)
     val search = rememberPeopleSearch(controller, people.filter { it.deviceId != null })
     val shownPeople = search.all
     PageFrame(st.noHelpersTitle, sos::close) {
-        // Questions put off with „Später“ wait here, on top: they are what is left to do.
+        // Open questions wait here, on top: they are what is left to do (ADR 0123 §6).
         val openAsks by sos.asks.collectAsState()
         if (openAsks.isNotEmpty()) AppSection(st.openAsks) {
             openAsks.forEach { a -> AppRow(title = st.askTitle(sos.name(a.person)), icon = AppIcons.Person, chevron = true, onClick = { sos.askNow(a.person) }) }
@@ -337,7 +331,8 @@ private fun HelpersPage(controller: AppController, sos: Sos, onDone: () -> Unit)
         AppButton(
             st.save,
             {
-                sos.setHelpers(SosHelpers(chosenCircles, chosenPersons))
+                // Who was ended through a circle stays left out (ADR 0123 §3), unless chosen alone now.
+                sos.setHelpers(SosHelpers(chosenCircles, chosenPersons, saved.except - chosenPersons))
                 onDone()
             },
             // Nobody chosen can be saved only to take the helpers away again; the button in the header then shows „not set up“.
