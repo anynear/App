@@ -230,6 +230,18 @@ interface PeopleTexts {
     fun requestAcceptedLine(name: String): String
     fun requestAnsweredLine(name: String): String
     fun requestsTitle(count: Int): String
+    val requestsPage: String
+    fun requestsRow(count: Int): String
+    val requestsToYou: String
+    val requestsFromYou: String
+    val requestsNone: String
+    val requestAboutContact: String
+    fun requestAboutLocation(exact: Boolean): String
+    val requestAboutSos: String
+    val requestAboutSosOwn: String
+    val sharingsTitle: String
+    val sharingsFooter: String
+    val askAsSos: String
     val requestsShow: String
     val requestsHide: String
     fun requestSent(name: String): String
@@ -445,6 +457,18 @@ internal object PeopleTextsDe : PeopleTexts {
     override fun requestAcceptedLine(name: String) = "Du hast $name hinzugefügt. Ihr könnt euch jetzt schreiben."
     override fun requestAnsweredLine(name: String) = "$name hat zugestimmt. Ihr könnt euch jetzt schreiben."
     override fun requestsTitle(count: Int) = "$count Kontaktanfragen"
+    override val requestsPage = "Anfragen"
+    override fun requestsRow(count: Int) = if (count == 1) "1 Anfrage wartet auf dich" else "$count Anfragen warten auf dich"
+    override val requestsToYou = "An dich"
+    override val requestsFromYou = "Von dir"
+    override val requestsNone = "Gerade ist nichts offen."
+    override val requestAboutContact = "möchte Kontakt werden"
+    override fun requestAboutLocation(exact: Boolean) = if (exact) "Standort freigeben: genau" else "Standort freigeben: ungefähr"
+    override val requestAboutSos = "fragt, ob du SOS-Kontakt bist"
+    override val requestAboutSosOwn = "als SOS-Kontakt gefragt"
+    override val sharingsTitle = "Freigaben"
+    override val sharingsFooter = "Was ihr miteinander vereinbart habt. Beenden gilt für euch beide."
+    override val askAsSos = "Als SOS-Kontakt fragen"
     override val requestsShow = "Anzeigen"
     override val requestsHide = "Ausblenden"
     override fun requestSent(name: String) = "Anfrage an $name gesendet. Ihr könnt euch schreiben, sobald $name zustimmt."
@@ -660,6 +684,18 @@ internal object PeopleTextsEn : PeopleTexts {
     override fun requestAcceptedLine(name: String) = "You added $name. You can now message each other."
     override fun requestAnsweredLine(name: String) = "$name accepted. You can now message each other."
     override fun requestsTitle(count: Int) = "$count contact requests"
+    override val requestsPage = "Requests"
+    override fun requestsRow(count: Int) = if (count == 1) "1 request is waiting for you" else "$count requests are waiting for you"
+    override val requestsToYou = "To you"
+    override val requestsFromYou = "From you"
+    override val requestsNone = "Nothing is open right now."
+    override val requestAboutContact = "would like to be a contact"
+    override fun requestAboutLocation(exact: Boolean) = if (exact) "Share location: precisely" else "Share location: approximately"
+    override val requestAboutSos = "asks whether you'll be their SOS contact"
+    override val requestAboutSosOwn = "asked to be your SOS contact"
+    override val sharingsTitle = "Sharing"
+    override val sharingsFooter = "What you agreed on with each other. Stopping it holds for both of you."
+    override val askAsSos = "Ask to be SOS contact"
     override val requestsShow = "Show"
     override val requestsHide = "Hide"
     override fun requestSent(name: String) = "Request sent to $name. You can message each other once $name accepts."

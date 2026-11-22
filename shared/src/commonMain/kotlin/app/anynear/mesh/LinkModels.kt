@@ -235,11 +235,17 @@ data class ChatSpot(
         /** „Angekommen“ (ADR 0121 §26): the sender arrived where it was going; the place and, if it has one, its name. */
         const val ARRIVED = 5
 
-        /** „Standort freigeben“ (ADR 0121 §28): the sender asks that both see each other for good, at [level]. */
+        /** „Standort freigeben“ (ADR 0123 §2): the sender asks that both see each other for good, at [level]. */
         const val SHARE = 6
 
-        /** The answer to [SHARE]. */
+        /** The answer to [SHARE]: [level] the level asked for as a yes, 0 for no. */
         const val SHARED = 7
+
+        /** The sender ended the sharing for both. */
+        const val ENDED = 8
+
+        /** The sender took back its own open question. */
+        const val WITHDRAWN = 9
     }
 }
 
@@ -312,6 +318,8 @@ data class SystemNote(
     val removedDevice: String? = null,
     val removedKey: String? = null,
     val removedName: String? = null,
+    /** A step about SOS contacts with the person of the chat, as a card (ADR 0123 §5): [app.anynear.sos.CARD_ASKED_US] … */
+    val sos: Int? = null,
 )
 
 /** Attachments were announced over radio that have not yet arrived over the internet. */
@@ -339,6 +347,8 @@ fun spotLineOf(kind: Int, label: String?, outgoing: Boolean): String {
         ChatSpot.ARRIVED -> if (outgoing) mt.arrivedOwn else mt.noticeArrived(label)
         ChatSpot.SHARE -> mt.mutualNotice
         ChatSpot.SHARED -> mt.mutualAnswerNotice
+        ChatSpot.ENDED -> if (outgoing) mt.sharingEndedOwnNotice else mt.sharingEndedNotice
+        ChatSpot.WITHDRAWN -> mt.sharingWithdrawnNotice
         else -> if (outgoing) mt.spotHereOwn else mt.noticeHere
     }
 }

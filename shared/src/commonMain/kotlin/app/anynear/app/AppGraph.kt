@@ -197,6 +197,9 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
     // check-in nobody confirmed.
     val locationSharing = app.anynear.location.LocationSharing(scope, store, hooks, now = { Clock.System.now().toEpochMilliseconds() })
     locationSharing.start()
+    // „Standort freigeben“ (ADR 0123): what both agreed on is kept by the core, from the cards in the chat.
+    val sharings = app.anynear.location.Sharings(scope, app.anynear.location.CoreSharingSource(core))
+    locationSharing.shared = { sharings.level(it) }
     // The places the person named (ADR 0121 §13); where the phone was how often stays on this device.
     val savedPlaces = app.anynear.location.SavedPlaces(
         scope, store, now = { Clock.System.now().toEpochMilliseconds() }, nextMidnight = { app.anynear.ui.nextLocalHour(it, 0) },
@@ -302,6 +305,7 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
         placeSharer = placeSharer,
         mapTiles = mapTiles,
         sos = sos,
+        sharings = sharings,
         savedPlaces = savedPlaces,
         circlePlaces = circlePlaces,
     )
@@ -336,7 +340,14 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
             )
         }
     }
-    locationSharing.onMutualLowered = { id, level -> controller.tellMutualLowered(id, level) }
+    sharings.onChanged = { scope.launch { placeSharer.sync() } }
+    sos.onCard = { person, card -> controller.addSosCard(person, card) }
+    // What the app kept itself before (ADR 0123 §9) moves into the core once, after the core has loaded.
+    sharings.onReady = {
+        locationSharing.migrateMutual(controller.people.value.mapNotNull { it.deviceId }) { id, level, asked -> sharings.adopt(id, level, asked) }
+        placeSharer.sync()
+    }
+    sharings.start()
     placeSharer.battery = { hooks.batteryPercent() }
     placeSharer.onAnswered = { hooks.cancelAlertNotifications(app.anynear.location.PlaceSharer.ASK_CHANNEL) }
     placeSharer.start()

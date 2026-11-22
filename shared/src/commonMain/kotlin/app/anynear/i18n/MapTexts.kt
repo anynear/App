@@ -177,30 +177,36 @@ interface MapTexts {
     val mutualAnswerNotice: String
     fun mutualAskBy(name: String, exact: Boolean): String
     fun mutualAskOwn(name: String, exact: Boolean): String
-    fun mutualAlready(name: String, exact: Boolean): String
-    val mutualOwnHint: String
-    fun mutualYes(exact: Boolean): String
-    val mutualOnlyArea: String
-    val mutualNo: String
-    fun mutualAgreedBy(name: String, exact: Boolean): String
-    fun mutualAgreedOwn(exact: Boolean): String
-    fun mutualRefusedBy(name: String): String
-    val mutualRefusedOwn: String
-    val mutualRefusedBack: String
     val mutualChange: String
-    val mutualLoweredMessage: String
     val mutualEndedMessage: String
     fun mutualLoweredBy(name: String, still: Boolean): String
     fun mutualLoweredOwn(name: String, still: Boolean): String
-    fun mutualLoweredText(name: String, still: Boolean): String
-    fun mutualLoweredOwnText(name: String): String
-    fun mutualKeep(level: String): String
     val mutualMark: String
+    fun sharingRow(level: String): String
+    val onlyFromYou: String
+    fun sharingAcceptedBy(name: String, exact: Boolean): String
+    fun sharingAcceptedOwn(exact: Boolean): String
+    fun sharingDeclinedBy(name: String): String
+    val sharingDeclinedOwn: String
+    fun sharingEndedBy(name: String): String
+    val sharingEndedOwn: String
+    fun sharingWithdrawnBy(name: String): String
+    val sharingWithdrawnOwn: String
+    val sharingWithdrawnMessage: String
+    val sharingEndedNotice: String
+    val sharingEndedOwnNotice: String
+    val sharingWithdrawnNotice: String
+    val sharingWaiting: String
+    val sharingAccept: String
+    val sharingDecline: String
+    val sharingWithdraw: String
+    val sharingEnd: String
+    val sharingOther: String
+    val sharingKeeps: String
+    fun sharingAskedOwn(name: String, exact: Boolean): String
     fun mutualMine(name: String, level: String): String
     fun mutualTheirs(name: String, level: String): String
     fun mutualBoth(name: String, exact: Boolean): String
-    fun mutualWaiting(name: String): String
-    val mutualMore: String
     val pickHint: String
     val pickTake: String
     val spotMeetOnMap: String
@@ -276,7 +282,7 @@ internal object MapTextsDe : MapTexts {
     override val stepCircles = "2. Für deine Kreise gilt"
     override val stepCirclesFooter = "Ein Kreis kann von „Für alle“ abweichen. Das gilt dann für alle in diesem Kreis."
     override val stepPersons = "3. Für einzelne Personen gilt"
-    override val stepPersonsFooter = "Eine Person kann von ihren Kreisen abweichen. Was hier steht, geht vor."
+    override val stepPersonsFooter = "Hier kannst du einer Person weniger zeigen als ihren Kreisen. Mehr geht über „Standort freigeben“: Dann seht ihr euch beide."
     override fun likeAll(level: String) = "Wie für alle: $level"
     override fun likeCircles(level: String) = "Wie ihre Kreise: $level"
     override val ownSettings = "Anders eingestellt"
@@ -427,7 +433,7 @@ internal object MapTextsDe : MapTexts {
     override val askedNotice = "Antworte in anynear auf der Karte."
     override val mutualStart = "Standort freigeben"
     override fun mutualTitle(name: String) = "Standort für $name freigeben"
-    override val mutualText = "Was du wählst, sieht die Person ab jetzt von dir. Sie entscheidet, ob sie dir dasselbe zeigt."
+    override val mutualText = "Ihr seht euch erst, wenn die Person annimmt. Dann gilt die Stufe für euch beide."
     override val mutualArea = "Ungefähr"
     override val mutualAreaText = "Ihr seht voneinander den Ort, genau nur bei SOS."
     override val mutualExact = "Genau"
@@ -440,30 +446,36 @@ internal object MapTextsDe : MapTexts {
     override val mutualAnswerNotice = "Standort freigeben: Es gibt etwas Neues"
     override fun mutualAskBy(name: String, exact: Boolean) = "$name möchte, dass ihr euch gegenseitig ${if (exact) "genau" else "ungefähr"} seht"
     override fun mutualAskOwn(name: String, exact: Boolean) = "Du hast $name gefragt: gegenseitig ${if (exact) "genau" else "ungefähr"} sehen"
-    override fun mutualAlready(name: String, exact: Boolean) = "$name zeigt dir den Standort schon ${if (exact) "genau" else "ungefähr"}. Du kannst deine Antwort jederzeit unter „Wer sieht mich?“ ändern."
-    override val mutualOwnHint = "Du zeigst deinen Standort schon so. Noch keine Antwort."
-    override fun mutualYes(exact: Boolean) = if (exact) "Ja, genau" else "Ja, ungefähr"
-    override val mutualOnlyArea = "Nur ungefähr"
-    override val mutualNo = "Nein"
-    override fun mutualAgreedBy(name: String, exact: Boolean) = "$name ist einverstanden: ${if (exact) "genau" else "ungefähr"}"
-    override fun mutualAgreedOwn(exact: Boolean) = "Du bist einverstanden: ${if (exact) "genau" else "ungefähr"}"
-    override fun mutualRefusedBy(name: String) = "$name möchte den Standort nicht teilen"
-    override val mutualRefusedOwn = "Du teilst deinen Standort nicht"
-    override val mutualRefusedBack = "Deine Freigabe ist wieder wie vor der Anfrage."
     override val mutualChange = "Ändern kannst du das unter „Wer sieht mich?“."
-    override val mutualLoweredMessage = "Ich zeige dir meinen Standort nur noch ungefähr."
-    override val mutualEndedMessage = "Ich zeige dir meinen Standort nicht mehr."
+    override val mutualEndedMessage = "Ich habe die Standortfreigabe beendet."
     override fun mutualLoweredBy(name: String, still: Boolean) = if (still) "$name zeigt dir den Standort nur noch ungefähr" else "$name zeigt dir den Standort nicht mehr"
     override fun mutualLoweredOwn(name: String, still: Boolean) = if (still) "Du zeigst $name deinen Standort nur noch ungefähr" else "Du zeigst $name deinen Standort nicht mehr"
-    override fun mutualLoweredText(name: String, still: Boolean) = if (still) "Du zeigst $name jetzt auch nur ungefähr." else "Deine Freigabe an $name ist wieder wie vor der Anfrage."
-    override fun mutualLoweredOwnText(name: String) = "$name zeigt dir von selbst auch nicht mehr als du."
-    override fun mutualKeep(level: String) = "Weiter zeigen: $level"
     override val mutualMark = "gegenseitig"
+    override fun sharingRow(level: String) = "Freigabe: $level"
+    override val onlyFromYou = "nur von dir"
+    override fun sharingAcceptedBy(name: String, exact: Boolean) = "$name hat angenommen: Ihr seht euch ${if (exact) "genau" else "ungefähr"}"
+    override fun sharingAcceptedOwn(exact: Boolean) = "Du hast angenommen: Ihr seht euch ${if (exact) "genau" else "ungefähr"}"
+    override fun sharingDeclinedBy(name: String) = "$name hat abgelehnt"
+    override val sharingDeclinedOwn = "Du hast abgelehnt"
+    override fun sharingEndedBy(name: String) = "$name hat die Standortfreigabe beendet"
+    override val sharingEndedOwn = "Du hast die Standortfreigabe beendet"
+    override fun sharingWithdrawnBy(name: String) = "$name hat die Anfrage zurückgezogen"
+    override val sharingWithdrawnOwn = "Du hast die Anfrage zurückgezogen"
+    override val sharingWithdrawnMessage = "Ich habe meine Anfrage zum Standort zurückgezogen."
+    override val sharingEndedNotice = "Hat die Standortfreigabe beendet"
+    override val sharingEndedOwnNotice = "Du hast die Standortfreigabe beendet"
+    override val sharingWithdrawnNotice = "Anfrage zum Standort zurückgezogen"
+    override val sharingWaiting = "Wartet auf Antwort."
+    override val sharingAccept = "Annehmen"
+    override val sharingDecline = "Ablehnen"
+    override val sharingWithdraw = "Zurückziehen"
+    override val sharingEnd = "Beenden"
+    override val sharingOther = "Andere Stufe anfragen:"
+    override val sharingKeeps = "Bis zur Antwort bleibt eure Freigabe, wie sie ist."
+    override fun sharingAskedOwn(name: String, exact: Boolean) = "Du hast $name gefragt: ${if (exact) "genau" else "ungefähr"}"
     override fun mutualMine(name: String, level: String) = "Du zeigst $name: $level"
     override fun mutualTheirs(name: String, level: String) = "$name zeigt dir: $level"
-    override fun mutualBoth(name: String, exact: Boolean) = "Du und $name seht euch schon gegenseitig ${if (exact) "genau" else "ungefähr"}."
-    override fun mutualWaiting(name: String) = "Deine Anfrage an $name wartet noch auf eine Antwort."
-    override val mutualMore = "Du kannst auch nach mehr fragen:"
+    override fun mutualBoth(name: String, exact: Boolean) = "Du und $name seht euch gegenseitig ${if (exact) "genau" else "ungefähr"}."
     override val pickHint = "Schieb die Karte, bis der Ort unter dem Kreis liegt."
     override val pickTake = "Diesen Ort nehmen"
     override val spotMeetOnMap = "Auf der Karte wählen"
@@ -539,7 +551,7 @@ internal object MapTextsEn : MapTexts {
     override val stepCircles = "2. For your circles"
     override val stepCirclesFooter = "A circle can differ from “For everyone”. That then applies to everyone in this circle."
     override val stepPersons = "3. For single people"
-    override val stepPersonsFooter = "A person can differ from their circles. What is set here comes first."
+    override val stepPersonsFooter = "Here you can show a person less than their circles see. For more, use “Share location”: then you both see each other."
     override fun likeAll(level: String) = "Same as everyone: $level"
     override fun likeCircles(level: String) = "Same as their circles: $level"
     override val ownSettings = "Set differently"
@@ -690,7 +702,7 @@ internal object MapTextsEn : MapTexts {
     override val askedNotice = "Answer on the map in anynear."
     override val mutualStart = "Share location"
     override fun mutualTitle(name: String) = "Share location with $name"
-    override val mutualText = "What you choose, the person sees of you from now on. They decide whether to show you the same."
+    override val mutualText = "You see each other only once the person accepts. Then the level holds for both of you."
     override val mutualArea = "Approximate"
     override val mutualAreaText = "You see each other's town, precisely only with SOS."
     override val mutualExact = "Precise"
@@ -703,30 +715,36 @@ internal object MapTextsEn : MapTexts {
     override val mutualAnswerNotice = "Share location: there is news"
     override fun mutualAskBy(name: String, exact: Boolean) = "$name would like you to see each other ${if (exact) "precisely" else "approximately"}"
     override fun mutualAskOwn(name: String, exact: Boolean) = "You asked $name: see each other ${if (exact) "precisely" else "approximately"}"
-    override fun mutualAlready(name: String, exact: Boolean) = "$name already shows you their location ${if (exact) "precisely" else "approximately"}. You can change your answer at any time under “Who sees me?”."
-    override val mutualOwnHint = "You already show your location this way. No answer yet."
-    override fun mutualYes(exact: Boolean) = if (exact) "Yes, precise" else "Yes, approximate"
-    override val mutualOnlyArea = "Only approximate"
-    override val mutualNo = "No"
-    override fun mutualAgreedBy(name: String, exact: Boolean) = "$name agrees: ${if (exact) "precise" else "approximate"}"
-    override fun mutualAgreedOwn(exact: Boolean) = "You agree: ${if (exact) "precise" else "approximate"}"
-    override fun mutualRefusedBy(name: String) = "$name does not want to share their location"
-    override val mutualRefusedOwn = "You don't share your location"
-    override val mutualRefusedBack = "Your sharing is back to what it was before the request."
     override val mutualChange = "You can change this under “Who sees me?”."
-    override val mutualLoweredMessage = "I now show you my location only approximately."
-    override val mutualEndedMessage = "I no longer show you my location."
+    override val mutualEndedMessage = "I stopped sharing our location."
     override fun mutualLoweredBy(name: String, still: Boolean) = if (still) "$name now shows you their location only approximately" else "$name no longer shows you their location"
     override fun mutualLoweredOwn(name: String, still: Boolean) = if (still) "You now show $name your location only approximately" else "You no longer show $name your location"
-    override fun mutualLoweredText(name: String, still: Boolean) = if (still) "You now show $name only approximately, too." else "Your sharing with $name is back to what it was before the request."
-    override fun mutualLoweredOwnText(name: String) = "$name automatically shows you no more than you do."
-    override fun mutualKeep(level: String) = "Keep showing: $level"
     override val mutualMark = "mutual"
+    override fun sharingRow(level: String) = "Shared: $level"
+    override val onlyFromYou = "only from you"
+    override fun sharingAcceptedBy(name: String, exact: Boolean) = "$name accepted: you see each other ${if (exact) "precisely" else "approximately"}"
+    override fun sharingAcceptedOwn(exact: Boolean) = "You accepted: you see each other ${if (exact) "precisely" else "approximately"}"
+    override fun sharingDeclinedBy(name: String) = "$name declined"
+    override val sharingDeclinedOwn = "You declined"
+    override fun sharingEndedBy(name: String) = "$name stopped sharing the location"
+    override val sharingEndedOwn = "You stopped sharing the location"
+    override fun sharingWithdrawnBy(name: String) = "$name withdrew the request"
+    override val sharingWithdrawnOwn = "You withdrew the request"
+    override val sharingWithdrawnMessage = "I withdrew my request to share our location."
+    override val sharingEndedNotice = "Stopped sharing the location"
+    override val sharingEndedOwnNotice = "You stopped sharing the location"
+    override val sharingWithdrawnNotice = "Location request withdrawn"
+    override val sharingWaiting = "Waiting for an answer."
+    override val sharingAccept = "Accept"
+    override val sharingDecline = "Decline"
+    override val sharingWithdraw = "Withdraw"
+    override val sharingEnd = "Stop"
+    override val sharingOther = "Ask for another level:"
+    override val sharingKeeps = "Until the answer, your sharing stays as it is."
+    override fun sharingAskedOwn(name: String, exact: Boolean) = "You asked $name: ${if (exact) "precisely" else "approximately"}"
     override fun mutualMine(name: String, level: String) = "You show $name: $level"
     override fun mutualTheirs(name: String, level: String) = "$name shows you: $level"
-    override fun mutualBoth(name: String, exact: Boolean) = "You and $name already see each other ${if (exact) "precisely" else "approximately"}."
-    override fun mutualWaiting(name: String) = "Your request to $name is still waiting for an answer."
-    override val mutualMore = "You can also ask for more:"
+    override fun mutualBoth(name: String, exact: Boolean) = "You and $name see each other ${if (exact) "precisely" else "approximately"}."
     override val pickHint = "Move the map until the place is under the circle."
     override val pickTake = "Take this place"
     override val spotMeetOnMap = "Choose on the map"

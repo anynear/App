@@ -464,7 +464,8 @@ private fun DrawScope.drawAreas(camera: MapCamera, mpp: Double, markers: List<Ma
         if (at.x < -400 || at.y < -400 || at.x > size.width + 400 || at.y > size.height + 400) continue
         val fill = (if (m.own || m.place) own else other).copy(alpha = if (m.stale) 0.45f else 1f)
         if (m.radiusMeters != null) {
-            // An area: the honeycomb cell the person is somewhere in, never a pin (ADR 0121 §3, §13).
+            // An area: the honeycomb cell the person is somewhere in, never a pin (ADR 0121 §3, §13). A dashed edge:
+            // somewhere in here (21.11.2026).
             val path = Path()
             app.anynear.location.PlaceSharer.areaCorners(m.latitude, m.longitude, m.radiusMeters).forEachIndexed { i, (lat, lon) ->
                 val c = project(camera, lat, lon)
@@ -472,7 +473,7 @@ private fun DrawScope.drawAreas(camera: MapCamera, mpp: Double, markers: List<Ma
             }
             path.close()
             drawPath(path, fill.copy(alpha = fill.alpha * 0.14f))
-            drawPath(path, fill.copy(alpha = fill.alpha * 0.65f), style = Stroke(1.5.dp.toPx()))
+            drawPath(path, fill.copy(alpha = fill.alpha * 0.65f), style = Stroke(1.5.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))))
         } else if (m.place) {
             drawCircle(fill.copy(alpha = 0.25f), dot * 1.5f, at)
             drawCircle(fill, dot * 0.55f, at)

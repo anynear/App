@@ -657,9 +657,10 @@ private fun MapButton(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
 
 /**
  * The people on the map (ADR 0121 §1), above the drawn map: each one a speech bubble with the picture (or the initials)
- * and the name, whose tip points exactly to the place; the own one with the name from the own profile and an orange
- * edge. For an area the tip points to its centre, the area itself is drawn below. Where bubbles would cover each other,
- * they are fanned out around the place ([placeBubbles], 20.11.2026).
+ * and the name, whose tip ends in a dot exactly at the place; the own one with the name from the own profile and an
+ * orange edge. An area has no place to point to: its bubble has no tip and sits on the edge of the cell drawn below,
+ * several in one cell spread along it (21.11.2026), so that „ungefähr“ never looks like „genau“. Where bubbles would
+ * cover each other, they are fanned out around the place ([placeBubbles], 20.11.2026).
  */
 @Composable
 private fun MapMarkers(controller: AppController, camera: MapCamera, markers: List<MapMarker>, onMarker: (String) -> Unit) {
@@ -678,11 +679,12 @@ private fun MapMarkers(controller: AppController, camera: MapCamera, markers: Li
     // Only the distances count, so moving the map does not change the layout, zooming may.
     val spots by remember(people) {
         androidx.compose.runtime.derivedStateOf {
-            placeBubbles(people.map { m -> val size = sizeOf(m); camera.project(m.latitude, m.longitude).let { Bubble(m.id, it.x, it.y, size.width, size.height) } }, tail, gap)
+            placeBubbles(people.map { m -> val size = sizeOf(m); camera.project(m.latitude, m.longitude).let { Bubble(m.id, it.x, it.y, size.width, size.height, ringOf(camera, m)) } }, tail, gap)
         }
     }
     val surface = MaterialTheme.colorScheme.surface
     val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+    val onSurface = MaterialTheme.colorScheme.onSurface
     val orange = BrandPalette.Signalorange
     Box(Modifier.fillMaxSize().clip(androidx.compose.ui.graphics.RectangleShape)) {
         // The bubbles with their tails, drawn in one piece so that the edge runs around both.
@@ -694,24 +696,37 @@ private fun MapMarkers(controller: AppController, camera: MapCamera, markers: Li
                 val spot = spots.getOrNull(i) ?: return@forEachIndexed
                 val size = sizeOf(m)
                 val centre = Offset(tip.x + spot.dx, tip.y + spot.dy)
-                val toTip = tip - centre
-                val length = toTip.getDistance().takeIf { it > 0f } ?: return@forEachIndexed
-                val across = Offset(-toTip.y / length * base, toTip.x / length * base)
                 val bubble = Path().apply {
                     addRoundRect(androidx.compose.ui.geometry.RoundRect(centre.x - size.width / 2, centre.y - size.height / 2, centre.x + size.width / 2, centre.y + size.height / 2, androidx.compose.ui.geometry.CornerRadius(corner)))
                 }
-                val tailPath = Path().apply {
-                    moveTo(tip.x, tip.y)
-                    lineTo(centre.x + across.x, centre.y + across.y)
-                    lineTo(centre.x - across.x, centre.y - across.y)
-                    close()
+                val area = m.radiusMeters != null
+                val toTip = tip - centre
+                val length = toTip.getDistance()
+                // An area: the bubble alone, without a tip (there is no point to show).
+                val shape = if (area || length <= 0f) bubble else {
+                    val across = Offset(-toTip.y / length * base, toTip.x / length * base)
+                    // The base of the tail just inside the edge of the bubble, not in its middle.
+                    val inside = (bubbleEdge(size.width, size.height, toTip.x, toTip.y) - BUBBLE_TAIL_INSET.toPx()).coerceIn(0f, length)
+                    val root = centre + toTip * (inside / length)
+                    val tailPath = Path().apply {
+                        moveTo(tip.x, tip.y)
+                        lineTo(root.x + across.x, root.y + across.y)
+                        lineTo(root.x - across.x, root.y - across.y)
+                        close()
+                    }
+                    Path.combine(androidx.compose.ui.graphics.PathOperation.Union, bubble, tailPath)
                 }
-                val shape = Path.combine(androidx.compose.ui.graphics.PathOperation.Union, bubble, tailPath)
                 val alpha = if (m.stale) 0.6f else 1f
                 // A soft shadow below, so that the bubble stands out from the light map.
                 translate(0f, 1.5.dp.toPx()) { drawPath(shape, androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.18f * alpha)) }
                 drawPath(shape, surface.copy(alpha = alpha))
-                drawPath(shape, if (m.own) orange.copy(alpha = alpha) else outline.copy(alpha = outline.alpha * alpha), style = androidx.compose.ui.graphics.drawscope.Stroke((if (m.own) 2.dp else 1.5.dp).toPx()))
+                val edge = if (m.own) orange.copy(alpha = alpha) else outline.copy(alpha = outline.alpha * alpha)
+                drawPath(shape, edge, style = androidx.compose.ui.graphics.drawscope.Stroke((if (m.own) 2.dp else 1.5.dp).toPx()))
+                // The exact place: a dot at the end of the tip, ringed so it shows on any map.
+                if (!area) {
+                    drawCircle(surface.copy(alpha = alpha), BUBBLE_DOT.toPx() + 1.5.dp.toPx(), tip)
+                    drawCircle(if (m.own) orange.copy(alpha = alpha) else onSurface.copy(alpha = alpha), BUBBLE_DOT.toPx(), tip)
+                }
             }
         }
         people.forEachIndexed { i, m ->
@@ -753,6 +768,17 @@ private val BUBBLE_PAD = 4.dp
 private val BUBBLE_TEXT_MAX = 120.dp
 private val BUBBLE_TAIL = 12.dp
 private val BUBBLE_TAIL_BASE = 14.dp
+private val BUBBLE_DOT = 3.dp
+
+/** How far inside the edge of the bubble the tail begins, so that the two join without a seam. */
+private val BUBBLE_TAIL_INSET = 4.dp
+
+/** For an area: pixels from the centre of its cell to the top corner, as drawn ([PlaceSharer.areaCorners]); else 0. */
+private fun ringOf(camera: MapCamera, m: MapMarker): Float {
+    val radius = m.radiusMeters ?: return 0f
+    val (lat, lon) = app.anynear.location.PlaceSharer.areaCorners(m.latitude, m.longitude, radius)[1]
+    return (camera.project(lat, lon) - camera.project(m.latitude, m.longitude)).getDistance().coerceAtLeast(1f)
+}
 
 /** Always on the map: for whom the own place is visible; a tap opens „Wer sieht mich?“ (ADR 0121 §1, §4.5). */
 @Composable
@@ -1306,6 +1332,8 @@ internal fun LocationLevelRow(controller: AppController, name: String, circleId:
         current = if (circleId != null) levels[circleId] ?: default else persons[personId],
         followLabel = if (circleId != null) null else mt.followsCircles,
         onDismiss = { choosing = false },
+        // For a person only less than its circles give (ADR 0123 §8); more is „Standort freigeben“.
+        levels = if (personId == null) ShareLevel.entries else sharing.circleLevelFor(personId, personCircles).let { cap -> ShareLevel.entries.filter { it.wire <= cap.wire } },
     ) { chosen, untilMillis ->
         if (circleId != null) {
             sharing.setLevel(circleId, chosen, untilMillis, members = people.filter { circleId in it.circleIds }.mapNotNull { it.deviceId })
@@ -1354,6 +1382,8 @@ internal fun WhoSeesMeScreen(controller: AppController, onBack: () -> Unit) {
     val circles by controller.circles.collectAsState()
     val people by controller.people.collectAsState()
     val myDevice by controller.myDeviceId.collectAsState()
+    val sharedAll by (controller.sharings?.all ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, app.anynear.anmp.core.PlaceSharing>()) }).collectAsState()
+    val sharedLevels = sharedAll.values.filter { it.active }.associate { it.person to ShareLevel.ofWire(it.level) }
     val now = rememberMinute()
     var editing by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var editingDefault by remember { mutableStateOf(false) }
@@ -1395,7 +1425,10 @@ internal fun WhoSeesMeScreen(controller: AppController, onBack: () -> Unit) {
                     AppRow(
                         title = p.name,
                         subtitle = when {
-                            own != null -> levelName(own) + untilText("p:$id") + (if (sharing.agreed(id) != null) " · " + mt.mutualMark else "")
+                            // A sharing both agreed on goes before the rest (ADR 0123 §8).
+                            sharedLevels[id] != null -> mt.sharingRow(levelName(sharedLevels.getValue(id)))
+                            own != null && own.wire > sharing.circleLevelFor(id, inCircles).wire -> levelName(own) + untilText("p:$id") + " · " + mt.onlyFromYou
+                            own != null -> levelName(own) + untilText("p:$id")
                             inCircles.any { levels[it] != null } -> mt.likeCircles(level)
                             else -> mt.likeAll(level)
                         },
@@ -1421,9 +1454,13 @@ internal fun WhoSeesMeScreen(controller: AppController, onBack: () -> Unit) {
     }
     editing?.let { (id, isCircle) ->
         val name = if (isCircle) circles.firstOrNull { it.id == id }?.name.orEmpty() else people.firstOrNull { it.deviceId == id }?.name.orEmpty()
+        // For a person only less than its circles give (ADR 0123 §8): more is „Standort freigeben“, which both agree to.
+        val personCircles = if (isCircle) emptyList() else people.firstOrNull { it.deviceId == id }?.circleIds.orEmpty().filter { it != MemberDirectory.DIRECT_CONTACTS }
+        val cap = if (isCircle) null else sharing.circleLevelFor(id, personCircles)
         LevelDialog(
             title = mt.chooseLevel(name), current = if (isCircle) levels[id] ?: default else persons[id],
             followLabel = if (isCircle) null else mt.followsCircles, onDismiss = { editing = null },
+            levels = if (cap == null) ShareLevel.entries else ShareLevel.entries.filter { it.wire <= cap.wire },
         ) { level, untilMillis ->
             if (isCircle) {
                 sharing.setLevel(id, level, untilMillis, members = people.filter { id in it.circleIds }.mapNotNull { it.deviceId })

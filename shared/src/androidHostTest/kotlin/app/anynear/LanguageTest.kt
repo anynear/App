@@ -100,6 +100,15 @@ class LanguageTest {
         assertEquals("Share location", texts.map.mutualStart)
         assertTrue(texts.map.mutualAnswerNotice.startsWith("Share location"))
         assertEquals("Share location with Anna", texts.map.mutualTitle("Anna"))
+        // One set of buttons for every request (ADR 0123 §1).
+        assertEquals("Accept", texts.map.sharingAccept)
+        assertEquals("Decline", texts.map.sharingDecline)
+        assertEquals("Requests", texts.people.requestsPage)
+        localeTagOverride = "de-DE"
+        assertEquals(listOf("Annehmen", "Ablehnen", "Zurückziehen", "Beenden"), listOf(texts.map.sharingAccept, texts.map.sharingDecline, texts.map.sharingWithdraw, texts.map.sharingEnd))
+        assertEquals("Anfragen", texts.people.requestsPage)
+        assertEquals("Anna ist jetzt dein SOS-Kontakt", texts.sos.card(app.anynear.sos.CARD_THEY_YES, "Anna"))
+        localeTagOverride = "en-US"
         for (tag in listOf("de-DE", "en-US")) {
             localeTagOverride = tag
             val all = listOf(texts.map.mutualStart, texts.map.mutualAnswerNotice, texts.map.mutualTitle("Anna"))

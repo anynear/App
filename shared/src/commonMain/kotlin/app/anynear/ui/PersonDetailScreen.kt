@@ -123,8 +123,10 @@ internal fun PersonDetailScreen(
             AppButton(texts.people.shareContact, { sharing = true }, Modifier.fillMaxWidth(), kind = ButtonKind.Quiet, icon = AppIcons.Teilen)
         }
 
-        // What this person sees of my location (ADR 0121 §13).
+        // „Freigaben“ (ADR 0123 §7): the sharing of the place, SOS in both directions and what is open, each to end here;
+        // below it what this person sees of my location (ADR 0121 §13).
         person?.deviceId?.let { id ->
+            PersonSharingsSection(controller, id, name)
             LocationLevelRow(controller, name, personId = id, personCircles = person.circleIds.filter { it != app.anynear.people.MemberDirectory.DIRECT_CONTACTS })
         }
 

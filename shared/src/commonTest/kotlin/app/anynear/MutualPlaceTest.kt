@@ -1,142 +1,106 @@
 package app.anynear
 
+import app.anynear.anmp.core.PlaceSharing
 import app.anynear.app.NoOpPlatformHooks
 import app.anynear.data.ObservedKeyValueStore
 import app.anynear.location.LocationSharing
 import app.anynear.location.ShareLevel
+import app.anynear.location.SharingSource
+import app.anynear.location.Sharings
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** ADR 0121 §28: both show each other the same; someone else's step can only lower what the person shows, never raise it. */
+/** ADR 0123: a sharing of the place holds once both agreed, at one level; it counts on top of the circles. */
 class MutualPlaceTest {
-    private fun kotlinx.coroutines.test.TestScope.sharing(told: MutableList<Pair<String, Int>> = mutableListOf()) =
-        LocationSharing(backgroundScope, ObservedKeyValueStore(InMemoryStore()), NoOpPlatformHooks(), now = { 0L }).apply { onMutualLowered = { id, level -> told += id to level } }
+    private fun kotlinx.coroutines.test.TestScope.sharing(store: ObservedKeyValueStore = ObservedKeyValueStore(InMemoryStore())) =
+        LocationSharing(backgroundScope, store, NoOpPlatformHooks(), now = { 0L })
+
+    private class Source(var list: List<PlaceSharing> = emptyList()) : SharingSource {
+        override val changes = MutableSharedFlow<String>()
+        val adopted = mutableListOf<Triple<String, Int, Int>>()
+        override fun all(): List<PlaceSharing> = list
+        override suspend fun adopt(person: String, level: Int, asked: Int): Boolean {
+            if (list.any { it.person == person }) return false
+            adopted += Triple(person, level, asked)
+            list = list + PlaceSharing(person, level = level, asked = asked, askedByUs = asked > 0)
+            return true
+        }
+    }
 
     @Test
-    fun askingShowsFirstAndANoGoesBack() = runTest {
+    fun aSharingGivesAtLeastItsLevelAndEndsWithoutLeavingAnythingBehind() = runTest {
         val s = sharing()
-        s.setPersonLevel("anna", ShareLevel.Area)
-        s.askMutual("anna", ShareLevel.Exact)
-        assertEquals(ShareLevel.Exact, s.persons.value["anna"])
-        assertTrue(s.mutualOpen("anna"))
-        s.mutualAnswered("anna", 0)
-        assertEquals(ShareLevel.Area, s.persons.value["anna"])
-        assertNull(s.agreed("anna"))
+        val agreed = mutableMapOf<String, ShareLevel>()
+        s.shared = { agreed[it] }
+        s.answer(ShareLevel.WhenNeeded)
+        assertEquals(ShareLevel.WhenNeeded, s.levelFor("anna", emptyList()))
+        agreed["anna"] = ShareLevel.Exact
+        assertEquals(ShareLevel.Exact, s.levelFor("anna", emptyList()))
+        // Ended: back to what the circles say, nothing to put back by hand.
+        agreed.remove("anna")
+        assertEquals(ShareLevel.WhenNeeded, s.levelFor("anna", emptyList()))
+        // Paused: nothing, also with a sharing.
+        agreed["anna"] = ShareLevel.Exact
+        s.setPaused(true)
+        assertEquals(ShareLevel.Off, s.levelFor("anna", emptyList()))
     }
 
     @Test
-    fun aYesToLessLowersTheAskerToo() = runTest {
-        val s = sharing()
-        s.askMutual("anna", ShareLevel.Exact)
-        s.mutualAnswered("anna", ShareLevel.Area.wire)
-        assertEquals(ShareLevel.Area, s.persons.value["anna"])
-        assertEquals(ShareLevel.Area, s.agreed("anna"))
-    }
-
-    @Test
-    fun loweringTellsTheOtherSideAndRaisingDoesNot() = runTest {
-        val told = mutableListOf<Pair<String, Int>>()
-        val s = sharing(told)
-        s.agreeMutual("ben", ShareLevel.Exact)
-        assertTrue(told.isEmpty())
-        // Lower: the other side is told, the agreement holds at most that.
-        s.setPersonLevel("ben", ShareLevel.Area)
-        assertEquals(listOf("ben" to ShareLevel.Area.wire), told)
-        assertEquals(ShareLevel.Area, s.agreed("ben"))
-        // Giving more again, alone: nobody is told.
-        s.setPersonLevel("ben", ShareLevel.Exact)
-        assertEquals(1, told.size)
-        // Taken away: told, and the agreement is over.
-        s.setPersonLevel("ben", null)
-        assertEquals("ben" to 0, told.last())
-        assertNull(s.agreed("ben"))
-        // Nothing agreed: lowering tells nobody.
-        s.setPersonLevel("tom", ShareLevel.Exact)
-        s.setPersonLevel("tom", ShareLevel.Off)
-        assertEquals(2, told.size)
-    }
-
-    @Test
-    fun theOtherSideLoweringLowersMeAndICanKeepShowing() = runTest {
-        val told = mutableListOf<Pair<String, Int>>()
-        val s = sharing(told)
-        s.agreeMutual("ben", ShareLevel.Exact)
-        assertTrue(s.remoteLowered("ben", ShareLevel.Area.wire))
-        assertEquals(ShareLevel.Area, s.persons.value["ben"])
-        assertEquals(ShareLevel.Exact, s.kept("ben"))
-        // That was not my step: nobody is told back.
-        assertTrue(told.isEmpty())
-        // „Weiter zeigen“ is my own choice.
-        s.keepShowing("ben")
-        assertEquals(ShareLevel.Exact, s.persons.value["ben"])
-        assertNull(s.kept("ben"))
-        // The other side ends it: back to what was before the question, here nothing of its own.
-        assertTrue(s.remoteLowered("ben", 0))
-        assertNull(s.persons.value["ben"])
-        assertNull(s.agreed("ben"))
-        // What I showed before the question comes back when the other side ends it.
-        s.setPersonLevel("ida", ShareLevel.Area)
-        s.askMutual("ida", ShareLevel.Exact)
-        s.mutualAnswered("ida", ShareLevel.Exact.wire)
-        assertTrue(s.remoteLowered("ida", 0))
-        assertEquals(ShareLevel.Area, s.persons.value["ida"])
-        // A step of someone I have no agreement with never changes anything, and nothing ever raises.
-        s.setPersonLevel("tom", ShareLevel.Exact)
-        assertTrue(!s.remoteLowered("tom", 0))
-        assertEquals(ShareLevel.Exact, s.persons.value["tom"])
-        s.agreeMutual("eva", ShareLevel.Area)
-        assertTrue(!s.remoteLowered("eva", ShareLevel.Exact.wire))
-        assertEquals(ShareLevel.Area, s.persons.value["eva"])
-    }
-
-    /** The reported bug: both share precisely already, set up outside „Standort freigeben“; a second tap shows that. */
-    @Test
-    fun anExistingSharingIsRecognizedAndNothingMoreIsAsked() = runTest {
-        val s = sharing()
-        s.setPersonLevel("anna", ShareLevel.Exact)
-        val between = s.between("anna", emptyList(), ShareLevel.Exact)
-        assertTrue(between.exists)
-        assertEquals(ShareLevel.Exact, between.mine)
-        assertEquals(ShareLevel.Exact, between.theirs)
-        assertEquals(ShareLevel.Exact, between.both)
-        assertTrue(between.askable.isEmpty())
-        assertNull(between.suggested)
-    }
-
-    @Test
-    fun aSharingThroughACircleCountsToo() = runTest {
+    fun aPersonsOwnSettingOnlyLowersWhatTheCirclesGive() = runTest {
         val s = sharing()
         s.setLevel("familie", ShareLevel.Exact, members = listOf("anna"))
-        val between = s.between("anna", listOf("familie"), ShareLevel.Area)
-        assertEquals(ShareLevel.Exact, between.mine)
-        assertEquals(ShareLevel.Area, between.both)
-        // Only more than both show is left to ask for, and the choice starts where the person is already.
-        assertEquals(listOf(ShareLevel.Exact), between.askable)
-        assertEquals(ShareLevel.Exact, between.suggested)
+        assertEquals(ShareLevel.Exact, s.circleLevelFor("anna", listOf("familie")))
+        s.setPersonLevel("anna", ShareLevel.WhenNeeded)
+        assertEquals(ShareLevel.WhenNeeded, s.levelFor("anna", listOf("familie")))
+        assertEquals(ShareLevel.Exact, s.circleLevelFor("anna", listOf("familie")))
     }
 
     @Test
-    fun anAgreementOrAnOpenQuestionIsShown() = runTest {
+    fun whatTheAppKeptMovesIntoTheCoreOnce() = runTest {
+        val store = ObservedKeyValueStore(InMemoryStore())
+        // As the app before ADR 0123 left it: Anna agreed at „Genau“ (before that „Nur bei SOS“), Tom was asked.
+        store.putString("location_agreed_anna", "exact")
+        store.putString("location_mutual_anna", "when")
+        store.putString("location_mutual_open_tom", "1")
+        store.putString("location_mutual_tom", "-")
+        store.putString(LocationSharing.KEY_PERSONS, "{\"anna\":\"exact\",\"tom\":\"area\"}")
+        val s = sharing(store)
+        val source = Source()
+        val sharings = Sharings(backgroundScope, source)
+        s.migrateMutual(listOf("anna", "tom", "ben")) { id, level, asked -> sharings.adopt(id, level, asked) }
+        assertEquals(listOf(Triple("anna", ShareLevel.Exact.wire, 0), Triple("tom", 0, ShareLevel.Area.wire)), source.adopted)
+        // What was shown for the agreement and the question goes back to what held before.
+        assertEquals(ShareLevel.WhenNeeded, s.persons.value["anna"])
+        assertNull(s.persons.value["tom"])
+        assertEquals(ShareLevel.Exact, sharings.level("anna"))
+        assertEquals(ShareLevel.Area to true, sharings.asked("tom"))
+        // A second time nothing happens.
+        s.migrateMutual(listOf("anna", "tom")) { id, level, asked -> sharings.adopt(id, level, asked) }
+        assertEquals(2, source.adopted.size)
+        assertNull(store.getString("location_agreed_anna"))
+    }
+
+    /** The reported bug (21.11.2026): a sharing that holds is shown, and only another level is offered. */
+    @Test
+    fun anExistingSharingIsShownAndOnlyAnotherLevelIsOffered() = runTest {
         val s = sharing()
-        s.agreeMutual("ben", ShareLevel.Area)
-        assertEquals(ShareLevel.Area, s.between("ben", emptyList(), null).agreed)
-        assertTrue(s.between("ben", emptyList(), null).exists)
-        s.askMutual("tom", ShareLevel.Exact)
-        val tom = s.between("tom", emptyList(), null)
-        assertTrue(tom.open && tom.exists)
-        assertNull(tom.both)
-        // Asking again never starts below what the person shows already.
-        assertEquals(ShareLevel.Exact, tom.suggested)
-    }
-
-    @Test
-    fun withoutAnySharingItIsAFreshQuestion() = runTest {
-        val between = sharing().between("eva", emptyList(), null)
-        assertTrue(!between.exists)
-        assertEquals(listOf(ShareLevel.Area, ShareLevel.Exact), between.askable)
-        assertEquals(ShareLevel.Area, between.suggested)
+        s.shared = { if (it == "anna") ShareLevel.Exact else null }
+        val between = s.between("anna", emptyList(), ShareLevel.Exact)
+        assertTrue(between.exists)
+        assertEquals(ShareLevel.Exact, between.shared)
+        assertEquals(listOf(ShareLevel.Area), between.askable)
+        // An open question of the own person: that level is not offered again.
+        val tom = s.between("tom", emptyList(), null, asked = ShareLevel.Exact, askedByUs = true)
+        assertTrue(tom.exists)
+        assertEquals(listOf(ShareLevel.Area), tom.askable)
+        // Nothing at all: a fresh question, starting at „Ungefähr“.
+        val eva = s.between("eva", emptyList(), null)
+        assertTrue(!eva.exists)
+        assertEquals(listOf(ShareLevel.Area, ShareLevel.Exact), eva.askable)
+        assertEquals(ShareLevel.Area, eva.suggested)
     }
 }

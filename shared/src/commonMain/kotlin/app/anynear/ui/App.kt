@@ -130,6 +130,8 @@ private sealed interface Detail {
     data object Settings : Detail
     /** „Wer sieht mich?“ (ADR 0121 §4.5). */
     data object WhoSeesMe : Detail
+    /** „Anfragen“ (ADR 0123 §6). */
+    data object Requests : Detail
     /** „Meine Orte“, from the ⋮ menu of the map. */
     data object MyPlaces : Detail
     data object Help : Detail
@@ -497,6 +499,7 @@ private fun MainScreen(controller: AppController) {
                                 is Detail.Connections -> ConnectionsScreen(controller, onBack = closeDetail, start = detail.start)
                                 Detail.Settings -> SettingsPageScreen(controller, onBack = closeDetail)
                                 Detail.WhoSeesMe -> WhoSeesMeScreen(controller, onBack = closeDetail)
+                                Detail.Requests -> RequestsScreen(controller, onBack = closeDetail, onOpen = openChat, onOpenPerson = { showDetail(Detail.PersonInfo(it)) })
                                 Detail.MyPlaces -> MyPlacesScreen(controller, onBack = closeDetail)
                                 Detail.Help -> HelpScreen(controller, onBack = closeDetail, onOpenChat = openChat)
                                 Detail.Troubleshooting -> TroubleshootingScreen(controller, onBack = closeDetail, onOpenChat = openChat)
@@ -616,6 +619,7 @@ private fun MainScreen(controller: AppController) {
                                                 is Conversation.Direct -> showDetail(Detail.PersonInfo(c.peer))
                                             }
                                         },
+                                        onOpenRequests = { showDetail(Detail.Requests) },
                                     )
                                     // The map (ADR 0121 §1): the own people, who sees me, check-ins.
                                     tab == Tab.Map -> MapScreen(
