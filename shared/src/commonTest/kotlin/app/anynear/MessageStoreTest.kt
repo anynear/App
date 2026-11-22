@@ -16,6 +16,18 @@ import kotlin.test.assertTrue
 class MessageStoreTest {
     private val store = MessageStore()
 
+    /** A system line is kept once per id; doubles stored by an older version go when loading (22.11.2026). */
+    @Test
+    fun aSystemLineIsKeptOncePerId() {
+        val chat = Conversation.Circle("c")
+        store.addSystem("sos-5-ben-1", chat, "eins")
+        store.addSystem("sos-5-ben-1", chat, "eins")
+        assertEquals(1, store.messages.value.size)
+        val stored = store.messages.value.single()
+        val restored = MessageStore(restored = app.anynear.data.MessageHistory.Snapshot(messages = listOf(stored, stored), seenPackets = emptyList(), seenOnlineIds = emptyList()))
+        assertEquals(1, restored.messages.value.size)
+    }
+
     @Test
     fun ownMessagesOfARemovedDeviceBecomeOwnAgain() {
         // FUT B8: after the emergency card the support circle history showed the person's own messages from the old,

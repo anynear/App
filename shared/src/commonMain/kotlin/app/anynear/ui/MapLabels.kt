@@ -162,6 +162,8 @@ internal object MapLabels {
         for (c in sorted) {
             if (c.left < 0 || c.top < 0 || c.right > width || c.bottom > height) continue
             if (c.once && c.text in named) continue
+            // A town and its quarter of the same name (Idstein, 22.11.2026): the same name close by only once.
+            if (c.text in named && placed.any { p -> p.text == c.text && near(p, c) }) continue
             val clash = placed.any { p ->
                 val room = maxOf(c.room, p.room)
                 c.left - room < p.right && c.right + room > p.left && c.top - room < p.bottom && c.bottom + room > p.top
@@ -171,5 +173,13 @@ internal object MapLabels {
             named += c.text
         }
         return placed
+    }
+
+    /** Centres closer than three times the wider name: one would read as a repeat of the other. */
+    private fun near(a: LabelCandidate, b: LabelCandidate): Boolean {
+        val dx = (a.left + a.right) / 2 - (b.left + b.right) / 2
+        val dy = (a.top + a.bottom) / 2 - (b.top + b.bottom) / 2
+        val reach = 3 * maxOf(a.right - a.left, b.right - b.left)
+        return dx * dx + dy * dy < reach * reach
     }
 }

@@ -1,5 +1,11 @@
 package app.anynear.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -81,7 +87,7 @@ import kotlin.time.Clock
 private const val HOUR = 3_600_000L
 
 @Composable
-private fun rememberMinute(): Long {
+internal fun rememberMinute(): Long {
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -237,18 +243,46 @@ internal fun MapScreen(
     val warnings = remember(active) { active.flatMap { a -> a.area.map { MapWarning(it.take(5), a.priority) } }.distinct() }
     // Everything paused (20.11.2026): the map steps back, the others stand where they were last known.
     val pausedAll by (controller.locationSharing?.paused ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
+    // Running calls for help (22.11.2026): each one at the exact place it carries, whatever the person shares otherwise
+    // and whatever circle is filtered; the SOS contacts must find the person. Not dimmed while everything is paused.
+    val sos = controller.sos
+    val sosCalls by (sos?.calls ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList<app.anynear.anmp.core.SosCall>()) }).collectAsState()
+    val runningSos = remember(sosCalls) { sosCalls.filter { !it.ended } }
+    val sosOwners = remember(runningSos) { runningSos.filter { !it.own && it.position != null }.map { it.owner }.toSet() }
+    val ownSos = runningSos.any { it.own }
+    // Marker ID → call, so that a tap opens the call.
+    val sosMarkers = remember(runningSos, people) {
+        runningSos.filter { !it.own && it.position != null }.associateBy { c -> people.firstOrNull { it.deviceId == c.owner }?.peer ?: (SOS_MARKER + c.id) }
+    }
+    var fitted by remember { mutableStateOf(camera.start != null || camera.scale > 0) }
     val markers = buildList {
         for (p in withApp) {
+            if (p.deviceId in sosOwners) continue
             val s = places[p.deviceId]?.takeIf { it.untilMillis !in 1..now } ?: continue
             val place = s.place?.takeIf { !app.anynear.location.PlaceAge.gone(it.atMillis, nextLocalHour(now, 0)) } ?: continue
             add(MapMarker(p.peer, p.name, place.latitude, place.longitude, s.radiusMeters, stale = pausedAll || s.radiusMeters == null && now - place.atMillis > HOUR, image = p.image))
         }
         focus?.let { add(MapMarker(FOCUS_MARKER, it.label, it.latitude, it.longitude, place = true)) }
-        own?.let { add(MapMarker(OWN_MARKER, ownName.ifBlank { mt.you }, it.latitude, it.longitude, own = true, stale = now - it.atMillis > HOUR, image = ownImage)) }
+        own?.let {
+            // The own person is always „Du“ on the map (22.11.2026), never its own name; the picture shows its initials.
+            add(MapMarker(OWN_MARKER, if (ownSos) texts.sos.mapSosOwn else mt.you, it.latitude, it.longitude, own = true, stale = !ownSos && now - it.atMillis > HOUR, image = ownImage, sos = ownSos, name = ownName.ifBlank { mt.you }))
+        }
+        for ((id, call) in sosMarkers) {
+            val at = call.position ?: continue
+            val person = people.firstOrNull { it.deviceId == call.owner }
+            val name = person?.name ?: sos?.name(call.owner).orEmpty()
+            add(MapMarker(id, texts.sos.mapSos(name), at.latitude, at.longitude, image = person?.image, sos = true, name = name))
+        }
+    }
+    // A new call for help: the map goes there at once (together with the own place, if known).
+    val sosKey = sosMarkers.values.joinToString(",") { it.id }
+    LaunchedEffect(sosKey, outlines) {
+        if (sosKey.isEmpty() || camera.width <= 0f) return@LaunchedEffect
+        camera.fitPlaces(sosMarkers.values.mapNotNull { c -> c.position?.let { it.latitude to it.longitude } })
+        fitted = true
     }
     // Once, when the first places are known: show them all.
     // Opened at the own place: stay there, close; showing everyone at once is the button „Alle zeigen“ (20.11.2026).
-    var fitted by remember { mutableStateOf(camera.start != null || camera.scale > 0) }
     var locating by remember { mutableStateOf(false) }
     LaunchedEffect(markers.size, outlines) {
         if (!fitted && markers.isNotEmpty() && camera.width > 0f) {
@@ -288,7 +322,7 @@ internal fun MapScreen(
     )
     Column(Modifier.fillMaxSize()) {
         AppHeader(mt.title, menu = menu)
-        if (sharing != null && sharer != null) VisibleBar(sharing, sharer, circles, people, onWhoSeesMe)
+        if (sharing != null && sharer != null) VisibleBar(controller, sharing, sharer, circles, people, onWhoSeesMe)
         // The map has the whole page (19.11.2026); the people and what runs are a sheet at its lower edge.
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val o = outlines
@@ -299,14 +333,23 @@ internal fun MapScreen(
                     onTap = { id, _, latitude, longitude ->
                         // A person goes before the district below; the own place and a destination open nothing.
                         val person = id?.takeIf { it != OWN_MARKER && it != FOCUS_MARKER }
-                        when (val tap = mapTap(person, o.townAt(latitude, longitude)?.kreis, active)) {
+                        // A call for help opens the call, not the person.
+                        val call = person?.let { sosMarkers[it] } ?: if (id == OWN_MARKER && ownSos) runningSos.firstOrNull { it.own } else null
+                        if (call != null) { if (call.own) sos?.open() else sos?.open(call.id) }
+                        else when (val tap = mapTap(person, o.townAt(latitude, longitude)?.kreis, active)) {
                             is MapTap.Person -> { warningSpot = null; selected = tap.id }
                             is MapTap.Warnings -> warningSpot = WarningSpot(latitude, longitude, tap.kreis)
                             MapTap.Nothing -> warningSpot = null
                         }
                     },
                 )
-                MapMarkers(controller, camera, markers) { id -> if (id != OWN_MARKER && id != FOCUS_MARKER) { warningSpot = null; selected = id } }
+                MapMarkers(controller, camera, markers) { id ->
+                    val call = sosMarkers[id] ?: if (id == OWN_MARKER && ownSos) runningSos.firstOrNull { it.own } else null
+                    when {
+                        call != null -> if (call.own) sos?.open() else sos?.open(call.id)
+                        id != OWN_MARKER && id != FOCUS_MARKER -> { warningSpot = null; selected = id }
+                    }
+                }
                 if (pausedAll) Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)))
                 Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     MapButton(AppIcons.Plus, mt.zoomIn) { camera.zoom(1.8f) }
@@ -363,6 +406,7 @@ internal fun MapScreen(
             }
             // Closed it is one line; a tap or a drag opens it over the lower part of the map. Something that waits
             // for an answer or a destination opens it by itself.
+            // Not for a call for help: the open sheet would cover its marker, which is what the SOS contact needs to see.
             val needsLook = focus != null || (sharer?.asking?.collectAsState()?.value?.isNotEmpty() == true)
             LaunchedEffect(needsLook) { if (needsLook) sheetOpen = true }
             LaunchedEffect(sheetOpen) { if (sheetOpen) warningSpot = null else sheetFull = false }
@@ -443,6 +487,7 @@ internal fun MapScreen(
                     AppRow(title = mt.closeFocus, icon = AppIcons.Schliessen, onClick = { controller.showOnMap(null) })
                 }
             }
+            if (runningSos.any { !it.own }) SosSection(runningSos.filter { !it.own }, people, sos, camera)
             if (sharer != null && sharing != null) MapRequests(controller, sharer, sharing, people)
             if (sharer != null) Running(controller, sharer, people, now)
             val relevant = circles.filter { c -> !c.removed && people.any { c.id in it.circleIds } }
@@ -470,15 +515,26 @@ internal fun MapScreen(
                 shown.forEach { p ->
                     val s = places[p.deviceId]
                     val warned = s?.place?.takeIf { s.untilMillis !in 1..now }?.let { warningAt(outlines, active, it) }
+                    // Calling for help: said in the row as well, and a tap goes to the place of the call.
+                    val call = runningSos.firstOrNull { !it.own && it.owner == p.deviceId }
                     AppRow(
                         title = p.name,
-                        subtitle = if (warned != null) mt.warningNear(p.name, warned.title ?: warned.text.take(60)) else statusLine(s, outlines, now, known),
+                        subtitle = when {
+                            call != null -> texts.sos.mapSosLine(formatTime(call.start))
+                            warned != null -> mt.warningNear(p.name, warned.title ?: warned.text.take(60))
+                            else -> statusLine(s, outlines, now, known)
+                        },
                         leading = { PersonAvatar(controller, p.peer, p.image, 44.dp) },
-                        danger = warned != null && warned.priority == AlertPriority.Alarm,
+                        danger = call != null || warned != null && warned.priority == AlertPriority.Alarm,
                         chevron = true,
                         onClick = {
-                            s?.place?.takeIf { s.untilMillis !in 1..now }?.let { camera.fitPlaces(listOf(it.latitude to it.longitude)) }
-                            selected = p.peer
+                            if (call != null) {
+                                call.position?.let { camera.fitPlaces(listOf(it.latitude to it.longitude)) }
+                                sos?.open(call.id)
+                            } else {
+                                s?.place?.takeIf { s.untilMillis !in 1..now }?.let { camera.fitPlaces(listOf(it.latitude to it.longitude)) }
+                                selected = p.peer
+                            }
                         },
                     )
                 }
@@ -502,6 +558,29 @@ private val SHEET_CLOSED = 56.dp
 
 private const val OWN_MARKER = "\u0000own"
 private const val FOCUS_MARKER = "\u0000focus"
+private const val SOS_MARKER = "\u0000sos:"
+
+/** Running calls for help of others, on top of the list below the map: red, a tap shows the place and opens the call. */
+@Composable
+private fun SosSection(calls: List<app.anynear.anmp.core.SosCall>, people: List<Person>, sos: app.anynear.sos.Sos?, camera: MapCamera) {
+    AppSection(texts.sos.title) {
+        calls.forEach { call ->
+            val person = people.firstOrNull { it.deviceId == call.owner }
+            val name = person?.name ?: sos?.name(call.owner).orEmpty()
+            AppRow(
+                title = texts.sos.mapSos(name),
+                subtitle = if (call.position == null) texts.sos.mapSosNoPlace else texts.sos.mapSosLine(formatTime(call.start)),
+                icon = AppIcons.Karte,
+                danger = true,
+                chevron = true,
+                onClick = {
+                    call.position?.let { camera.fitPlaces(listOf(it.latitude to it.longitude)) }
+                    sos?.open(call.id)
+                },
+            )
+        }
+    }
+}
 
 /** The active official warning for the district the place lies in, the most urgent first. */
 private fun warningAt(outlines: Outlines?, active: List<Alert>, place: Place): Alert? =
@@ -668,7 +747,15 @@ private fun MapMarkers(controller: AppController, camera: MapCamera, markers: Li
     val density = androidx.compose.ui.platform.LocalDensity.current
     val style = MaterialTheme.typography.labelLarge
     // The own one last, so that it lies on top.
-    val people = markers.filter { !it.place }.sortedBy { it.own }
+    // A call for help above everything (22.11.2026).
+    val people = markers.filter { !it.place }.sortedBy { if (it.sos) 2 else if (it.own) 1 else 0 }
+    val red = AppTheme.colors.alarm
+    val onRed = AppTheme.colors.onAlarm
+    // A call for help pulses: a red ring that grows and fades around its place, so that it never goes under.
+    val pulse = if (people.any { it.sos }) {
+        val t = rememberInfiniteTransition()
+        t.animateFloat(0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Restart)).value
+    } else 0f
     // The size each bubble really has once laid out; until then a guess from the length of the name.
     val measured = remember { androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.unit.IntSize>() }
     val guess = with(density) { (BUBBLE_AVATAR + BUBBLE_PAD * 4).toPx() } to with(density) { (BUBBLE_AVATAR + BUBBLE_PAD * 2).toPx() }
@@ -716,16 +803,25 @@ private fun MapMarkers(controller: AppController, camera: MapCamera, markers: Li
                     }
                     Path.combine(androidx.compose.ui.graphics.PathOperation.Union, bubble, tailPath)
                 }
-                val alpha = if (m.stale) 0.6f else 1f
+                val alpha = if (m.stale && !m.sos) 0.6f else 1f
+                if (m.sos) {
+                    val ring = SOS_RING.toPx()
+                    drawCircle(red.copy(alpha = 0.45f * (1f - pulse)), ring * (0.4f + pulse), tip)
+                    drawCircle(red.copy(alpha = 0.25f), ring * 0.45f, tip)
+                }
                 // A soft shadow below, so that the bubble stands out from the light map.
                 translate(0f, 1.5.dp.toPx()) { drawPath(shape, androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.18f * alpha)) }
-                drawPath(shape, surface.copy(alpha = alpha))
-                val edge = if (m.own) orange.copy(alpha = alpha) else outline.copy(alpha = outline.alpha * alpha)
-                drawPath(shape, edge, style = androidx.compose.ui.graphics.drawscope.Stroke((if (m.own) 2.dp else 1.5.dp).toPx()))
+                drawPath(shape, if (m.sos) red else surface.copy(alpha = alpha))
+                val edge = when {
+                    m.sos -> onRed
+                    m.own -> orange.copy(alpha = alpha)
+                    else -> outline.copy(alpha = outline.alpha * alpha)
+                }
+                drawPath(shape, edge, style = androidx.compose.ui.graphics.drawscope.Stroke((if (m.sos || m.own) 2.dp else 1.5.dp).toPx()))
                 // The exact place: a dot at the end of the tip, ringed so it shows on any map.
                 if (!area) {
                     drawCircle(surface.copy(alpha = alpha), BUBBLE_DOT.toPx() + 1.5.dp.toPx(), tip)
-                    drawCircle(if (m.own) orange.copy(alpha = alpha) else onSurface.copy(alpha = alpha), BUBBLE_DOT.toPx(), tip)
+                    drawCircle(if (m.sos) red else if (m.own) orange.copy(alpha = alpha) else onSurface.copy(alpha = alpha), (if (m.sos) BUBBLE_DOT * 1.6f else BUBBLE_DOT).toPx(), tip)
                 }
             }
         }
@@ -741,7 +837,7 @@ private fun MapMarkers(controller: AppController, camera: MapCamera, markers: Li
                     .onSizeChanged { measured[m.id] = it }
                     .clip(RoundedCornerShape(BUBBLE_AVATAR / 2 + BUBBLE_PAD))
                     .clickable(onClickLabel = m.label, role = Role.Button) { onMarker(m.id) }
-                    .alpha(if (m.stale) 0.6f else 1f)
+                    .alpha(if (m.stale && !m.sos) 0.6f else 1f)
                     .padding(BUBBLE_PAD),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(BUBBLE_PAD),
@@ -754,10 +850,10 @@ private fun MapMarkers(controller: AppController, camera: MapCamera, markers: Li
                     val tones = AppTheme.colors.avatarTones
                     val tone = tones[remember(seed, tones.size) { app.anynear.images.AvatarPattern.person(seed, tones.size).tone }]
                     Box(Modifier.size(BUBBLE_AVATAR).clip(CircleShape).background(if (m.own) orange else tone.background), contentAlignment = Alignment.Center) {
-                        Text(initials(m.label), style = MaterialTheme.typography.labelMedium, color = if (m.own) androidx.compose.ui.graphics.Color.White else tone.pattern, maxLines = 1)
+                        Text(initials(m.name), style = MaterialTheme.typography.labelMedium, color = if (m.own) androidx.compose.ui.graphics.Color.White else tone.pattern, maxLines = 1)
                     }
                 }
-                Text(m.label, style = style, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = BUBBLE_TEXT_MAX).padding(end = BUBBLE_PAD))
+                Text(m.label, style = style, color = if (m.sos) onRed else androidx.compose.ui.graphics.Color.Unspecified, fontWeight = if (m.sos) androidx.compose.ui.text.font.FontWeight.Bold else null, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = BUBBLE_TEXT_MAX).padding(end = BUBBLE_PAD))
             }
         }
     }
@@ -769,6 +865,9 @@ private val BUBBLE_TEXT_MAX = 120.dp
 private val BUBBLE_TAIL = 12.dp
 private val BUBBLE_TAIL_BASE = 14.dp
 private val BUBBLE_DOT = 3.dp
+
+/** How far the pulsing ring around a call for help grows. */
+private val SOS_RING = 40.dp
 
 /** How far inside the edge of the bubble the tail begins, so that the two join without a seam. */
 private val BUBBLE_TAIL_INSET = 4.dp
@@ -782,16 +881,20 @@ private fun ringOf(camera: MapCamera, m: MapMarker): Float {
 
 /** Always on the map: for whom the own place is visible; a tap opens „Wer sieht mich?“ (ADR 0121 §1, §4.5). */
 @Composable
-private fun VisibleBar(sharing: LocationSharing, sharer: PlaceSharer, circles: List<Circle>, people: List<Person>, onClick: () -> Unit) {
+private fun VisibleBar(controller: AppController, sharing: LocationSharing, sharer: PlaceSharer, circles: List<Circle>, people: List<Person>, onClick: () -> Unit) {
     val paused by sharing.paused.collectAsState()
     val levels by sharing.circles.collectAsState()
     val persons by sharing.persons.collectAsState()
     val default by sharing.default.collectAsState()
     val approved by sharing.approved.collectAsState()
+    // Sharings both agreed on (ADR 0123 §8) also show here, not only an own setting for the person.
+    val agreed by (controller.sharings?.all ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, app.anynear.anmp.core.PlaceSharing>()) }).collectAsState()
     val mt = texts.map
-    val text = remember(paused, levels, persons, default, approved, circles, people) {
+    val text = remember(paused, levels, persons, default, approved, agreed, circles, people) {
         val always = circles.filter { !it.removed && sharing.level(it.id).always }.map { it.name } +
-            people.filter { p -> p.deviceId?.let { persons[it]?.always == true && sharing.levelFor(it, emptyList()).always } == true }.map { it.name }
+            people.filter { p ->
+                p.deviceId?.let { (persons[it]?.always == true || sharing.shared(it)?.always == true) && sharing.levelFor(it, emptyList()).always } == true
+            }.map { it.name }
         when {
             paused -> mt.visiblePaused
             always.isNotEmpty() -> mt.visibleTo(always.joinToString(", "))
@@ -992,47 +1095,6 @@ internal fun LevelDialog(
             AppRow(title = mt.untilTonight, onClick = { onChoose(chosen, now + 8 * HOUR) })
             Text(mt.openOnly, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
         }
-    }
-}
-
-/**
- * The phone's permission follows the level (ADR 0121 §24): as soon as a level needs more than the phone allows, the
- * app says in a sentence what for and leads to the system's question. „Nur bei SOS“ needs the exact location while the
- * app is used; „Ungefähr“ and „Genau“ need „Immer“, because they are brought up to date when the app is woken.
- * Asked once per step; who says „Später“ finds the same under „Dein Handy“.
- */
-@Composable
-internal fun PhonePermissionPrompt(sharing: LocationSharing) {
-    val mt = texts.map
-    val default by sharing.default.collectAsState()
-    val circles by sharing.circles.collectAsState()
-    val persons by sharing.persons.collectAsState()
-    val allowed by sharing.allowed.collectAsState()
-    val background by sharing.background.collectAsState()
-    val all = listOfNotNull(default) + circles.values + persons.values
-    val wantsAlways = all.any { it.always }
-    val wantsAny = all.any { it != ShareLevel.Off }
-    val phone = remember(allowed, background, wantsAlways, wantsAny) { sharing.phone() }
-    val missing = when {
-        wantsAlways && phone != LocationSharing.Phone.Always -> 2
-        wantsAny && (phone == LocationSharing.Phone.NotAllowed || phone == LocationSharing.Phone.SwitchedOff) -> 1
-        else -> 0
-    }
-    // What was asked already, for this visit of the page: a higher step asks again, the same one does not.
-    var asked by remember { mutableStateOf(0) }
-    if (missing > asked) {
-        AppDialog(
-            onDismissRequest = { asked = missing },
-            title = { Text(if (missing == 2) mt.needAlwaysTitle else mt.needLocationTitle) },
-            text = { Text(if (missing == 2) mt.needAlwaysText else mt.needLocationText) },
-            confirmButton = {
-                AppButton(mt.needAllow, {
-                    asked = missing
-                    sharing.fixPhone()
-                })
-            },
-            dismissButton = { AppButton(mt.needLater, { asked = missing }, kind = ButtonKind.Quiet) },
-        )
     }
 }
 
@@ -1393,7 +1455,6 @@ internal fun WhoSeesMeScreen(controller: AppController, onBack: () -> Unit) {
         AppHeader(mt.whoSeesMe, leading = { HeaderBackButton(onBack) })
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Text(mt.whoSeesMeText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            PhonePermissionPrompt(sharing)
             AppSection {
                 AppRow(
                     title = mt.pauseAll, subtitle = if (paused) mt.pauseAllOn else mt.pauseAllOff, icon = AppIcons.Anhalten,

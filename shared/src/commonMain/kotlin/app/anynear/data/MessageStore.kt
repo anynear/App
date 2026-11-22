@@ -38,7 +38,9 @@ class MessageStore(
     restored: MessageHistory.Snapshot? = null,
 ) {
     private val _messages = MutableStateFlow(
-        restored?.messages.orEmpty().map {
+        // distinctBy: an older version could store a system line twice with the same id (SOS cards, 22.11.2026);
+        // the chat list needs unique ids and crashed on them.
+        restored?.messages.orEmpty().distinctBy { it.localId }.map {
             if (it.outgoing && it.status == MessageStatus.QUEUED && !isResumable(it)) it.copy(status = MessageStatus.FAILED) else it
         },
     )
@@ -108,6 +110,7 @@ class MessageStore(
     fun addSystem(localId: String, conversation: Conversation, text: String, note: SystemNote = SystemNote()) {
         val at = now()
         _messages.update {
+            if (it.any { m -> m.localId == localId }) return@update it
             it + ChatMessage(
                 localId = localId,
                 conversation = conversation,

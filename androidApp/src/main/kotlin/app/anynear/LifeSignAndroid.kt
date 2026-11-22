@@ -99,6 +99,7 @@ class LifeSignActionReceiver : BroadcastReceiver() {
 class CheckInNotifier(private val context: Context) {
     fun show(checkIn: app.anynear.app.CheckInNotification?) {
         if (checkIn == null) {
+            current = null
             NotificationGroups.cancel(context, NotificationGroups.CHECK_IN, null, NOTIFICATION_ID)
             return
         }
@@ -137,6 +138,7 @@ class CheckInNotifier(private val context: Context) {
             .addAction(0, checkIn.okLabel, LifeSignActionReceiver.intent(context, checkIn.okAction, ""))
             .addAction(0, checkIn.endLabel, LifeSignActionReceiver.intent(context, checkIn.endAction, ""))
             .build()
+        current = built
         try {
             NotificationGroups.notify(context, null, NOTIFICATION_ID, built)
         } catch (e: SecurityException) {
@@ -146,7 +148,15 @@ class CheckInNotifier(private val context: Context) {
 
     companion object {
         private const val CHANNEL_ID = "lifesign_ongoing"
-        private const val NOTIFICATION_ID = 400
+        const val NOTIFICATION_ID = 400
+
+        /**
+         * The notification of the running own check-in, for [LocationShareService] while only the check-in locates
+         * (ADR 0125 §7): showing it again under the same number updates the one the service holds.
+         */
+        @Volatile
+        var current: android.app.Notification? = null
+            private set
     }
 }
 

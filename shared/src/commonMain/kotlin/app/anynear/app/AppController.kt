@@ -291,6 +291,8 @@ class AppController(
     /** The places the person named (ADR 0121 §13); `null` in tests without a platform. */
     val savedPlaces: app.anynear.location.SavedPlaces? = null,
     val circlePlaces: app.anynear.location.CirclePlaces? = null,
+    /** The one check of the location permission for every action (ADR 0125); `null` in tests without a platform. */
+    val locationAccess: app.anynear.location.LocationAccess? = null,
 ) {
     /** The place that rides along with a direct message (ADR 0121 §20), in the form of the core. */
     private fun corePlace(r: app.anynear.location.PlaceSharer.Riding): app.anynear.anmp.core.PlaceShare = app.anynear.anmp.core.PlaceShare(
@@ -321,6 +323,11 @@ class AppController(
         _mapCircle.value = (conversation as? Conversation.Circle)?.circleId to nowMillis()
     }
 
+    /** The map tab without a filter, e.g. for the own running check-in, whose screen opens there. */
+    fun showMap() {
+        _mapCircle.value = null to nowMillis()
+    }
+
     fun showOnMap(focus: MapFocus?) {
         _mapFocus.value = focus
     }
@@ -344,10 +351,18 @@ class AppController(
         }
         if (!sharing.allowed.value) {
             // Asked right here (20.11.2026): once the person allows it, the place goes out without a second tap.
-            // Declined or left open, the answer is the hint as before.
-            sharing.allow()
-            val allowed = kotlinx.coroutines.withTimeoutOrNull(PLACE_PERMISSION_WAIT_MILLIS) { sharing.allowed.first { it } }
-            if (allowed != true) return PlaceSend.NotAllowed
+            // The sheet comes once (ADR 0125 §4); a later tap on „Standort senden“ is the consent itself and goes
+            // straight to the system. Declined or left open, the answer is the hint as before.
+            val access = locationAccess
+            val allowed = if (access != null) {
+                val need = app.anynear.location.LocationNeed.Precise
+                val purpose = app.anynear.location.LocationPurpose.SendPlace
+                (if (access.asked(purpose)) access.fixAndWait(need, purpose) else access.ensure(need, purpose)) == app.anynear.location.LocationAccessState.Ok
+            } else {
+                sharing.allow()
+                kotlinx.coroutines.withTimeoutOrNull(PLACE_PERMISSION_WAIT_MILLIS) { sharing.allowed.first { it } } == true
+            }
+            if (!allowed) return PlaceSend.NotAllowed
         }
         val place = sharing.place() ?: return PlaceSend.Unknown
         val mt = app.anynear.i18n.texts.map
@@ -355,6 +370,49 @@ class AppController(
         val text = (if (kind == ChatSpot.MEET) mt.spotMeetText(label?.trim().orEmpty()) else mt.spotHereText) + "\n" + link
         val sent = send(conversation, text, spot = ChatSpot(kind, place.latitude, place.longitude, place.atMillis, place.accuracyMeters, label?.trim()?.takeIf { it.isNotEmpty() }))
         return if (sent is SendResult.Rejected) PlaceSend.Failed else PlaceSend.Sent
+    }
+
+    /**
+     * „Immer“ taken away while a level of this phone shows the place all the time (ADR 0125 §5): only the device the
+     * place comes from needs it, and nothing while everything is paused.
+     */
+    private suspend fun watchAlwaysLost() {
+        val access = locationAccess ?: return
+        val sharing = locationSharing ?: return
+        kotlinx.coroutines.flow.combine(
+            access.changes, sharing.default, sharing.circles, sharing.persons,
+            kotlinx.coroutines.flow.combine(sharing.paused, sharing.source) { paused, source -> paused to source },
+        ) { _, default, circles, persons, (paused, _) ->
+            val always = default?.always == true || circles.values.any { it.always } || persons.values.any { it.always }
+            always && !paused && placeSharer?.isSource != false
+        }.collect { access.checkAlways(it) }
+    }
+
+    private val _sosNoPrecise = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * The persons we are SOS contact for whose calls come without their precise place (ADR 0125 §8): their phone does
+     * not allow it. Shown with them, so that nobody relies on a place that will not come.
+     */
+    val sosNoPrecise: StateFlow<Set<String>> = _sosNoPrecise.asStateFlow()
+
+    private fun refreshSosNoPrecise() {
+        _sosNoPrecise.value = runCatching { core.sosAgreed().filter { core.sosPreciseOf(it) == false }.toSet() }.getOrDefault(emptySet())
+    }
+
+    /**
+     * Tells the own SOS contacts whether a call carries the precise place (ADR 0125 §8): from the device the place
+     * comes from, whenever its permission changes.
+     */
+    private suspend fun tellSosPrecise() {
+        val access = locationAccess ?: return
+        val sharing = locationSharing ?: return
+        // Which device is the source needs the own device ID: read before it is known, a phone that shares counted as
+        // „not the source“ and told its SOS contacts nothing, also later (tablet, 22.11.2026).
+        core.identity.filterNotNull().first()
+        kotlinx.coroutines.flow.combine(access.changes, sharing.source) { _, _ -> (placeSharer?.isSource != false) to (access.state(app.anynear.location.LocationNeed.Precise) == app.anynear.location.LocationAccessState.Ok) }
+            .distinctUntilChanged()
+            .collect { (isSource, precise) -> if (isSource) runCatching { core.setSosPrecise(precise) } }
     }
 
     /** Sends a meeting point chosen on the map into [conversation] (ADR 0121 §13): no own location needed for it. */
@@ -413,7 +471,16 @@ class AppController(
 
     /** Asks [personId] that both see each other at [level]; nothing goes out before the yes. `false` if it did not go out. */
     fun askSharing(personId: String, level: app.anynear.location.ShareLevel): Boolean =
-        sendSharingCard(personId, app.anynear.i18n.texts.map.mutualMessage, ChatSpot.SHARE, level.wire)
+        sendSharingCard(personId, app.anynear.i18n.texts.map.mutualMessage, ChatSpot.SHARE, level.wire).also { if (it) askForLevel(level) }
+
+    /** A level both see each other at needs „Immer“ on this phone (ADR 0125 §3), asked for once; never holds it up. */
+    private fun askForLevel(level: app.anynear.location.ShareLevel) {
+        val access = locationAccess ?: return
+        if (!level.always) return
+        val need = app.anynear.location.LocationNeed.Always
+        if (access.state(need) == app.anynear.location.LocationAccessState.Ok) return
+        scope.launch { access.ensure(need, app.anynear.location.LocationPurpose.Level) }
+    }
 
     /** The answer to the open question of [personId]: [accept] at the level asked for, or no. */
     fun answerSharing(personId: String, accept: Boolean): Boolean {
@@ -421,6 +488,7 @@ class AppController(
         if (byUs) return false
         val mt = app.anynear.i18n.texts.map
         return sendSharingCard(personId, if (accept) mt.mutualYesMessage else mt.mutualNoMessage, ChatSpot.SHARED, if (accept) level.wire else 0)
+            .also { if (it && accept) askForLevel(level) }
     }
 
     /**
@@ -2560,6 +2628,9 @@ class AppController(
         scope.launch { suggestDevices() }
         scope.launch { keepOwnHistory() }
         settingsSync?.start()
+        scope.launch { watchAlwaysLost() }
+        scope.launch { tellSosPrecise() }
+        refreshSosNoPrecise()
         scope.launch { runCatching { offerReplace() } }
         startImageTransfers()
         passwords?.onVaultChanged = { data, changed, key -> scope.launch { core.vaultPut(data, changed, key) } }
@@ -2722,7 +2793,7 @@ class AppController(
             is CoreEvent.SosChanged -> Unit
             // Read by [app.anynear.sos.Sos].
             is CoreEvent.SosAsked -> Unit
-            is CoreEvent.SosContactsChanged -> Unit
+            is CoreEvent.SosContactsChanged -> refreshSosNoPrecise()
             is CoreEvent.SharingChanged -> Unit
             is CoreEvent.Have -> onHave(event.hash, event.ref)
             is CoreEvent.ReadElsewhere -> {

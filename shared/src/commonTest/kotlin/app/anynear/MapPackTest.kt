@@ -162,4 +162,71 @@ class MapPackTest {
         delay(100)
         assertEquals(setOf(near), offline.loaded.value.keys)
     }
+
+    /** A tile kept from an earlier map is shown at once and replaced once the network offers another object (22.11.2026). */
+    @Test
+    fun aKeptTileIsReplacedWhenTheNetworkOffersAnother() = runBlocking {
+        val fetched = mutableListOf<String>()
+        var roots = 0
+        var tileId = "tile-new"
+        val source = object : MapTileSource {
+            override suspend fun roots(): List<ByteArray> {
+                roots++
+                return listOf(MapTiles.encodeOffers(listOf(MapOffer(region, 1, 1, "list-$tileId"))))
+            }
+            override suspend fun fetch(objectId: String): ByteArray? {
+                fetched += objectId
+                return when (objectId) {
+                    "list-$tileId" -> MapTiles.encodeOffers(listOf(MapOffer(region, 1, 1, tileId)))
+                    tileId -> tile(region)
+                    else -> null
+                }
+            }
+        }
+        val files = Files()
+        // A tile of before: on the phone, without the object it came from.
+        files.write("t-$region", tile(region))
+        val tiles = MapTiles(CoroutineScope(Dispatchers.Default), files, source)
+        tiles.want(listOf(region), 0)
+        repeat(150) { if ("tile-new" in fetched) return@repeat; delay(20) }
+        delay(100)
+        assertEquals(setOf(region), tiles.loaded.value.keys)
+        assertEquals(listOf("list-tile-new", "tile-new"), fetched)
+
+        // The next start: the same object, nothing fetched again (the list of the region is kept as well).
+        fetched.clear()
+        val again = MapTiles(CoroutineScope(Dispatchers.Default), files, source)
+        again.want(listOf(region), 0)
+        delay(400)
+        assertEquals(setOf(region), again.loaded.value.keys)
+        assertEquals(emptyList(), fetched)
+
+        // A new map is published, with a new list: the tile follows.
+        fetched.clear()
+        tileId = "tile-newer"
+        val later = MapTiles(CoroutineScope(Dispatchers.Default), files, source)
+        later.want(listOf(region), 0)
+        repeat(150) { if ("tile-newer" in fetched) return@repeat; delay(20) }
+        assertEquals(listOf("list-tile-newer", "tile-newer"), fetched)
+        assertTrue(roots >= 3)
+    }
+
+    /** Without a network the tiles on the phone are enough; asking again and again for the root lists is not. */
+    @Test
+    fun withoutANetworkKeptTilesAreNotCheckedOverAndOver() = runBlocking {
+        var roots = 0
+        val source = object : MapTileSource {
+            override suspend fun roots(): List<ByteArray>? { roots++; return null }
+            override suspend fun fetch(objectId: String): ByteArray? = null
+        }
+        val files = Files()
+        files.write("t-$region", tile(region))
+        files.write("t-$near", tile(near))
+        val tiles = MapTiles(CoroutineScope(Dispatchers.Default), files, source)
+        tiles.want(listOf(region, near), 1_000)
+        repeat(150) { if (tiles.loaded.value.size == 2) return@repeat; delay(20) }
+        delay(300)
+        assertEquals(setOf(region, near), tiles.loaded.value.keys)
+        assertEquals(1, roots)
+    }
 }

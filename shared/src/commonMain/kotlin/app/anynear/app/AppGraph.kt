@@ -197,6 +197,10 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
     // check-in nobody confirmed.
     val locationSharing = app.anynear.location.LocationSharing(scope, store, hooks, now = { Clock.System.now().toEpochMilliseconds() })
     locationSharing.start()
+    // The one check of the location permission for every action (ADR 0125); its marks stay on this device.
+    // iPhone: the exact place that stays after closing the app comes only from the settings (ADR 0125 §6).
+    val locationAccess = app.anynear.location.LocationAccess(hooks, store, lastingPreciseOnlyInSettings = { hooks.preciseLastingOnlyInSettings })
+    locationSharing.access = locationAccess
     // „Standort freigeben“ (ADR 0123): what both agreed on is kept by the core, from the cards in the chat.
     val sharings = app.anynear.location.Sharings(scope, app.anynear.location.CoreSharingSource(core))
     locationSharing.shared = { sharings.level(it) }
@@ -227,6 +231,7 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
                 ?: memberDirectory.members.value.firstOrNull { it.personId == person }?.name.orEmpty()
         },
     )
+    sos.access = locationAccess
     sos.start()
     val lifeSigns = LifeSigns(
         scope, CoreLifeSignSource(core), store, hooks,
@@ -245,6 +250,7 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
         me = { core.identity.value?.personId },
         isSupport = { id -> controllerRef?.isSupportCircle(id) == true },
         sharing = locationSharing,
+        access = locationAccess,
         alarmIsCall = true,
         circlesOf = { person -> memberDirectory.members.value.filter { it.personId == person && it.circleId != app.anynear.people.MemberDirectory.DIRECT_CONTACTS }.map { it.circleId }.distinct() },
         trailBefore = sos::trailBefore,
@@ -308,6 +314,7 @@ fun createAppController(hooks: PlatformHooks, platformLog: AppLog = AppLog.Silen
         sharings = sharings,
         savedPlaces = savedPlaces,
         circlePlaces = circlePlaces,
+        locationAccess = locationAccess,
     )
     controllerRef = controller
     placeSharer.targets = { controller.shareTargets() }

@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.input.pointer.pointerInput
@@ -62,6 +63,10 @@ internal data class MapMarker(
     val place: Boolean = false,
     /** Whose picture the marker carries; the own one for [own]. */
     val image: app.anynear.images.ImageRef? = null,
+    /** A running call for help (22.11.2026): always the exact place of the call, red and on top of everything else. */
+    val sos: Boolean = false,
+    /** Whose initials the marker shows without a picture; the label may say more („SOS · Anna“). */
+    val name: String = label,
 )
 
 /** A district with an official warning: its key prefix and the highest priority (ADR 0121 §7). */
@@ -329,15 +334,35 @@ private fun renderMap(want: MapWanted, margin: Float, measurer: TextMeasurer, de
         )
         val mpp = camera.metresPerPixel
         val inView = packs.filter { it.minX < view.right && it.maxX > view.left && it.minY < view.bottom && it.maxY > view.top }
-        val region = inView.filter { it.level == MapPack.REGION && mpp < PACK_BELOW }
+        val inRegion = inView.filter { it.level == MapPack.REGION && mpp < PACK_BELOW }
+        // Further out the maps of the app carry the land, and region tiles join only once they cover all of the view:
+        // tiles left from a closer look would otherwise show woods and villages in a rectangle (22.11.2026, tablet).
+        // What the page shows, without the margin drawn ahead for moving.
+        val visible = Rect(
+            (camera.x - want.width / 2.0 / camera.scale).toFloat(), (camera.y - want.height / 2.0 / camera.scale).toFloat(),
+            (camera.x + want.width / 2.0 / camera.scale).toFloat(), (camera.y + want.height / 2.0 / camera.scale).toFloat(),
+        )
+        val region = if (mpp < 60 || covers(inRegion, visible)) inRegion else emptyList()
         val near = inView.filter { it.level == MapPack.NEAR && mpp < NEAR_BELOW }
         // Far out, and where no region tile is there, the maps of the app carry roads, rivers and cities.
-        val far = if (mpp < BASE_BELOW && (mpp >= 60 || region.isEmpty())) ground.filter { it.key != MapPack.WORLD } else emptyList()
-        drawTiles(listOfNotNull(world) + far + region + near, camera, view, mpp, scheme.surface, scheme.onSurfaceVariant, land)
+        val far = if (mpp < BASE_BELOW) ground.filter { it.key != MapPack.WORLD } else emptyList()
+        if (mpp >= 60 || region.isEmpty()) {
+            drawTiles(listOfNotNull(world) + far + region + near, camera, view, mpp, scheme.surface, scheme.onSurfaceVariant, land)
+        } else {
+            // Closer, the region tiles draw the land, and the maps of the app only where no region tile lies (yet):
+            // no empty rectangle beside the tiles that are there (22.11.2026, tablet).
+            drawTiles(listOfNotNull(world), camera, view, mpp, scheme.surface, scheme.onSurfaceVariant, land)
+            clipPath(tileCover(region, camera), androidx.compose.ui.graphics.ClipOp.Difference) {
+                drawTiles(far, camera, view, mpp, scheme.surface, scheme.onSurfaceVariant, land)
+            }
+            drawTiles(region + near, camera, view, mpp, scheme.surface, scheme.onSurfaceVariant, land)
+        }
         drawWarnings(outlines, camera, view, mpp, warnings, c.alarm, c.alarm)
-        if (mpp < GERMAN_BORDERS_BELOW) drawBorders(outlines, camera, view, mpp, scheme.onSurfaceVariant.copy(alpha = if (region.isEmpty()) 0.8f else 0.4f), quiet = far.isNotEmpty())
+        if (mpp < GERMAN_BORDERS_BELOW) drawBorders(outlines, camera, view, mpp, scheme.onSurfaceVariant.copy(alpha = if (region.isEmpty()) 0.8f else 0.4f), quiet = far.isNotEmpty() && (mpp >= 60 || region.isEmpty()))
         // All names of all maps in view compete at once, by rank (MapLabels): a city wins over its quarters, whatever
-        // tile either comes from.
+        // tile either comes from. The cities and towns of the app always take part, so a region tile of an earlier
+        // map, whose places carry no rank, does not leave the middle zoom without names (22.11.2026); where both
+        // name the same place, the room keeps one of them.
         drawLabels(far + region + near + listOfNotNull(world), camera, view, mpp * density.density, measurer, scheme.onSurface, scheme.onSurfaceVariant, scheme.surface, german)
         // The names of districts and municipalities only where nothing better is there.
         if (ground.isEmpty() && region.isEmpty()) drawNames(outlines, camera, view, mpp, kreisNames, measurer, scheme.onSurfaceVariant)
@@ -506,6 +531,26 @@ private fun roadWidth(kind: Int, mpp: Double): Float {
         MapPack.STREAM -> 1.6f
         else -> 1f
     }
+}
+
+/** Whether the tiles [packs] of the region level cover all of [view]; a view of too many tiles is never covered. */
+private fun covers(packs: List<MapPack>, view: Rect): Boolean {
+    if (packs.isEmpty()) return false
+    val want = MapPack.tilesIn(MapPack.REGION, view.left.toDouble(), view.top.toDouble(), view.right.toDouble(), view.bottom.toDouble(), limit = 64)
+    val keys = packs.mapTo(HashSet()) { it.key }
+    return want.isNotEmpty() && keys.containsAll(want)
+}
+
+/** The area the tiles [packs] stand for, on the picture: each tile's square by its key. */
+private fun DrawScope.tileCover(packs: List<MapPack>, camera: MapCamera): Path {
+    val path = Path()
+    for (p in packs) {
+        val parts = p.key.split('-').mapNotNull { it.toIntOrNull() }
+        if (parts.size != 3) continue
+        val n = (1 shl parts[0]).toFloat()
+        path.addRect(Rect(sx(camera, parts[1] / n), sy(camera, parts[2] / n), sx(camera, (parts[1] + 1) / n), sy(camera, (parts[2] + 1) / n)))
+    }
+    return path
 }
 
 /**

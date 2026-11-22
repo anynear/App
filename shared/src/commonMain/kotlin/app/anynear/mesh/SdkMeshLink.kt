@@ -882,8 +882,7 @@ class SdkMeshLink(
 
     private suspend fun writeUntilDoneLocked(nameSuffix: String, onlyName: Boolean, force: Boolean): DeviceSetupResult {
         if (!DeviceName.isValidSuffix(nameSuffix)) return DeviceSetupResult.Failed(texts.status.deviceNameInvalid)
-        val expectedLong = DeviceName.longName(nameSuffix)
-        fun nameDone(owner: User?) = owner?.long_name == expectedLong && owner.short_name == DeviceName.shortName(nameSuffix, owner.id)
+        fun nameDone(owner: User?) = hasName(owner, nameSuffix)
         var remaining: Set<ProfileDeviation>? = null
         var forcePending = force
         repeat(PROFILE_ATTEMPTS) { attempt ->
@@ -1036,6 +1035,14 @@ class SdkMeshLink(
     }
 
     companion object {
+        /**
+         * Does the radio carry the name for [nameSuffix]? Firmware 2.8 keeps at most 24 bytes of the long name and
+         * shortens longer ones when saving; [DeviceName.isStored] also accepts that shortened form.
+         */
+        internal fun hasName(owner: User?, nameSuffix: String): Boolean =
+            owner != null && DeviceName.isStored(owner.long_name, DeviceName.longName(nameSuffix)) &&
+                owner.short_name == DeviceName.shortName(nameSuffix, owner.id)
+
         private val PROBE_TIMEOUT = 15.seconds
         private const val SDK_RECONNECT_ATTEMPTS = 10
         private const val BACKGROUND_SLOWDOWN_AFTER = 5
