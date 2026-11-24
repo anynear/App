@@ -2,6 +2,7 @@ package app.anynear.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -142,7 +143,7 @@ internal fun SharingAnswerButtons(controller: AppController, personId: String) {
  * both sides alike. Only the newest open question has buttons.
  */
 @Composable
-internal fun SharingCard(controller: AppController, message: ChatMessage, spot: ChatSpot, senderName: String?, color: Color) {
+internal fun SharingCard(controller: AppController, message: ChatMessage, spot: ChatSpot, senderName: String?, color: Color, footer: @Composable ColumnScope.() -> Unit) {
     val mt = texts.map
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     val who = senderName ?: controller.findPerson(message.fromPeer.orEmpty())?.name ?: controller.senderLabel(message)
@@ -171,18 +172,14 @@ internal fun SharingCard(controller: AppController, message: ChatMessage, spot: 
         ChatSpot.ENDED -> Triple(if (message.outgoing) mt.sharingEndedOwn else mt.sharingEndedBy(who), AppIcons.Schliessen, color)
         else -> Triple(if (message.outgoing) mt.sharingWithdrawnOwn else mt.sharingWithdrawnBy(who), AppIcons.Schliessen, color)
     }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
-            Text(title, style = MaterialTheme.typography.titleSmall, color = accent)
-        }
-        if (spot.kind != ChatSpot.SHARE || personId == null) return@Column
+    SystemCard(icon, title, accent = accent, footer = footer) {
+        if (spot.kind != ChatSpot.SHARE || personId == null) return@SystemCard
         // The newest question in this chat that is still open: the buttons; an older one says nothing more.
         val newest = remember(all, message.localId) {
             all.lastOrNull { it.conversation == message.conversation && it.spot?.kind == ChatSpot.SHARE }?.localId == message.localId
         }
         val open = newest && sharing?.open == true && sharing.askedByUs == message.outgoing && sharing.asked == spot.level
-        if (!open) return@Column
+        if (!open) return@SystemCard
         if (message.outgoing) {
             Text(mt.sharingWaiting, style = MaterialTheme.typography.labelMedium, color = quiet)
             AppButton(mt.sharingWithdraw, { controller.withdrawSharing(personId) }, kind = ButtonKind.Quiet)
@@ -205,23 +202,21 @@ internal fun SosEventCard(controller: AppController, message: ChatMessage, card:
     val all by controller.messages.collectAsState()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val good = card == app.anynear.sos.CARD_THEY_YES || card == app.anynear.sos.CARD_WE_YES
-    val accent = if (good) AppTheme.colors.safe else MaterialTheme.colorScheme.onSurfaceVariant
-    Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
+    val accent = if (good) AppTheme.colors.safe else MaterialTheme.colorScheme.onSurface
+    // The current name, also after „Namen ändern“; the stored text keeps the name of the moment it came.
+    val people by controller.people.collectAsState()
+    val name = personId?.let { id -> people.firstOrNull { it.deviceId == id }?.name }
+    SystemCard(
+        if (good) AppIcons.Haken else AppIcons.Person,
+        name?.let { texts.sos.card(card, it) } ?: message.text,
+        accent = accent,
+        footer = { SystemCardTime(message.timestampMillis) },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(if (good) AppIcons.Haken else AppIcons.Person, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
-            // The current name, also after „Namen ändern“; the stored text keeps the name of the moment it came.
-            val people by controller.people.collectAsState()
-            val name = personId?.let { id -> people.firstOrNull { it.deviceId == id }?.name }
-            Text(name?.let { texts.sos.card(card, it) } ?: message.text, style = MaterialTheme.typography.titleSmall, color = accent)
-        }
-        if (card != app.anynear.sos.CARD_ASKED_US || sos == null || personId == null) return@Column
+        if (card != app.anynear.sos.CARD_ASKED_US || sos == null || personId == null) return@SystemCard
         val newest = remember(all, message.localId) {
             all.lastOrNull { it.conversation == message.conversation && it.system?.sos == app.anynear.sos.CARD_ASKED_US }?.localId == message.localId
         }
-        if (!newest || asks.none { it.person == personId }) return@Column
+        if (!newest || asks.none { it.person == personId }) return@SystemCard
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AppButton(texts.map.sharingAccept, { scope.launch { sos.answer(personId, true) } }, kind = ButtonKind.Secondary, icon = AppIcons.Haken)
             AppButton(texts.map.sharingDecline, { scope.launch { sos.answer(personId, false) } }, kind = ButtonKind.Quiet)

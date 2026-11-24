@@ -6,6 +6,9 @@ import app.anynear.mesh.ChatMessage
 import app.anynear.mesh.Conversation
 import app.anynear.mesh.Reaction
 import app.anynear.mesh.Transport
+import app.anynear.mesh.ChatSpot
+import app.anynear.mesh.SystemNote
+import app.anynear.mesh.isSystemCard
 import app.anynear.mesh.previewText
 import kotlinx.serialization.json.Json
 import kotlin.test.AfterTest
@@ -78,5 +81,14 @@ class DeletedMessagesTest {
         val m = Json { ignoreUnknownKeys = true }.decodeFromString(ChatMessage.serializer(), old)
         assertFalse(m.deleted)
         assertNull(m.link)
+    }
+
+    @Test
+    fun systemCardsAreRecognized() {
+        // Places, SOS steps and circle lines are cards of the app: nobody can delete them.
+        assertTrue(incoming("l1", "m1").copy(spot = ChatSpot(kind = 3, latitude = 50.0, longitude = 8.0)).isSystemCard)
+        assertTrue(incoming("l2", "m2").copy(system = SystemNote(sos = 1)).isSystemCard)
+        assertTrue(incoming("l3", "m3").copy(system = SystemNote()).isSystemCard)
+        assertFalse(incoming("l4", "m4").isSystemCard)
     }
 }

@@ -44,6 +44,7 @@ import app.anynear.anmp.core.radio.RadioTarget
 import app.anynear.mesh.toMessageStatus
 import app.anynear.mesh.ReplyRef
 import app.anynear.mesh.ContactIntro
+import app.anynear.mesh.isSystemCard
 import app.anynear.anmp.core.RecoverResult
 import app.anynear.anmp.core.VaultResult
 import app.anynear.anmp.core.AnmpCoreHost
@@ -2938,7 +2939,8 @@ class AppController(
         val author = authorDevice?.let(::peerOfDevice)
         val target = messageStore.findByRemote(conversation, author, event.targetMid, own)
         when {
-            target != null -> if (messageStore.markDeleted(target.localId)) {
+            // A system card stays, also if an older app deletes it for everyone (22.11.2026).
+            target != null -> if (!target.isSystemCard && messageStore.markDeleted(target.localId)) {
                 reactionNotices.clear(conversation)
                 if (messageStore.messages.value.none { it.unread && it.conversation == conversation }) hooks.cancelMessageNotification(conversation.key())
                 else notifyAbout(conversation)
@@ -2949,7 +2951,7 @@ class AppController(
 
     /** Deleting for everyone works for own messages until [DELETE_FOR_EVERYONE_MILLIS] after sending (ADR 0068). */
     fun canDeleteForEveryone(message: ChatMessage): Boolean =
-        message.outgoing && !message.deleted && message.system == null && nowMillis() - message.timestampMillis <= DELETE_FOR_EVERYONE_MILLIS
+        message.outgoing && !message.deleted && !message.isSystemCard && nowMillis() - message.timestampMillis <= DELETE_FOR_EVERYONE_MILLIS
 
     /** Delete an own message for everyone (ADR 0068): here at once, to the others over the internet and, if connected, over radio. */
     fun deleteForEveryone(message: ChatMessage) {
@@ -2978,6 +2980,8 @@ class AppController(
 
     /** Delete only on this device (ADR 0068); the others and the own other devices keep the message. */
     fun deleteForMe(message: ChatMessage) {
+        // System cards stay (22.11.2026): they record what happened in the chat.
+        if (messageStore.find(message.localId)?.isSystemCard ?: message.isSystemCard) return
         messageStore.remove(message.localId)
         // An own message that is still waiting does not go out any more, over the internet or over radio.
         if (message.outgoing) scope.launch { core.cancelSend(message.localId) }
