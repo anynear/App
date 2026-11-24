@@ -50,6 +50,7 @@ import app.anynear.chats.withoutInviteLinks
 import app.anynear.i18n.texts
 import app.anynear.mesh.Reaction
 import app.anynear.mesh.awaitsAttachments
+import app.anynear.mesh.isSystemCard
 import app.anynear.mesh.ownReaction
 import app.anynear.mesh.reactionGroups
 import kotlinx.coroutines.Deferred
@@ -455,7 +456,7 @@ internal fun ChatScreen(
                     // Inside the item of the message that follows, so that the positions of the messages stay as they are.
                     lifeSignCards[message.localId]?.forEach { LifeSignCard(controller, it, Modifier.padding(bottom = 6.dp)) }
                     val note = message.system
-                    // A step about SOS contacts (ADR 0123 §5): a card like the others about places.
+                    // A step about SOS contacts (ADR 0123 §5): a system card like the others.
                     note?.sos?.let { card ->
                         SosEventCard(controller, message, card)
                         return@items
@@ -466,7 +467,13 @@ internal fun ChatScreen(
                         val device = note.removedDevice
                         val canReinvite = circleId != null && device != null && readOnlyReason == null &&
                             circleMembers.none { it.circleId == circleId && it.deviceId == device }
-                        SystemLine(message.text, onReinvite = if (canReinvite && circleId != null) ({ error = controller.reinvite(circleId, note) }) else null)
+                        SystemLine(message.text, message.timestampMillis, onReinvite = if (canReinvite && circleId != null) ({ error = controller.reinvite(circleId, note) }) else null)
+                        return@items
+                    }
+                    // A place or an introduced contact: a system card, without details, reactions or deleting.
+                    // Deleted before system cards were kept: the calm line of a deleted message.
+                    if (message.isSystemCard && !message.deleted) {
+                        SystemCardMessage(controller, message, if (message.outgoing) null else controller.senderLabel(message), isDirect, message.localId == highlighted, onError = { error = it })
                         return@items
                     }
                     val sender = if (message.outgoing || isDirect) null else message.fromPeer ?: PeerId.node(message.fromNodeNum)
@@ -495,7 +502,7 @@ internal fun ChatScreen(
                             },
                         )
                     }
-                    if (message.localId == replySoonAfter) SystemLine(texts.support.replySoon, onReinvite = null)
+                    if (message.localId == replySoonAfter) SystemLine(texts.support.replySoon, null, onReinvite = null)
                 }
                 // Check-ins started after the last message.
                 lifeSignCards[""]?.let { tail -> items(tail, key = { "alive:" + it.plan.id }) { LifeSignCard(controller, it) } }
@@ -777,17 +784,33 @@ private fun Hint(text: String, color: Color = MaterialTheme.colorScheme.onSurfac
     Text(text, style = MaterialTheme.typography.labelMedium, color = color, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
 }
 
-/** Line about a change in the circle (ADR 0012), centred and quiet; possibly with „Wieder einladen“. */
+/** A change in the circle (ADR 0012) or a note of the app, as a system card; possibly with „Wieder einladen“. */
 @Composable
-private fun SystemLine(text: String, onReinvite: (() -> Unit)?) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
+private fun SystemLine(text: String, timestampMillis: Long?, onReinvite: (() -> Unit)?) {
+    SystemCard(
+        if (onReinvite != null || timestampMillis != null) AppIcons.Kreis else AppIcons.Info,
+        text,
+        footer = timestampMillis?.let { { SystemCardTime(it) } },
+    ) {
         if (onReinvite != null) AppButton(texts.chat.reinvite, onReinvite, kind = ButtonKind.Quiet, icon = AppIcons.Teilen)
+    }
+}
+
+/**
+ * A message that is a system card (ADR 0116 introduced contact, ADR 0121 §8 place, ADR 0123 §5 sharing): the card in
+ * the middle with time and, for an own one, its state; no details, no reactions, no deleting.
+ */
+@Composable
+private fun SystemCardMessage(controller: AppController, message: ChatMessage, senderName: String?, isDirect: Boolean, highlighted: Boolean, onError: (String) -> Unit) {
+    val footer: @Composable ColumnScope.() -> Unit = {
+        MessageFooter(message, isDirect, expanded = false, controller::peerName, MaterialTheme.colorScheme.onSurfaceVariant, side = Alignment.End)
+    }
+    Box(
+        Modifier.fillMaxWidth()
+            .then(if (highlighted) Modifier.background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp)).padding(4.dp) else Modifier),
+    ) {
+        message.spot?.let { SpotCard(controller, message, it, senderName, MaterialTheme.colorScheme.onSurface, onError, footer) }
+            ?: message.intro?.let { IntroCard(controller, it, senderName ?: controller.senderLabel(message), own = message.outgoing, footer) }
     }
 }
 
@@ -862,17 +885,13 @@ private fun MessageBubble(
     val clipboard = LocalClipboardManager.current
     // Invitations as a card instead of as a link; the stored text keeps the link.
     val invites = remember(message.text) { findInviteLinks(message.text) }
-    // With an introduction (ADR 0116) the card says it all; the text is only the stand-in for older apps.
-    // The same for a place (ADR 0121 §8): the card shows it.
-    val visibleText = remember(message.text, invites, message.intro, message.spot) { if (message.intro != null || message.spot != null) "" else withoutInviteLinks(message.text, invites) }
+    // Places and introduced contacts never get here: they are system cards (SystemCardMessage).
+    val visibleText = remember(message.text, invites) { withoutInviteLinks(message.text, invites) }
     // Speech bubble with a "tip" towards the sender's side (design: 18 dp, tip 6 dp).
-    val shape = if (message.spot != null) RoundedCornerShape(14.dp) else if (outgoing) RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp) else RoundedCornerShape(18.dp, 18.dp, 18.dp, 6.dp)
+    val shape = if (outgoing) RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp) else RoundedCornerShape(18.dp, 18.dp, 18.dp, 6.dp)
     // Not sent and out by no path: light background with a red border so that it stands out.
     val failed = outgoing && message.status == MessageStatus.FAILED && message.via.isEmpty()
-    // What the app sent for the person (a place, a question for it, „angekommen“; ADR 0121 §26) is an event, not
-    // something typed: a card in the middle, the same on both sides, that names who it is from.
-    val event = message.spot != null
-    val dark = outgoing && !failed && !event
+    val dark = outgoing && !failed
     // Opened, the actions grow below the bubble; with the newest message they would stay under the input field.
     val bring = remember(message.localId) { androidx.compose.foundation.relocation.BringIntoViewRequester() }
     if (expanded) LaunchedEffect(message.localId) {
@@ -884,21 +903,20 @@ private fun MessageBubble(
             .fillMaxWidth()
             .then(Modifier.bringIntoViewRequester(bring))
             .then(if (highlighted) Modifier.background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp)).padding(4.dp) else Modifier),
-        horizontalArrangement = if (event) Arrangement.Center else if (outgoing) Arrangement.End else Arrangement.spacedBy(8.dp),
+        horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
-        if (!event) avatar?.invoke()
-        Column(horizontalAlignment = if (event) Alignment.CenterHorizontally else if (outgoing) Alignment.End else Alignment.Start) {
+        avatar?.invoke()
+        Column(horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start) {
             Row(verticalAlignment = Alignment.Bottom) {
-                if (outgoing && !event) DetailsButton(expanded) { show(!expanded) }
+                if (outgoing) DetailsButton(expanded) { show(!expanded) }
                 Column(
                     Modifier
-                        .then(if (event) Modifier.width(296.dp) else Modifier.widthIn(max = 296.dp))
-                        .background(if (event) MaterialTheme.colorScheme.surface else if (dark) colors.outgoingBubble else colors.incomingBubble, shape)
+                        .widthIn(max = 296.dp)
+                        .background(if (dark) colors.outgoingBubble else colors.incomingBubble, shape)
                         .then(
                             when {
                                 failed -> Modifier.border(1.5.dp, MaterialTheme.colorScheme.error, shape)
-                                event -> Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
                                 outgoing -> Modifier
                                 else -> Modifier.border(1.dp, colors.bubbleOutline, shape)
                             },
@@ -914,7 +932,7 @@ private fun MessageBubble(
                         )
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
-                    if (senderName != null && !event) {
+                    if (senderName != null) {
                         Text(senderName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (message.passedOn) {
@@ -931,7 +949,6 @@ private fun MessageBubble(
                         )
                     }
                     if (message.attachments.isNotEmpty()) MessageAttachments(controller, message.attachments, onError)
-                    message.spot?.let { SpotCard(controller, message, it, senderName, if (dark) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface, onError) }
                     val textColor = if (dark) colors.onOutgoingBubble else MaterialTheme.colorScheme.onSurface
                     if (visibleText.isNotEmpty()) {
                         if (message.attachments.any { it.transcribed }) TextPreviewLabel(visibleText, textColor.copy(alpha = 0.75f))
@@ -952,8 +969,6 @@ private fun MessageBubble(
                         val sender = senderName ?: controller.senderLabel(message)
                         invites.forEach { InviteCardBox(controller, it, sender, own = outgoing) }
                     }
-                    // Introduced contact (ADR 0116): a card with „Hinzufügen“ instead of the stand-in text alone.
-                    message.intro?.let { IntroCardBox(controller, it, senderName ?: controller.senderLabel(message), own = outgoing) }
                     // Preview from the sender (ADR 0069), only for a link that is in the text.
                     message.link?.takeIf { message.text.contains(it.url) }?.let { LinkPreviewCard(controller, it, textColor) }
                     if (message.awaitsAttachments) {
@@ -966,7 +981,7 @@ private fun MessageBubble(
                     }
                     MessageFooter(message, isDirect, expanded, controller::peerName, if (dark) colors.onOutgoingBubble.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (!outgoing || event) DetailsButton(expanded) { show(!expanded) }
+                if (!outgoing) DetailsButton(expanded) { show(!expanded) }
             }
             val react = { emoji: String ->
                 controller.react(message, emoji)
@@ -1243,10 +1258,9 @@ internal fun ReactionPicker(own: String?, onReact: (String) -> Unit) {
  */
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun ColumnScope.MessageFooter(message: ChatMessage, isDirect: Boolean, expanded: Boolean, nameOf: (String) -> String, tint: Color) {
+private fun ColumnScope.MessageFooter(message: ChatMessage, isDirect: Boolean, expanded: Boolean, nameOf: (String) -> String, tint: Color, side: Alignment.Horizontal = if (message.outgoing) Alignment.End else Alignment.Start) {
     val status = message.status
     val lines = message.deliveryLines(isDirect, ::formatDateTime, nameOf)
-    val side = if (message.outgoing) Alignment.End else Alignment.Start
     // If there is not enough room, the state slides as a whole below the time; "…" never wraps alone.
     FlowRow(
         Modifier.align(side).semantics { contentDescription = lines.joinToString("\n") { it.spoken } },
@@ -1417,16 +1431,16 @@ private fun MeetingPointDialog(controller: AppController, conversation: Conversa
  * „Wo bist du?“ offers to send the own place once.
  */
 @Composable
-private fun SpotCard(controller: AppController, message: ChatMessage, spot: app.anynear.mesh.ChatSpot, senderName: String?, color: Color, onError: (String) -> Unit) {
+private fun SpotCard(controller: AppController, message: ChatMessage, spot: app.anynear.mesh.ChatSpot, senderName: String?, color: Color, onError: (String) -> Unit, footer: @Composable ColumnScope.() -> Unit) {
     val mt = texts.map
     val scope = rememberCoroutineScope()
     val ask = spot.kind == app.anynear.mesh.ChatSpot.ASK
     if (spot.kind == app.anynear.mesh.ChatSpot.ALL) {
-        ShareAllCard(controller, message, spot, senderName, color)
+        ShareAllCard(controller, message, spot, color, footer)
         return
     }
     if (spot.kind in app.anynear.mesh.ChatSpot.SHARE..app.anynear.mesh.ChatSpot.WITHDRAWN) {
-        SharingCard(controller, message, spot, senderName, color)
+        SharingCard(controller, message, spot, senderName, color, footer)
         return
     }
     val who = senderName ?: controller.findPerson(message.fromPeer.orEmpty())?.name ?: controller.senderLabel(message)
@@ -1439,11 +1453,7 @@ private fun SpotCard(controller: AppController, message: ChatMessage, spot: app.
     }
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     val accent = if (arrived) AppTheme.colors.safe else color
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(if (arrived) AppIcons.Haken else AppIcons.Karte, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
-            Text(title, style = MaterialTheme.typography.titleSmall, color = accent)
-        }
+    SystemCard(if (arrived) AppIcons.Haken else AppIcons.Karte, title, accent = accent, footer = footer) {
         // A meeting point does not say in its title who set it.
         if (spot.kind == app.anynear.mesh.ChatSpot.MEET) Text(if (message.outgoing) mt.spotByOwn else mt.spotBy(who), style = MaterialTheme.typography.labelMedium, color = quiet)
         val lat = spot.latitude
@@ -1671,27 +1681,21 @@ private fun LifeSignCard(controller: AppController, status: app.anynear.anmp.cor
             else -> controller.showMapFor(Conversation.Circle(plan.circleId))
         }
     }
-    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Column(
-            Modifier.widthIn(max = 320.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
-                .border(1.5.dp, accent.copy(alpha = if (ended) 0.25f else 0.7f), RoundedCornerShape(16.dp))
-                .clickable(onClickLabel = lt.cardOpen, role = Role.Button, onClick = open).padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(AppIcons.Karte, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
-                Text(
-                    if (status.own) lt.cardOwn(formatFutureDayAndTime(plan.until, plan.start)) else lt.cardOf(lifeSigns.name(plan.owner), formatFutureDayAndTime(plan.until, plan.start)),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            }
-            if (plan.label.isNotBlank()) Text(lt.cardLabel(plan.label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(state, style = MaterialTheme.typography.bodyMedium, fontWeight = if (alarm) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal, color = if (alarm) accent else MaterialTheme.colorScheme.onSurface)
-            // Where the phone is, if nobody confirmed and the person shares it for that case.
-            val place = (call?.position ?: plan.position)?.takeIf { alarm && !status.own }
-            if (place != null) SpotMap(controller, place.latitude, place.longitude, lifeSigns.name(plan.owner), open)
-            if (!ended) Text(lt.cardOpen, style = MaterialTheme.typography.labelLarge, color = accent, modifier = Modifier.align(Alignment.End))
-        }
+    SystemCard(
+        AppIcons.Karte,
+        if (status.own) lt.cardOwn(formatFutureDayAndTime(plan.until, plan.start)) else lt.cardOf(lifeSigns.name(plan.owner), formatFutureDayAndTime(plan.until, plan.start)),
+        modifier,
+        accent = accent,
+        onClick = open,
+        onClickLabel = lt.cardOpen,
+        footer = { SystemCardTime(plan.start) },
+    ) {
+        if (plan.label.isNotBlank()) Text(lt.cardLabel(plan.label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(state, style = MaterialTheme.typography.bodyMedium, fontWeight = if (alarm) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal, color = if (alarm) accent else MaterialTheme.colorScheme.onSurface)
+        // Where the phone is, if nobody confirmed and the person shares it for that case.
+        val place = (call?.position ?: plan.position)?.takeIf { alarm && !status.own }
+        if (place != null) SpotMap(controller, place.latitude, place.longitude, lifeSigns.name(plan.owner), open)
+        if (!ended) Text(lt.cardOpen, style = MaterialTheme.typography.labelLarge, color = accent, modifier = Modifier.align(Alignment.End))
     }
 }
 
@@ -1726,7 +1730,7 @@ private fun ShareAllDialog(controller: AppController, circleId: String, onDismis
  * place with the circle until the end, „Aussteigen“ stops it any time; the card says who takes part.
  */
 @Composable
-private fun ShareAllCard(controller: AppController, message: ChatMessage, spot: app.anynear.mesh.ChatSpot, senderName: String?, color: Color) {
+private fun ShareAllCard(controller: AppController, message: ChatMessage, spot: app.anynear.mesh.ChatSpot, color: Color, footer: @Composable ColumnScope.() -> Unit) {
     val mt = texts.map
     val sharing = controller.locationSharing ?: return
     val circleId = (message.conversation as? Conversation.Circle)?.circleId ?: return
@@ -1743,11 +1747,7 @@ private fun ShareAllCard(controller: AppController, message: ChatMessage, spot: 
     // Who agreed counts, also while its phone has no place yet (e.g. indoors without a fix).
     val taking = members.filter { m -> places[m.deviceId]?.let { it.level == app.anynear.location.ShareLevel.Exact && kotlin.math.abs(it.untilMillis - until) < 2000 } == true }
     var note by remember { mutableStateOf<String?>(null) }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(AppIcons.Kreis, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
-            Text(if (over) mt.shareAllOver else mt.shareAllUntil(formatTime(until)), style = MaterialTheme.typography.titleSmall, color = color)
-        }
+    SystemCard(AppIcons.Kreis, if (over) mt.shareAllOver else mt.shareAllUntil(formatTime(until)), accent = color, footer = footer) {
         if (!over) {
             Text(mt.shareAllTaking(taking.size + if (joined) 1 else 0, members.size + 1), style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.85f))
             if (taking.isNotEmpty()) Text(taking.joinToString(", ") { it.name }, style = MaterialTheme.typography.labelMedium, color = color.copy(alpha = 0.75f))

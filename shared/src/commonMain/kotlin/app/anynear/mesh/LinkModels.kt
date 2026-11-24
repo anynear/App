@@ -322,6 +322,13 @@ data class SystemNote(
     val sos: Int? = null,
 )
 
+/**
+ * The app put this into the chat as a card (system card): a line about the circle, a step about SOS contacts, a place or
+ * sharing it (ADR 0121, 0123), an introduced contact (ADR 0116). Nobody can delete it, here or for everyone.
+ */
+val ChatMessage.isSystemCard: Boolean
+    get() = system != null || spot != null || intro != null
+
 /** Attachments were announced over radio that have not yet arrived over the internet. */
 val ChatMessage.awaitsAttachments: Boolean
     get() = !outgoing && attachments.isEmpty() && RadioAnnouncement.announces(text)
