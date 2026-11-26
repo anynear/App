@@ -138,7 +138,7 @@ In Xcode choose the destination “My Mac (Designed for iPad)”.
 Not necessary: the app sets up the radio itself (ADR 0006). After every connection it compares
 the device with the uniform device profile (`mesh/RadioProfile.kt`):
 
-1. EU_868, SHORT_SLOW, 869.525 MHz (Hessenmesh), **hops 5**, transmit on, transmit power 0
+1. EU_868, SHORT_SLOW, 869.525 MHz (Hessenmesh), **hops 3** (Meshtastic default, ADR 0127; own messages retry with 5, then 7), transmit on, transmit power 0
    (the highest allowed for the region, limited by the hardware); `config_ok_to_mqtt` on, `ignore_mqtt` off
    (radio bridge, ADR 0054; in a separate step after region and preset).
 2. Role CLIENT.
@@ -383,8 +383,9 @@ The code is licensed under GPL-3.0-or-later because meshtastic-sdk is under this
 Origin and licenses of sounds, models, font and data in the repository: [NOTICE](NOTICE). Name and logos are
 excluded: [TRADEMARKS.md](TRADEMARKS.md).
 
-anynear is an independent project and is not affiliated with Meshtastic LLC; it is neither
-supported nor endorsed by it. Meshtastic® is a registered trademark of Meshtastic LLC. The app works with
+Meshtastic® is a registered trademark of Meshtastic LLC. Meshtastic software components are released under various
+licenses, see GitHub for details. No warranty is provided - use at your own risk. anynear is an independent project
+and is not affiliated with or endorsed by the Meshtastic project. The app works with
 radios that run the free software Meshtastic and uses the library meshtastic-sdk (GPL-3.0) for this.
 The procedures for installing radio software and for the serial connection follow those of Meshtastic-Android
 (GPL-3.0).

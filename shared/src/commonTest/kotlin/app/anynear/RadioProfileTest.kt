@@ -34,7 +34,7 @@ class RadioProfileTest {
         assertEquals(Config.LoRaConfig.RegionCode.EU_868, lora.region)
         assertEquals(Config.LoRaConfig.ModemPreset.SHORT_SLOW, lora.modem_preset)
         assertEquals(869.525f, lora.override_frequency)
-        assertEquals(5, lora.hop_limit)
+        assertEquals(3, lora.hop_limit)
         assertTrue(lora.tx_enabled)
         assertEquals(0, lora.tx_power)
         assertEquals(Config.DeviceConfig.Role.CLIENT, RadioProfile.device(null).role)
@@ -52,7 +52,7 @@ class RadioProfileTest {
 
     @Test
     fun oldHopLimitOnOwnDeviceIsAnUpdate() {
-        val old = compliant().copy(configs = configs(lora = RadioProfile.lora(null).newBuilder().also { it.hop_limit = 3 }.build()))
+        val old = compliant().copy(configs = configs(lora = RadioProfile.lora(null).newBuilder().also { it.hop_limit = 5 }.build()))
         val check = RadioProfile.check(old)
         assertEquals(DeviceSetupCheck.Kind.UPDATE, check.kind)
         assertEquals(setOf(ProfileDeviation.HOPS), check.deviations)
@@ -61,7 +61,7 @@ class RadioProfileTest {
     @Test
     fun foreignDeviceWithOtherSettingsIsDifferent() {
         val foreign = compliant().copy(
-            configs = configs(lora = RadioProfile.lora(null).newBuilder().also { it.hop_limit = 3 }.build()),
+            configs = configs(lora = RadioProfile.lora(null).newBuilder().also { it.hop_limit = 5 }.build()),
             owner = user("Meshtastic 3f2a"),
         )
         val check = RadioProfile.check(foreign)
