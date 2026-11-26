@@ -68,7 +68,7 @@ class RadioAreasTest {
         assertEquals(Config.LoRaConfig.ModemPreset.LONG_FAST, lora.modem_preset)
         assertEquals(0f, lora.override_frequency, "default slot of region and preset")
         assertEquals(0, lora.tx_power)
-        assertEquals(5, lora.hop_limit)
+        assertEquals(3, lora.hop_limit)
         assertEquals(emptySet(), RadioProfile.deviations(snapshot(lora), us))
         // The firmware reports the limit of the region instead of 0.
         assertEquals(emptySet(), RadioProfile.deviations(snapshot(lora.newBuilder().also { it.tx_power = 30 }.build()), us))
@@ -92,7 +92,7 @@ class RadioAreasTest {
         val own = RadioProfile.lora(null).newBuilder().also { it.modem_preset = Config.LoRaConfig.ModemPreset.MEDIUM_FAST }.build()
         assertFalse(RadioProfile.check(snapshot(own), europe, known).areaChange)
         // Another deviation besides the area.
-        val hops = RadioProfile.lora(null).newBuilder().also { it.hop_limit = 3 }.build()
+        val hops = RadioProfile.lora(null).newBuilder().also { it.hop_limit = 5 }.build()
         assertFalse(RadioProfile.check(snapshot(hops), europe, known).areaChange)
         // A radio not set up for the app.
         assertFalse(RadioProfile.check(snapshot(RadioProfile.lora(null), name = "Meshtastic 1234"), europe, known).areaChange)
